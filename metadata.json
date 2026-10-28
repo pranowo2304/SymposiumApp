@@ -1,0 +1,8 @@
+{
+  "name": "Jadwal Simposium Kedokteran",
+  "description": "Aplikasi jadwal simposium kedokteran interaktif dengan menu Daftar Speaker, Jadwal Workshop, Jadwal Symposium, Pameran, Denah Venue, serta fitur Broadcast Notifikasi Panitia.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

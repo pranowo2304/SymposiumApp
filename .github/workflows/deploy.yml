@@ -18,6 +18,9 @@ concurrency:
 
 jobs:
   build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -51,6 +54,8 @@ jobs:
         id: configure_pages
         uses: actions/configure-pages@v5
         continue-on-error: true
+        with:
+          enablement: true
 
       - name: Upload build artifact
         if: steps.configure_pages.outcome == 'success'

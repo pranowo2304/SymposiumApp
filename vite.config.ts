@@ -5,8 +5,11 @@ import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
+  // Default to './' for AI Studio & generic static hosting, or use explicit repo base path (e.g. '/SymposiumApp/') on GitHub Pages
+  const basePath = process.env.VITE_BASE_PATH || './';
+
   return {
-    base: './',
+    base: basePath,
     plugins: [
       {
         name: 'disable-vite-client-ws',
@@ -30,7 +33,7 @@ export default defineConfig(() => {
           'pwa-maskable-512x512.png',
         ],
         manifest: {
-          id: './',
+          id: basePath,
           name: 'KIVNAHK IV & MUNAS V ADHPHKI 2026',
           short_name: 'KIVNAHK IV',
           description:
@@ -39,8 +42,8 @@ export default defineConfig(() => {
           background_color: '#0f172a',
           display: 'standalone',
           orientation: 'portrait',
-          scope: './',
-          start_url: './',
+          scope: basePath,
+          start_url: basePath,
           icons: [
             {
               src: 'pwa-192x192.png',

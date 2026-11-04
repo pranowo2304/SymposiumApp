@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
+    "build:gh-pages": "node scripts/deploy-gh-pages.mjs",
+    "deploy:gh-pages": "node scripts/deploy-gh-pages.mjs --push",
     "start": "node server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",

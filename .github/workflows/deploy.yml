@@ -34,15 +34,12 @@ jobs:
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Build production bundle
-        run: npm run build
+      - name: Build production bundle for GitHub Pages (/SymposiumApp/)
+        env:
+          VITE_BASE_PATH: /${{ github.event.repository.name }}/
+        run: node scripts/deploy-gh-pages.mjs
 
-      - name: Prepare SPA fallback and .nojekyll for GitHub Pages
-        run: |
-          cp dist/index.html dist/404.html
-          touch dist/.nojekyll
-
-      - name: Deploy to gh-pages branch
+      - name: Deploy static files to root of gh-pages branch
         uses: peaceiris/actions-gh-pages@v4
         continue-on-error: true
         with:

@@ -207,6 +207,45 @@ ${takeawaysList}
                 </p>
               </div>
 
+              {/* Rundown Workshop (Mulai s/d Selesai) */}
+              {session.rundown && session.rundown.length > 0 && (
+                <div className="bg-emerald-50/60 p-3.5 sm:p-4 rounded-xl border border-emerald-200/80 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-950 flex items-center">
+                      <Clock className="w-3.5 h-3.5 mr-1.5 text-emerald-600" />
+                      Rundown Acara ({session.startTime} – {session.endTime} WIB)
+                    </h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      {session.rundown.length} Sesi
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border border-emerald-200/70 bg-white">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 border-b border-slate-200 text-[10px] uppercase tracking-wider">
+                          <th className="py-1.5 px-2.5 w-8 text-center">No</th>
+                          <th className="py-1.5 px-2.5 w-28">Waktu</th>
+                          <th className="py-1.5 px-2.5">Kegiatan / Materi</th>
+                          <th className="py-1.5 px-2.5 w-36">Instruktur / PIC</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {session.rundown.map((item, idx) => (
+                          <tr key={item.id || idx} className="hover:bg-emerald-50/40">
+                            <td className="py-1.5 px-2.5 text-center font-bold text-slate-400">{idx + 1}</td>
+                            <td className="py-1.5 px-2.5 font-mono font-bold text-emerald-700 whitespace-nowrap">
+                              {item.startTime} - {item.endTime}
+                            </td>
+                            <td className="py-1.5 px-2.5 font-semibold text-slate-800">{item.activity}</td>
+                            <td className="py-1.5 px-2.5 text-slate-500">{item.pic || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Abstract: Clinical Updates */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center">
@@ -298,12 +337,6 @@ ${takeawaysList}
                         <span className="truncate">{speaker.institution}</span>
                       </p>
 
-                      {speaker.talkTitle && (
-                        <div className="mt-2 text-xs bg-white p-2 rounded-lg border border-slate-200/80 text-slate-800 font-medium italic">
-                          "{speaker.talkTitle}"
-                        </div>
-                      )}
-
                       {/* Biografi Singkat (Short Bio) */}
                       <div className="mt-2.5 pt-2 border-t border-slate-200/60">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -346,7 +379,7 @@ ${takeawaysList}
               <span>Bagikan Sesi (WhatsApp)</span>
             </button>
 
-            {onOpenQrScanner && (
+            {onOpenQrScanner && eventInfo?.enableQrAttendance !== false && (
               <button
                 onClick={() => {
                   onClose();

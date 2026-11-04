@@ -19,7 +19,9 @@ import {
   Eye,
   CheckCircle2,
   AlertCircle,
-  Palette
+  Palette,
+  QrCode,
+  Settings
 } from 'lucide-react';
 import { SymposiumInfo } from '../../types';
 import { SYMPOSIUM_INFO } from '../../data/symposiumData';
@@ -33,6 +35,13 @@ interface AdminEventSettingsProps {
 
 // Medical & Symposium Logo Presets for quick selection
 export const EVENT_LOGO_PRESETS = [
+  {
+    id: 'kivnahk-veterinary',
+    label: 'KIVNAHK IV & MUNAS V ADHPHKI (Default)',
+    description: 'Lambang Konferensi Ilmiah Veteriner Nasional Hewan Kecil & Praktisi Hewan Kecil',
+    url: 'https://images.unsplash.com/photo-1576201836106-db1758fd1c97?w=300&auto=format&fit=crop&q=80',
+    themeColor: 'emerald-green' as LogoPaletteType
+  },
   {
     id: 'caduceus-gold',
     label: 'Caduceus Medis Emas',
@@ -95,7 +104,8 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
     accreditation: eventInfo.accreditation || '32 SKP PB PDHI (Perhimpunan Dokter Hewan Indonesia)',
     contactEmail: eventInfo.contactEmail || 'sekretariat@adhphki.org',
     contactPhone: eventInfo.contactPhone || '+62 811-2345-6789',
-    websiteUrl: eventInfo.websiteUrl || 'https://kivnahk-munas.adhphki.org'
+    websiteUrl: eventInfo.websiteUrl || 'https://kivnahk-munas.adhphki.org',
+    enableQrAttendance: eventInfo.enableQrAttendance !== false
   }));
 
   const [hasChanges, setHasChanges] = useState<boolean>(false);
@@ -107,6 +117,20 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
       [field]: value
     }));
     setHasChanges(true);
+  };
+
+  const handleToggleQrAttendance = (enabled: boolean) => {
+    const updated = {
+      ...formData,
+      enableQrAttendance: enabled
+    };
+    setFormData(updated);
+    onSaveEventInfo(updated);
+    onShowToast(
+      enabled
+        ? 'Fitur Absensi QR Code diaktifkan (Dipakai). Menu & tombol QR kini tampil di aplikasi.'
+        : 'Fitur Absensi QR Code dinonaktifkan (Tidak Dipakai). Seluruh menu & tombol QR disembunyikan.'
+    );
   };
 
   const handleDateNestedChange = (dayKey: string, value: string) => {
@@ -159,7 +183,7 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
 
     onSaveEventInfo(formData);
     setHasChanges(false);
-    onShowToast('Pengaturan Event berhasil disimpan!');
+    onShowToast('Pengaturan Event & Sistem berhasil disimpan!');
   };
 
   // Handle Reset to Default
@@ -184,7 +208,8 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
       accreditation: SYMPOSIUM_INFO.accreditation,
       contactEmail: SYMPOSIUM_INFO.contactEmail || 'sekretariat@adhphki.org',
       contactPhone: SYMPOSIUM_INFO.contactPhone || '+62 811-2345-6789',
-      websiteUrl: SYMPOSIUM_INFO.websiteUrl || 'https://kivnahk-munas.adhphki.org'
+      websiteUrl: SYMPOSIUM_INFO.websiteUrl || 'https://kivnahk-munas.adhphki.org',
+      enableQrAttendance: SYMPOSIUM_INFO.enableQrAttendance !== false
     });
     setHasChanges(true);
     onShowToast('Data event dikembalikan ke setelan awal KIVNAHK IV & MUNAS V ADHPHKI (klik Simpan untuk menerapkan).');
@@ -197,19 +222,19 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-start gap-3.5">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-lg shrink-0">
-            <Building className="w-6 h-6" />
+            <Settings className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg sm:text-xl font-black text-white">
-                Pengaturan Event Simposium & Acara
+                Pengaturan Sistem & Event Simposium
               </h2>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                Konfigurasi Utama
+                Konfigurasi Sistem
               </span>
             </div>
             <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              Atur nama resmi simposium, tanggal pelaksanaan, logo brand acara, serta tempat venue gedung yang ditampilkan di beranda, header, dan sertifikat peserta.
+              Kelola fitur sistem (seperti aktivasi Absensi QR Code), nama resmi simposium, tanggal pelaksanaan, logo brand acara, serta tempat venue gedung.
             </p>
           </div>
         </div>
@@ -237,6 +262,98 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
           >
             <Check className="w-4 h-4" />
             <span>{hasChanges ? 'Simpan Perubahan' : 'Simpan Pengaturan'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* PENGATURAN SISTEM: FITUR ABSENSI QR CODE (DIPAKAI / TIDAK DIPAKAI) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div className="flex items-center gap-3">
+            <div className={`p-2.5 rounded-xl border ${
+              formData.enableQrAttendance !== false
+                ? 'bg-teal-500/15 text-teal-400 border-teal-500/30'
+                : 'bg-slate-800 text-slate-400 border-slate-700'
+            }`}>
+              <QrCode className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm sm:text-base font-extrabold text-white">
+                  Pengaturan Sistem: Fitur Absensi QR Code
+                </h3>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                  formData.enableQrAttendance !== false
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {formData.enableQrAttendance !== false ? 'Dipakai (Aktif)' : 'Tidak Dipakai (Nonaktif)'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Pilih apakah fitur pemindaian Presensi QR Code dipakai atau tidak dipakai pada penyelenggaraan acara ini. Jika dipilih <strong>Tidak Dipakai</strong>, seluruh menu dan tombol Absensi QR Code tidak akan muncul di aplikasi peserta.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          {/* Opsi 1: Dipakai */}
+          <button
+            type="button"
+            onClick={() => handleToggleQrAttendance(true)}
+            className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 cursor-pointer ${
+              formData.enableQrAttendance !== false
+                ? 'bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg'
+                : 'bg-slate-950 border-slate-800 hover:border-slate-700 opacity-75 hover:opacity-100'
+            }`}
+          >
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 border ${
+              formData.enableQrAttendance !== false
+                ? 'bg-emerald-500 border-emerald-400 text-slate-950'
+                : 'bg-slate-900 border-slate-700 text-transparent'
+            }`}>
+              <Check className="w-3.5 h-3.5 stroke-[3]" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-white">
+                  Dipakai (Tampilkan Fitur Absensi QR)
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Tombol & menu <strong>Presensi QR Code</strong> ditampilkan di Header atas, Beranda, Detail Sesi, dan Profil Peserta untuk mencatat kehadiran & poin SKP.
+              </p>
+            </div>
+          </button>
+
+          {/* Opsi 2: Tidak Dipakai */}
+          <button
+            type="button"
+            onClick={() => handleToggleQrAttendance(false)}
+            className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 cursor-pointer ${
+              formData.enableQrAttendance === false
+                ? 'bg-rose-950/40 border-rose-500 ring-2 ring-rose-500/30 shadow-lg'
+                : 'bg-slate-950 border-slate-800 hover:border-slate-700 opacity-75 hover:opacity-100'
+            }`}
+          >
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 border ${
+              formData.enableQrAttendance === false
+                ? 'bg-rose-500 border-rose-400 text-white'
+                : 'bg-slate-900 border-slate-700 text-transparent'
+            }`}>
+              <Check className="w-3.5 h-3.5 stroke-[3]" />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-black text-white">
+                  Tidak Dipakai (Sembunyikan Fitur Absensi QR)
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Fitur <strong>Presensi QR Code</strong> dinonaktifkan sepenuhnya dan tidak akan muncul di Header, menu Beranda, maupun modal Detail Sesi.
+              </p>
+            </div>
           </button>
         </div>
       </div>
@@ -674,18 +791,24 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
               </div>
             )}
 
-            {/* Active Logo Status & Clear Button */}
+            {/* Active Logo Status & App Icon Synchronization Preview */}
             {formData.logoUrl && (
-              <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800">
-                <div className="flex items-center gap-2.5">
+              <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800 gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   <img
                     src={formData.logoUrl}
-                    alt="Logo aktif"
-                    className="w-8 h-8 rounded-lg object-contain bg-white p-0.5 border border-slate-700"
+                    alt="Logo Event & Ikon Aplikasi"
+                    className="w-10 h-10 rounded-xl object-contain bg-white p-1 border border-emerald-500/50 shadow-xs shrink-0"
+                    referrerPolicy="no-referrer"
                   />
-                  <span className="text-xs font-semibold text-slate-300">
-                    Logo Terpasang
-                  </span>
+                  <div className="min-w-0">
+                    <span className="text-xs font-bold text-white block truncate">
+                      Logo Event &amp; Ikon Aplikasi Mobile Aktif
+                    </span>
+                    <span className="text-[10px] text-emerald-400 block truncate">
+                      Otomatis digunakan sebagai Ikon Home Screen HP (PWA) &amp; Favicon
+                    </span>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -693,7 +816,7 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
                     handleChange('logoUrl', '');
                     onShowToast('Logo dihapus. Menampilkan ikon standar.');
                   }}
-                  className="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1 border border-rose-500/20"
+                  className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1 border border-rose-500/20 shrink-0"
                 >
                   <Trash2 className="w-3 h-3" />
                   <span>Hapus Logo</span>

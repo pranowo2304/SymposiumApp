@@ -17,7 +17,8 @@ export const MUNAS_ADHPHKI_EVENT_INFO: SymposiumInfo = {
   organizer: "Asosiasi Dokter Hewan Praktisi Hewan Kecil Indonesia (ADHPHKI) & PB PDHI",
   accreditation: "32 SKP PB PDHI (Perhimpunan Dokter Hewan Indonesia)",
   logoUrl: "https://images.unsplash.com/photo-1576201836106-db1758fd1c97?w=300&auto=format&fit=crop&q=80",
-  themeColor: "emerald-green"
+  themeColor: "emerald-green",
+  enableQrAttendance: true
 };
 
 export const MUNAS_ROOMS: Room[] = [
@@ -104,7 +105,6 @@ export const MUNAS_SPEAKERS: Record<string, Speaker> = {
     institution: "Imaging & Diagnostic Oncology Center - RSHP",
     photoUrl: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=400&auto=format&fit=crop&q=80",
     specialty: "Veterinary Diagnostic Imaging & Cytology",
-    talkTitle: "Workshop Versus: MASS Hunt - From Pixel to Cell (Diagnostic Imaging to Fine Needle Cytology)",
     bio: "Pakar pencitraan diagnostik ultrasonografi dan evaluasi sitopatologi massa tumor hewan kecil dengan pengalaman klinis dan pelatihan internasional."
   },
   sp_vet_nurse: {
@@ -114,7 +114,6 @@ export const MUNAS_SPEAKERS: Record<string, Speaker> = {
     institution: "Perhimpunan Paramedis Veteriner & RSH Pendidikan",
     photoUrl: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&auto=format&fit=crop&q=80",
     specialty: "Veterinary Intensive Care & Anesthesia Monitoring",
-    talkTitle: "Workshop Vet Nurse: Nurse Excellence Track - Emergency Triage, Critical Monitoring & Patient Care",
     bio: "Instruktur senior paramedis veteriner tersertifikasi dengan fokus pada manajemen triase gawat darurat, monitoring anestesi lanjut, dan protokol ICU hewan kecil."
   },
   dr_ivan: {
@@ -124,7 +123,6 @@ export const MUNAS_SPEAKERS: Record<string, Speaker> = {
     institution: "Departemen Klinik Veteriner & Rumah Sakit Hewan Pendidikan",
     photoUrl: "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&auto=format&fit=crop&q=80",
     specialty: "Oncology & Reconstructive Surgery",
-    talkTitle: "Surgical Oncology: Mastectomy Techniques, Margin Clearance and Advanced Skin Flap Reconstruction",
     bio: "Dr. Ivan Satriawan merupakan dokter hewan praktisi dan akademisi spesialisasi bedah jaringan lunak, onkologi, dan teknik flap rekonstruksi kulit pada anjing dan kucing dengan pengalaman klinis dan riset lebih dari 18 tahun."
   },
   drh_listriani: {
@@ -134,7 +132,6 @@ export const MUNAS_SPEAKERS: Record<string, Speaker> = {
     institution: "ADHPHKI Pusat & Klinik Hewan Khusus Onkologi",
     photoUrl: "https://images.unsplash.com/photo-1594824813566-88855ce78347?w=400&auto=format&fit=crop&q=80",
     specialty: "Onkologi & Sitopatologi Veteriner",
-    talkTitle: "Moderator Sesi Onkologi & Penatalaksanaan Klinis Neoplasia",
     bio: "drh. Listriani Wistawan aktif sebagai pembicara dan moderator nasional dalam penanganan sitologi diagnostik tumor dan terapi suportif onkologi veteriner."
   },
   wsava_speaker: {
@@ -144,7 +141,6 @@ export const MUNAS_SPEAKERS: Record<string, Speaker> = {
     institution: "World Small Animal Veterinary Association (WSAVA)",
     photoUrl: "https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=400&auto=format&fit=crop&q=80",
     specialty: "Small Animal Soft Tissue Surgery",
-    talkTitle: "WSAVA Keynote: Modern Principles in Small Animal Surgical Oncology & Wound Management",
     bio: "Pakar bedah veteriner internasional dari WSAVA Continuing Education dengan fokus pada bedah reseksi tumor kuratif dan manajemen luka bedah kompleks."
   },
   presidium_munas: {
@@ -154,7 +150,6 @@ export const MUNAS_SPEAKERS: Record<string, Speaker> = {
     institution: "Asosiasi Dokter Hewan Praktisi Hewan Kecil Indonesia",
     photoUrl: "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=400&auto=format&fit=crop&q=80",
     specialty: "Organisasi & Kebijakan Profesi",
-    talkTitle: "Musyawarah Nasional V ADHPHKI 2026: Laporan Pertanggungjawaban & Pemilihan Ketua Umum",
     bio: "Sidang tertinggi organisasi ADHPHKI untuk membahas kode etik praktisi hewan kecil, standardisasi pelayanan klinik, serta pemilihan kepengurusan nasional periode 2026-2030."
   }
 };
@@ -162,16 +157,46 @@ export const MUNAS_SPEAKERS: Record<string, Speaker> = {
 export const MUNAS_SESSIONS: Session[] = [
   // ============================================================
   // PRE-CONGRESS WORKSHOP: SABTU, 28 NOVEMBER 2026
+  // TRACK 1: WORKSHOP VERSUS - MASS HUNT (ANTAREJA ROOM, 08:00 - 17:00 WIB)
   // ============================================================
   {
     id: "ws-versus-01",
     day: "Workshop (28 Nov)",
     date: "Sabtu, 28 November 2026",
     startTime: "08:00",
-    endTime: "17:00",
-    timeString: "08:00 - 17:00 WIB",
-    title: "Workshop Versus - MASS Hunt (From Pixel to Cell)",
-    category: "Workshop Pre-Congress",
+    endTime: "08:30",
+    timeString: "08:00 - 08:30 WIB",
+    title: "Registrasi Peserta, Pembagian Kit & Pre-Test: Workshop Versus - MASS Hunt (From Pixel to Cell)",
+    category: "Workshop Versus - MASS Hunt",
+    type: "Workshop Hands-On",
+    room: "Antareja Room",
+    floor: "Ground Floor",
+    roomColor: "bg-amber-600",
+    moderator: "drh. Listriani Wistawan",
+    capacity: 60,
+    speakers: [MUNAS_SPEAKERS.drh_listriani],
+    abstract: {
+      background: "Registrasi ulang peserta Workshop Versus - MASS Hunt (From Pixel to Cell), pembagian modul wetlab sitologi & pencitraan USG, serta pelaksanaan Pre-Test evaluasi awal kompetensi.",
+      clinicalUpdates: [
+        "Verifikasi kehadiran peserta dan pembagian kelompok stasiun wetlab USG & sitologi.",
+        "Pengisian Pre-Test diagnostik massa jaringan lunak dan organ abdomen."
+      ],
+      conclusion: "Peserta siap mengikuti rangkaian sesi teori dan praktik hands-on dari pixel sonografi hingga evaluasi seluler."
+    },
+    keyTakeaways: [
+      "Pastikan membawa jas praktikum/scrub untuk sesi wetlab siang.",
+      "Pre-test menjadi acuan evaluasi peningkatan kompetensi di akhir sesi."
+    ]
+  },
+  {
+    id: "ws-versus-02",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "08:30",
+    endTime: "10:00",
+    timeString: "08:30 - 10:00 WIB",
+    title: "Sesi I (From Pixel): Prinsip Ultrasonografi Resolusi Tinggi Massa Jaringan Lunak & Organ Abdomen",
+    category: "Workshop Versus - MASS Hunt",
     type: "Workshop Hands-On",
     room: "Antareja Room",
     floor: "Ground Floor",
@@ -180,30 +205,207 @@ export const MUNAS_SESSIONS: Session[] = [
     capacity: 60,
     speakers: [MUNAS_SPEAKERS.sp_versus_mass],
     abstract: {
-      background: "Workshop intensif pre-congress yang mengintegrasikan modalitas diagnostik pencitraan ultrasonografi beresolusi tinggi (pixel) dengan pemeriksaan sitopatologi jarum halus (cell) secara real-time untuk karakterisasi massa neoplasia dan lesi organ hewan kecil.",
+      background: "Pemaparan mendalam mengenai optimasi knobologi ultrasonografi B-mode dan Doppler untuk mengidentifikasi karakteristik ekogenisitas, batas margin, vaskularisasi, dan invasi lokal massa tumor pada hewan kecil.",
       clinicalUpdates: [
-        "Teknik Ultrasound-Guided Fine Needle Aspiration (USG-FNA) presisi tinggi pada organ cavum abdomen dan massa jaringan lunak.",
-        "Prosedur pembuatan preparat apus sitologi, fiksasi optimal, dan pewarnaan cepat Diff-Quik di meja periksa.",
-        "Pembacaan sitopatologis pola seluler: diferensiasi proses supuratif, granulomatosa, hiperplasia, adenoma, dan keganasan karsinoma/sarkoma.",
-        "Hands-on wetlab langsung menggunakan phantom organ dan spesimen sitologi klinis."
+        "Standar pengaturan frekuensi transducer, gain, focal zone, dan dynamic range untuk diferensiasi lesi kistik, solid, dan campuran.",
+        "Pola sonogram khas neoplasia limpa, hepar, limfonodus mesenterika, dan massa subkutan.",
+        "Identifikasi jalur aman jarum biopsi dengan menghindari pembuluh darah besar menggunakan Color Doppler."
       ],
-      conclusion: "Kombinasi modalitas visual pixel dan seluler meningkatkan ketepatan diagnosis neoplasia pre-bedah hingga di atas 95%."
+      conclusion: "Interpretasi pixel sonografi yang presisi menentukan keberhasilan pengambilan sampel seluler yang representatif."
     },
     keyTakeaways: [
-      "Korelasi sonogram dengan apusan sitologi adalah kunci diagnosis massa non-invasif.",
-      "Teknik non-aspirasi jarum halus (kapiler) memberikan preparat sitologi terbaik tanpa kontaminasi eritrosit berlebih.",
-      "Selalu lakukan grading batas massa sebelum menentukan margin eksisi bedah."
+      "Gunakan transducer linear frekuensi tinggi untuk evaluasi massa superfisial dan subkutan.",
+      "Evaluasi vaskularisasi intralesi dengan Doppler sebelum melakukan pungsi jarum."
     ]
   },
   {
-    id: "ws-vetnurse-02",
+    id: "ws-versus-03",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "10:00",
+    endTime: "10:15",
+    timeString: "10:00 - 10:15 WIB",
+    title: "Coffee Break & Diskusi Panel Pagi — Workshop Versus (MASS Hunt)",
+    category: "Workshop Versus - MASS Hunt",
+    type: "Workshop Hands-On",
+    room: "Antareja Room",
+    floor: "Ground Floor",
+    roomColor: "bg-amber-600",
+    moderator: "Panitia Workshop Versus",
+    capacity: 60,
+    speakers: [],
+    abstract: {
+      background: "Rehat kopi pagi disertai diskusi santai dan konsultasi kasus pencitraan ultrasonografi bersama instruktur di area Antareja Room.",
+      clinicalUpdates: [
+        "Networking antar peserta praktisi hewan kecil.",
+        "Tinjauan unit mesin USG portabel dan probe yang digunakan pada sesi wetlab."
+      ],
+      conclusion: "Persiapan menuju Sesi II tentang teknik pengambilan sampel sitologi."
+    },
+    keyTakeaways: [
+      "Manfaatkan waktu rehat untuk mengenal instrumen USG di stasiun praktik."
+    ]
+  },
+  {
+    id: "ws-versus-04",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "10:15",
+    endTime: "12:00",
+    timeString: "10:15 - 12:00 WIB",
+    title: "Sesi II (To Cell): Teknik USG-Guided Fine Needle Aspiration (USG-FNA) & Preparasi Sitologi",
+    category: "Workshop Versus - MASS Hunt",
+    type: "Workshop Hands-On",
+    room: "Antareja Room",
+    floor: "Ground Floor",
+    roomColor: "bg-amber-600",
+    moderator: "drh. Listriani Wistawan",
+    capacity: 60,
+    speakers: [MUNAS_SPEAKERS.sp_versus_mass, MUNAS_SPEAKERS.drh_listriani],
+    abstract: {
+      background: "Integrasi prosedur pengambilan sampel jarum halus dipandu ultrasonografi (USG-FNA) secara in-plane dan out-of-plane serta teknik pembuatan preparat apus sitologi bebas artefak lisis sel.",
+      clinicalUpdates: [
+        "Perbandingan teknik Fine Needle Capillary (non-aspirasi/woodpecker) vs Fine Needle Aspiration pada massa vaskular.",
+        "Teknik squash preparation dan blood smear technique untuk menghasilkan monolayer sel yang ideal.",
+        "Klasifikasi sitopatologi dasar: peradangan (supuratif, piogranulomatosa) vs neoplasia (epitelial, mesenkimal, round cell tumor)."
+      ],
+      conclusion: "Teknik koleksi dan apusan yang benar mencegah sampel non-diagnostik dan hemodilusi."
+    },
+    keyTakeaways: [
+      "Teknik non-aspirasi (kapiler) meminimalkan kontaminasi darah pada organ parenkim seperti limpa dan hati.",
+      "Hindari tekanan berlebih saat melakukan squash prep agar inti sel ganas yang rapuh tidak pecah."
+    ]
+  },
+  {
+    id: "ws-versus-05",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "12:00",
+    endTime: "13:00",
+    timeString: "12:00 - 13:00 WIB",
+    title: "ISHOMA (Istirahat, Sholat & Makan Siang) — Workshop Versus",
+    category: "Workshop Versus - MASS Hunt",
+    type: "Workshop Hands-On",
+    room: "Antareja Room",
+    floor: "Ground Floor",
+    roomColor: "bg-amber-600",
+    moderator: "Panitia Workshop",
+    capacity: 60,
+    speakers: [],
+    abstract: {
+      background: "Istirahat makan siang dan ibadah sholat Dzuhur bagi peserta Workshop Versus sebelum memasuki sesi praktikum wetlab intensif.",
+      clinicalUpdates: [
+        "Santap siang prasmanan di area restoran The Sunan Hotel Solo.",
+        "Persiapan stasiun phantom USG dan mikroskop sitologi oleh tim teknis."
+      ],
+      conclusion: "Sesi hands-on wetlab dimulai tepat pukul 13:00 WIB di Antareja Room."
+    },
+    keyTakeaways: [
+      "Peserta kembali ke Antareja Room 10 menit sebelum sesi wetlab dimulai."
+    ]
+  },
+  {
+    id: "ws-versus-06",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "13:00",
+    endTime: "15:00",
+    timeString: "13:00 - 15:00 WIB",
+    title: "Sesi III (Hands-On Wetlab 1): Praktik Biopsi Jarum Halus dengan Panduan USG pada Phantom",
+    category: "Workshop Versus - MASS Hunt",
+    type: "Workshop Hands-On",
+    room: "Antareja Room",
+    floor: "Ground Floor",
+    roomColor: "bg-amber-600",
+    moderator: "drh. Listriani Wistawan",
+    capacity: 60,
+    speakers: [MUNAS_SPEAKERS.sp_versus_mass, MUNAS_SPEAKERS.drh_listriani],
+    abstract: {
+      background: "Sesi praktik langsung (hands-on wetlab) koordinasi tangan-mata memegang probe USG dan mengarahkan jarum 22G-25G tepat menuju target massa berukuran kecil di dalam model phantom jaringan.",
+      clinicalUpdates: [
+        "Praktik pendekatan In-Plane (visualisasi seluruh batang dan ujung bevel jarum secara longitudinal).",
+        "Praktik pendekatan Out-of-Plane untuk lesi superfisial dengan kedalaman terukur.",
+        "Aspirasi massa terpandu dan pengeluaran sampel ke kaca objek secara higienis."
+      ],
+      conclusion: "Setiap peserta wajib berhasil melakukan minimal 3 kali pungsi target lesi terpandu USG dengan visualisasi ujung jarum yang jelas."
+    },
+    keyTakeaways: [
+      "Jangan pernah mendorong jarum lebih dalam jika ujung bevel jarum tidak terlihat pada layar monitor USG.",
+      "Sudut masuk jarum yang lebih landai menghasilkan pantulan akustik jarum yang lebih terang."
+    ]
+  },
+  {
+    id: "ws-versus-07",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "15:00",
+    endTime: "16:30",
+    timeString: "15:00 - 16:30 WIB",
+    title: "Sesi IV (Hands-On Wetlab 2): Pewarnaan Cepat Diff-Quik & Interpretasi Mikroskopis Seluler",
+    category: "Workshop Versus - MASS Hunt",
+    type: "Workshop Hands-On",
+    room: "Antareja Room",
+    floor: "Ground Floor",
+    roomColor: "bg-amber-600",
+    moderator: "drh. Listriani Wistawan",
+    capacity: 60,
+    speakers: [MUNAS_SPEAKERS.sp_versus_mass, MUNAS_SPEAKERS.drh_listriani],
+    abstract: {
+      background: "Praktikum pewarnaan sitologi cepat metode Romanowsky (Diff-Quik) dan pembacaan mandiri preparat mikroskopis berbagai kasus tumor klinis anjing dan kucing (Mast Cell Tumor, Lymphoma, Lipoma, Squamous Cell Carcinoma).",
+      clinicalUpdates: [
+        "Protokol pencelupan fiksasi metanol, eosinofilik, dan basofilik untuk kontras kromatin inti optimal.",
+        "Algoritma skening mikroskop dari perbesaran 4x, 10x, 40x hingga 100x minyak imersi.",
+        "Identifikasi kriteria keganasan inti: anisokariosis, makrokariosis, rasio N:C tinggi, nukleoli prominen, dan mitosis atipikal."
+      ],
+      conclusion: "Peserta mampu mengorelasikan temuan citra USG (pixel) dengan morfologi seluler (cell) untuk merumuskan diagnosis kerja."
+    },
+    keyTakeaways: [
+      "Selalu mulai pemeriksaan mikroskopis dengan lensa objektif 10x untuk menilai selularitas dan distribusi sel.",
+      "Ditemukannya lebih dari 3 kriteria keganasan inti mengindikasikan proses neoplastik maligna."
+    ]
+  },
+  {
+    id: "ws-versus-08",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "16:30",
+    endTime: "17:00",
+    timeString: "16:30 - 17:00 WIB",
+    title: "Sesi V: Review Kasus Interaktif, Post-Test & Penyerahan Sertifikat Workshop Versus",
+    category: "Workshop Versus - MASS Hunt",
+    type: "Workshop Hands-On",
+    room: "Antareja Room",
+    floor: "Ground Floor",
+    roomColor: "bg-amber-600",
+    moderator: "drh. Listriani Wistawan",
+    capacity: 60,
+    speakers: [MUNAS_SPEAKERS.sp_versus_mass, MUNAS_SPEAKERS.drh_listriani],
+    abstract: {
+      background: "Diskusi rangkuman kasus klinis 'From Pixel to Cell', pelaksanaan Post-Test evaluasi akhir, dan penyerahan sertifikat resmi Workshop Pre-Congress KIVNAHK IV & MUNAS V ADHPHKI.",
+      clinicalUpdates: [
+        "Pembahasan 5 kasus tantangan sonografi-sitologi terintegrasi.",
+        "Pengumuman peserta dengan skor diagnostik terbaik dan foto bersama."
+      ],
+      conclusion: "Penutupan rangkaian Workshop Versus - MASS Hunt."
+    },
+    keyTakeaways: [
+      "Sertifikat SKP Workshop dapat diunduh setelah menyelesaikan Post-Test."
+    ]
+  },
+
+  // ============================================================
+  // PRE-CONGRESS WORKSHOP: SABTU, 28 NOVEMBER 2026
+  // TRACK 2: WORKSHOP VET NURSE - NURSE EXCELLENCE TRACK (WISANGGENI ROOM, 09:00 - 17:00 WIB)
+  // ============================================================
+  {
+    id: "ws-vetnurse-01",
     day: "Workshop (28 Nov)",
     date: "Sabtu, 28 November 2026",
     startTime: "09:00",
-    endTime: "17:00",
-    timeString: "09:00 - 17:00 WIB",
-    title: "Workshop Vet Nurse - Nurse Excellence Track",
-    category: "Veterinary Nursing",
+    endTime: "09:30",
+    timeString: "09:00 - 09:30 WIB",
+    title: "Registrasi Peserta, Orientasi Track & Pre-Test: Workshop Vet Nurse - Nurse Excellence Track",
+    category: "Workshop Vet Nurse - Nurse Excellence",
     type: "Workshop Hands-On",
     room: "Wisanggeni Room",
     floor: "Ground Floor",
@@ -212,19 +414,219 @@ export const MUNAS_SESSIONS: Session[] = [
     capacity: 70,
     speakers: [MUNAS_SPEAKERS.sp_vet_nurse],
     abstract: {
-      background: "Pelatihan komprehensif peningkatan kompetensi paramedis veteriner dan perawat hewan dalam penanganan gawat darurat, monitoring anestesi lanjut, serta manajemen resusitasi kritis di instalasi rawat inap dan bedah.",
+      background: "Registrasi ulang peserta Workshop Vet Nurse - Nurse Excellence Track di Wisanggeni Room, pembagian modul panduan keperawatan kritis veteriner, dan pelaksanaan Pre-Test.",
       clinicalUpdates: [
-        "Protokol Triase Cepat Veteriner (Metode ABCD: Airway, Breathing, Circulation, Disability) dalam 60 detik pertama kedatangan pasien kritis.",
-        "Monitoring Anestesi Lanjut: Interpretasi kurva kapnografi (EtCO2), pulse oximetry (SpO2), pemantauan tekanan darah non-invasif, dan EKG 3-lead.",
-        "Manajemen infus cairan resusitasi kristaloid/koloid dan kalkulasi laju infus konstan (Constant Rate Infusion - CRI) analgesia multimodal.",
-        "Hands-on simulasi Cardiopulmonary Resuscitation (CPR RECOVER Guidelines) pada manekin veteriner."
+        "Pengenalan standar kompetensi paramedis dan perawat veteriner di klinik hewan modern.",
+        "Pembagian tim simulasi triase dan resusitasi gawat darurat."
       ],
-      conclusion: "Keperawatan veteriner berstandar internasional secara nyata menurunkan mortalitas anestesi dan meningkatkan kelangsungan hidup pasien kritis."
+      conclusion: "Peserta siap mengikuti pelatihan intensif keperawatan veteriner dari pukul 09:00 hingga 17:00 WIB."
     },
     keyTakeaways: [
-      "Kapnografi merupakan tanda paling dini mendeteksi hipoventilasi, apneu, dan cardiac arrest intraoperatif.",
-      "Kompresi dada berkualitas tinggi pada CPR anjing/kucing memerlukan kedalaman 1/3-1/2 diameter dada dengan laju 100-120x/menit.",
-      "Pencatatan rekam medis terpadu vital signs menjamin kesinambungan terapi rawat inap."
+      "Perawat veteriner adalah garda terdepan deteksi dini perubahan status fisiologis pasien."
+    ]
+  },
+  {
+    id: "ws-vetnurse-02",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "09:30",
+    endTime: "10:45",
+    timeString: "09:30 - 10:45 WIB",
+    title: "Sesi I: Protokol Triase Gawat Darurat Veteriner (Metode ABCD) & Stabilisasi Awal Pasien Kritis",
+    category: "Workshop Vet Nurse - Nurse Excellence",
+    type: "Workshop Hands-On",
+    room: "Wisanggeni Room",
+    floor: "Ground Floor",
+    roomColor: "bg-violet-600",
+    moderator: "Ns. Maya Kartika, S.Kep, CVN",
+    capacity: 70,
+    speakers: [MUNAS_SPEAKERS.sp_vet_nurse],
+    abstract: {
+      background: "Pelatihan sistematis penilaian cepat pasien gawat darurat dalam 60 detik pertama kedatangan di ruang IGD veteriner menggunakan algoritma Airway, Breathing, Circulation, dan Disability (ABCD).",
+      clinicalUpdates: [
+        "Identifikasi pola napas paradoksal, sianosis, waktu pengisian kapiler (CRT), dan kualitas pulsus femoralis.",
+        "Teknik oksigenasi darurat (flow-by, masker, oxygen cage, dan nasal cannula) tanpa memicu stres berlebih pada kucing dispnea.",
+        "Pemasangan akses kateter intravena cepat pada pasien hipovolemik dan syok."
+      ],
+      conclusion: "Triase yang cepat dan terstruktur dalam 5 menit emas pertama secara signifikan menyelamatkan nyawa pasien kritis."
+    },
+    keyTakeaways: [
+      "Pada kucing dengan distres pernapasan berat, stabilisasi oksigen minimal-stres wajib didahulukan sebelum prosedur diagnostik agresif.",
+      "Komunikasi efektif antara vet nurse dan dokter jaga mempercepat intervensi penyelamatan hidup."
+    ]
+  },
+  {
+    id: "ws-vetnurse-03",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "10:45",
+    endTime: "11:00",
+    timeString: "10:45 - 11:00 WIB",
+    title: "Coffee Break Pagi — Workshop Vet Nurse (Nurse Excellence Track)",
+    category: "Workshop Vet Nurse - Nurse Excellence",
+    type: "Workshop Hands-On",
+    room: "Wisanggeni Room",
+    floor: "Ground Floor",
+    roomColor: "bg-violet-600",
+    moderator: "Panitia Vet Nurse",
+    capacity: 70,
+    speakers: [],
+    abstract: {
+      background: "Rehat kopi pagi dan ramah tamah antar peserta paramedis serta perawat hewan kecil dari berbagai klinik dan rumah sakit hewan di Indonesia.",
+      clinicalUpdates: [
+        "Demonstrasi alat patient monitor multi-parameter di meja stasiun praktik.",
+        "Diskusi ringan manajemen alur pasien rawat inap."
+      ],
+      conclusion: "Persiapan memasuki Sesi II tentang monitoring anestesi lanjut."
+    },
+    keyTakeaways: [
+      "Kenali konektor sensor SpO2, manset NIBP, dan sidestream capnograph sebelum sesi berikutnya."
+    ]
+  },
+  {
+    id: "ws-vetnurse-04",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "11:00",
+    endTime: "12:15",
+    timeString: "11:00 - 12:15 WIB",
+    title: "Sesi II: Monitoring Anestesi Multi-Parameter (Kapnografi EtCO2, SpO2, EKG & Tekanan Darah)",
+    category: "Workshop Vet Nurse - Nurse Excellence",
+    type: "Workshop Hands-On",
+    room: "Wisanggeni Room",
+    floor: "Ground Floor",
+    roomColor: "bg-violet-600",
+    moderator: "Ns. Maya Kartika, S.Kep, CVN",
+    capacity: 70,
+    speakers: [MUNAS_SPEAKERS.sp_vet_nurse],
+    abstract: {
+      background: "Pendalaman peran vital perawat anestesi dalam memantau kedalaman anestesi, membaca gelombang kapnogram (EtCO2), saturasi oksigen (SpO2), elektrokardiografi (EKG), dan tekanan darah arteri.",
+      clinicalUpdates: [
+        "Interpretasi bentuk gelombang kapnografi normal vs obstruksi ETT, kebocoran sirkuit, rebreathing, dan henti jantung mendadak.",
+        "Pemilihan ukuran manset tekanan darah non-invasif (NIBP/Doppler) sebesar 40% lingkar ekstremitas untuk akurasi bacaan MAP.",
+        "Pencegahan hipotermia perioperatif dan manajemen pemulihan pasca-ekstubasi yang aman."
+      ],
+      conclusion: "Pemantauan kapnografi dan tekanan darah berkelanjutan menurunkan angka komplikasi anestesi secara drastis."
+    },
+    keyTakeaways: [
+      "Penurunan mendadak EtCO2 menuju nol adalah indikator paling dini terjadinya cardiac arrest atau lepasnya pipa endotrakeal.",
+      "Mean Arterial Pressure (MAP) wajib dipertahankan di atas 60 mmHg untuk menjamin perfusi ginjal dan otak."
+    ]
+  },
+  {
+    id: "ws-vetnurse-05",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "12:15",
+    endTime: "13:15",
+    timeString: "12:15 - 13:15 WIB",
+    title: "ISHOMA (Istirahat, Sholat & Makan Siang) — Workshop Vet Nurse",
+    category: "Workshop Vet Nurse - Nurse Excellence",
+    type: "Workshop Hands-On",
+    room: "Wisanggeni Room",
+    floor: "Ground Floor",
+    roomColor: "bg-violet-600",
+    moderator: "Panitia Vet Nurse",
+    capacity: 70,
+    speakers: [],
+    abstract: {
+      background: "Istirahat makan siang dan ibadah sholat Dzuhur bagi peserta Workshop Vet Nurse sebelum memasuki sesi hands-on stasiun keterampilan klinis.",
+      clinicalUpdates: [
+        "Makan siang bersama di area dining The Sunan Hotel Solo.",
+        "Penyiapan syringe pump, infusion pump, dan manekin CPR anjing di Wisanggeni Room."
+      ],
+      conclusion: "Sesi praktik hands-on dimulai pukul 13:15 WIB."
+    },
+    keyTakeaways: [
+      "Siapkan kalkulator klinis untuk sesi perhitungan dosis cairan dan CRI."
+    ]
+  },
+  {
+    id: "ws-vetnurse-06",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "13:15",
+    endTime: "14:45",
+    timeString: "13:15 - 14:45 WIB",
+    title: "Sesi III (Hands-On Stasiun 1): Manajemen Terapi Cairan, Syringe Pump & Kalkulasi CRI Analgesia",
+    category: "Workshop Vet Nurse - Nurse Excellence",
+    type: "Workshop Hands-On",
+    room: "Wisanggeni Room",
+    floor: "Ground Floor",
+    roomColor: "bg-violet-600",
+    moderator: "Ns. Maya Kartika, S.Kep, CVN",
+    capacity: 70,
+    speakers: [MUNAS_SPEAKERS.sp_vet_nurse],
+    abstract: {
+      background: "Praktik langsung penghitungan kebutuhan cairan rumatan, koreksi persentase dehidrasi, bolus syok, serta pengoperasian infusion pump dan syringe pump untuk pemberian Constant Rate Infusion (CRI).",
+      clinicalUpdates: [
+        "Rumus praktis perhitungan laju tetesan infus (ml/jam dan tetes/menit) pada pasien pediatrik dan kucing.",
+        "Pembuatan larutan CRI analgesia dan perawatan jalur kateter intravena agar bebas flebitis dan oklusi.",
+        "Pemantauan tanda-tanda fluid overload (kemosis, takipnea, peningkatan berat badan akut, ronkhi paru)."
+      ],
+      conclusion: "Ketepatan kalkulasi dan pemantauan infus mencegah komplikasi iatrogenik edema paru pada pasien rawat inap."
+    },
+    keyTakeaways: [
+      "Selalu lakukan pengecekan ganda (double-check) perhitungan konsentrasi obat CRI sebelum menyalakan syringe pump.",
+      "Periksa patensi dan kebersihan balutan IV catheter minimal setiap 8 jam."
+    ]
+  },
+  {
+    id: "ws-vetnurse-07",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "14:45",
+    endTime: "16:30",
+    timeString: "14:45 - 16:30 WIB",
+    title: "Sesi IV (Hands-On Stasiun 2): Simulasi Cardiopulmonary Resuscitation (CPR RECOVER Guidelines)",
+    category: "Workshop Vet Nurse - Nurse Excellence",
+    type: "Workshop Hands-On",
+    room: "Wisanggeni Room",
+    floor: "Ground Floor",
+    roomColor: "bg-violet-600",
+    moderator: "Ns. Maya Kartika, S.Kep, CVN",
+    capacity: 70,
+    speakers: [MUNAS_SPEAKERS.sp_vet_nurse],
+    abstract: {
+      background: "Simulasi tim gawat darurat melakukan Basic Life Support (BLS) dan Advanced Life Support (ALS) berdasarkan panduan internasional RECOVER pada manekin anjing dan kucing.",
+      clinicalUpdates: [
+        "Teknik kompresi dada laju 100-120 kali/menit dengan kedalaman 1/3 hingga 1/2 lebar dinding toraks sesuai konformasi dada (round, keel, flat-chested).",
+        "Ventilasi tekanan positif menggunakan Ambu-bag sebesar 10 napas/menit tanpa hiperventilasi.",
+        "Rotasi siklus 2 menit tanpa jeda, pencatatan waktu epinefrin/atropin, dan koordinasi pemimpin tim CPR."
+      ],
+      conclusion: "Latihan simulasi tim secara berkala meningkatkan kecepatan respons dan tingkat kembalinya sirkulasi spontan (ROSC)."
+    },
+    keyTakeaways: [
+      "Berikan kesempatan recoil dinding dada secara penuh di antara setiap kompresi.",
+      "Batasi jeda kompresi dada maksimal kurang dari 10 detik saat pergantian kompresor setiap 2 menit."
+    ]
+  },
+  {
+    id: "ws-vetnurse-08",
+    day: "Workshop (28 Nov)",
+    date: "Sabtu, 28 November 2026",
+    startTime: "16:30",
+    endTime: "17:00",
+    timeString: "16:30 - 17:00 WIB",
+    title: "Sesi V: Evaluasi Keterampilan Praktik, Post-Test & Penutupan Workshop Vet Nurse",
+    category: "Workshop Vet Nurse - Nurse Excellence",
+    type: "Workshop Hands-On",
+    room: "Wisanggeni Room",
+    floor: "Ground Floor",
+    roomColor: "bg-violet-600",
+    moderator: "Ns. Maya Kartika, S.Kep, CVN",
+    capacity: 70,
+    speakers: [MUNAS_SPEAKERS.sp_vet_nurse],
+    abstract: {
+      background: "Ujian evaluasi keterampilan praktis (OSCE singkat), pelaksanaan Post-Test tertulis, diskusi penutup, dan penyerahan sertifikat Nurse Excellence Track.",
+      clinicalUpdates: [
+        "Review poin kritis keselamatan pasien (patient safety) di klinik hewan.",
+        "Penyerahan sertifikat kelulusan Workshop Vet Nurse."
+      ],
+      conclusion: "Penutupan resmi Workshop Vet Nurse - Nurse Excellence Track."
+    },
+    keyTakeaways: [
+      "Terapkan checklist triase dan monitoring anestesi di fasilitas klinik masing-masing."
     ]
   },
 

@@ -469,9 +469,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         <Lock className="w-4 h-4 text-slate-500" />
                         <span>Unduh Sertifikat (Terkunci)</span>
                       </button>
-                      <p className="text-[11px] text-slate-400 text-center">
-                        Pindai QR Code di minimal 2 sesi simposium untuk membuka tombol unduh sertifikat.
-                      </p>
+                      {info.enableQrAttendance !== false && (
+                        <p className="text-[11px] text-slate-400 text-center">
+                          Pindai QR Code di minimal 2 sesi simposium untuk membuka tombol unduh sertifikat.
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -496,52 +498,56 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         + Tambah 2 Sesi (+5.0 SKP)
                       </button>
                     )}
-                    <button
-                      onClick={() => {
-                        onClose();
-                        onOpenQrScanner();
-                      }}
-                      className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors"
-                    >
-                      <QrCode className="w-3.5 h-3.5 inline mr-1" />
-                      Pindai QR
-                    </button>
+                    {info.enableQrAttendance !== false && (
+                      <button
+                        onClick={() => {
+                          onClose();
+                          onOpenQrScanner();
+                        }}
+                        className="px-3 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-bold transition-colors"
+                      >
+                        <QrCode className="w-3.5 h-3.5 inline mr-1" />
+                        Pindai QR
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
 
               {/* Attended Sessions History */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
-                  <span>Sesi Yang Telah Diikuti ({attendances.length}):</span>
-                  <span className="text-slate-400 text-[10px] font-normal">
-                    Terverifikasi QR Code
-                  </span>
-                </h4>
+              {info.enableQrAttendance !== false && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center justify-between">
+                    <span>Sesi Yang Telah Diikuti ({attendances.length}):</span>
+                    <span className="text-slate-400 text-[10px] font-normal">
+                      Terverifikasi QR Code
+                    </span>
+                  </h4>
 
-                {attendances.length === 0 ? (
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
-                    Belum ada presensi tercatat. Silakan pindai QR Code di ruang simposium.
-                  </div>
-                ) : (
-                  <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
-                    {attendances.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-2.5 bg-white rounded-lg border border-slate-200 text-xs flex items-center justify-between"
-                      >
-                        <div>
-                          <div className="text-[10px] text-slate-400 font-bold">{item.day} • {item.room}</div>
-                          <div className="font-bold text-slate-900">{item.sessionTitle}</div>
+                  {attendances.length === 0 ? (
+                    <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
+                      Belum ada presensi tercatat. Silakan pindai QR Code di ruang simposium.
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-[160px] overflow-y-auto pr-1">
+                      {attendances.map((item) => (
+                        <div
+                          key={item.id}
+                          className="p-2.5 bg-white rounded-lg border border-slate-200 text-xs flex items-center justify-between"
+                        >
+                          <div>
+                            <div className="text-[10px] text-slate-400 font-bold">{item.day} • {item.room}</div>
+                            <div className="font-bold text-slate-900">{item.sessionTitle}</div>
+                          </div>
+                          <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded shrink-0">
+                            +{item.skpPoints} SKP
+                          </span>
                         </div>
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded shrink-0">
-                          +{item.skpPoints} SKP
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
             </div>
 

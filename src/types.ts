@@ -10,6 +10,15 @@ export interface Speaker {
   talkTitle?: string;
 }
 
+export interface WorkshopRundownItem {
+  id: string;
+  startTime: string; // e.g. "08:00"
+  endTime: string;   // e.g. "08:30"
+  activity: string;  // e.g. "Registrasi & Pembukaan Workshop"
+  pic?: string;      // Instruktur / Pemateri / PIC
+  notes?: string;    // Catatan tambahan / Stasiun
+}
+
 export interface Session {
   id: string;
   day: string; // e.g. "Workshop (28 Nov)", "Hari I", "Hari II", "Hari III"
@@ -32,6 +41,7 @@ export interface Session {
   };
   keyTakeaways?: string[];
   capacity?: number;
+  rundown?: WorkshopRundownItem[];
 }
 
 export interface SymposiumInfo {
@@ -56,6 +66,7 @@ export interface SymposiumInfo {
   contactEmail?: string;
   contactPhone?: string;
   websiteUrl?: string;
+  enableQrAttendance?: boolean;
 }
 
 export interface Participant {

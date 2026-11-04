@@ -15,12 +15,15 @@ import {
   ChevronRight,
   UserCheck,
   Building,
-  CalendarDays
+  CalendarDays,
+  Smartphone,
+  Download
 } from 'lucide-react';
 import { MainTabType } from './MainMenuTabs';
 import { SymposiumInfo, Participant } from '../types';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { getThemePalette } from '../utils/themeColors';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 
 interface LandingPageViewProps {
   onSelectTab: (tab: MainTabType) => void;
@@ -28,6 +31,7 @@ interface LandingPageViewProps {
   onOpenQrScanner: () => void;
   onOpenProfile: () => void;
   onOpenBookmarks: () => void;
+  onOpenInstallModal?: () => void;
   speakerCount: number;
   workshopCount: number;
   symposiumCount: number;
@@ -44,6 +48,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   onOpenQrScanner,
   onOpenProfile,
   onOpenBookmarks,
+  onOpenInstallModal,
   speakerCount,
   workshopCount,
   symposiumCount,
@@ -55,6 +60,18 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
 }) => {
   const info = eventInfo || SYMPOSIUM_INFO;
   const palette = getThemePalette(info);
+  const { isInstallable, isInstalled, installApp } = usePWAInstall();
+
+  const handleInstallTrigger = async () => {
+    if (isInstallable) {
+      const outcome = await installApp();
+      if (outcome === 'unavailable' && onOpenInstallModal) {
+        onOpenInstallModal();
+      }
+    } else if (onOpenInstallModal) {
+      onOpenInstallModal();
+    }
+  };
 
   const eventMenus = [
     {
@@ -129,7 +146,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       actionText: 'Buka Agenda Saya',
       onClick: onOpenBookmarks
     },
-    {
+    ...(info.enableQrAttendance !== false ? [{
       id: 'presensi' as any,
       title: 'Presensi QR Code',
       subtitle: 'Pindai Kehadiran Sesi',
@@ -140,7 +157,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       badgeBg: 'bg-teal-100 text-teal-800',
       actionText: 'Pindai QR Presensi',
       onClick: onOpenQrScanner
-    },
+    }] : []),
     {
       id: 'profil' as any,
       title: 'Profil & Sertifikat',
@@ -152,6 +169,18 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       badgeBg: 'bg-purple-100 text-purple-800',
       actionText: 'Lihat Sertifikat',
       onClick: onOpenProfile
+    },
+    {
+      id: 'install-app' as any,
+      title: 'Install Aplikasi',
+      subtitle: isInstalled ? 'Sudah Terpasang' : 'Android & iOS (PWA)',
+      desc: 'Pasang aplikasi ke layar utama HP (Home Screen) untuk akses cepat layar penuh dan mode offline.',
+      icon: Smartphone,
+      color: 'emerald',
+      gradient: 'from-emerald-700 to-teal-800',
+      badgeBg: isInstalled ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-400 text-slate-950 font-black',
+      actionText: 'Install ke HP',
+      onClick: () => onOpenInstallModal && onOpenInstallModal()
     },
     {
       id: 'admin' as MainTabType,
@@ -280,6 +309,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
         {eventMenus.map((item) => {
           const Icon = item.icon;
           const isAdminCard = item.id === 'admin';
+          const isInstallCard = item.id === ('install-app' as any);
 
           return (
             <button
@@ -295,13 +325,27 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
               {/* Top/Center Icon with notification/badge */}
               <div className="flex flex-col items-center space-y-1.5 sm:space-y-2 w-full">
                 <div className="relative">
-                  <div className={`w-11 h-11 sm:w-13 sm:h-13 rounded-2xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-108 ${
-                    isAdminCard
-                      ? 'bg-amber-400 text-slate-950'
-                      : `bg-gradient-to-br ${item.gradient} text-white shadow-sm`
-                  }`}>
-                    <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
-                  </div>
+                  {isInstallCard && info.logoUrl ? (
+                    <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-white p-1 border-2 border-emerald-500/70 shadow-sm flex items-center justify-center overflow-hidden transition-transform group-hover:scale-108">
+                      <img
+                        src={info.logoUrl}
+                        alt={info.title}
+                        className="w-full h-full object-contain rounded-xl"
+                        referrerPolicy="no-referrer"
+                      />
+                      <span className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-xs border border-white">
+                        <Download className="w-3 h-3" />
+                      </span>
+                    </div>
+                  ) : (
+                    <div className={`w-11 h-11 sm:w-13 sm:h-13 rounded-2xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-108 ${
+                      isAdminCard
+                        ? 'bg-amber-400 text-slate-950'
+                        : `bg-gradient-to-br ${item.gradient} text-white shadow-sm`
+                    }`}>
+                      <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </div>
+                  )}
                 </div>
 
                 {/* Title & Subtitle */}
@@ -327,6 +371,45 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           );
         })}
       </div>
+
+      {/* Mobile App (PWA) Installer Banner */}
+      {!isInstalled && (
+        <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-slate-900 rounded-2xl p-4 sm:p-5 text-white shadow-md border border-emerald-700/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-white p-1 border-2 border-amber-400 shadow-md flex items-center justify-center shrink-0 overflow-hidden">
+              <img
+                src={info.logoUrl || '/pwa-192x192.png'}
+                alt={info.title}
+                className="w-full h-full object-contain rounded-xl"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-400/20 text-amber-300 text-[10px] font-extrabold uppercase tracking-wider mb-0.5">
+                <Smartphone className="w-3 h-3" />
+                Tersedia Versi Aplikasi Mobile
+              </div>
+              <h3 className="text-sm sm:text-base font-extrabold text-white">
+                Pasang Aplikasi {info.title} di Smartphone Anda
+              </h3>
+              <p className="text-xs text-emerald-100/80 mt-0.5">
+                Akses jadwal simposium, rundown workshop, dan denah venue lebih cepat dari layar utama HP (Android &amp; iPhone) dengan ikon resmi logo event.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <button
+              type="button"
+              onClick={handleInstallTrigger}
+              className="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>{isInstallable ? 'Install Aplikasi (1-Klik)' : 'Buka Installer Mobile'}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Simple Footer Event Info */}
       <div className="text-center pt-4 pb-2 border-t border-slate-200 text-xs text-slate-500 space-y-1">

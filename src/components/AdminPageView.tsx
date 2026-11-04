@@ -32,9 +32,10 @@ import {
   LogOut,
   Megaphone,
   Radio,
-  BarChart3
+  BarChart3,
+  ListOrdered
 } from 'lucide-react';
-import { Speaker, Session, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification, AttendanceRecord } from '../types';
+import { Speaker, Session, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification, AttendanceRecord, WorkshopRundownItem } from '../types';
 import { AdminParticipantsManager } from './admin/AdminParticipantsManager';
 import { SessionImportExportModal } from './admin/SessionImportExportModal';
 import { AdminEventSettings } from './admin/AdminEventSettings';
@@ -143,8 +144,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
     photoUrl: DOCTOR_AVATAR_PRESETS[0].url,
     specialty: 'Kardiologi',
     bio: '',
-    email: '',
-    talkTitle: ''
+    email: ''
   });
 
   const handleOpenSpeakerModal = (speaker?: Speaker) => {
@@ -157,8 +157,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         photoUrl: speaker.photoUrl,
         specialty: speaker.specialty,
         bio: speaker.bio,
-        email: speaker.email || '',
-        talkTitle: speaker.talkTitle || ''
+        email: speaker.email || ''
       });
     } else {
       setEditingSpeakerId(null);
@@ -169,8 +168,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         photoUrl: DOCTOR_AVATAR_PRESETS[Math.floor(Math.random() * DOCTOR_AVATAR_PRESETS.length)].url,
         specialty: 'Kardiologi',
         bio: '',
-        email: '',
-        talkTitle: ''
+        email: ''
       });
     }
     setIsSpeakerModalOpen(true);
@@ -231,8 +229,40 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
       conclusion: ''
     },
     keyTakeaways: [],
-    capacity: 60
+    capacity: 60,
+    rundown: []
   });
+
+  const buildDefaultWorkshopRundown = (start: string, end: string, instructorName?: string): WorkshopRundownItem[] => {
+    const startHour = parseInt((start || '08:00').split(':')[0], 10);
+    const isStartNine = startHour >= 9;
+    const picDefault = instructorName || 'Tim Instruktur Workshop';
+    const ts = Date.now();
+
+    if (isStartNine) {
+      return [
+        { id: `rd-${ts}-1`, startTime: start || '09:00', endTime: '09:30', activity: 'Registrasi Peserta, Pembagian Kit & Pre-Test Workshop', pic: 'Panitia Workshop' },
+        { id: `rd-${ts}-2`, startTime: '09:30', endTime: '10:45', activity: 'Sesi Materi 1: Pengantar Teori Klinis & Standar Prosedur', pic: picDefault },
+        { id: `rd-${ts}-3`, startTime: '10:45', endTime: '11:00', activity: 'Coffee Break Pagi', pic: 'Panitia' },
+        { id: `rd-${ts}-4`, startTime: '11:00', endTime: '12:15', activity: 'Sesi Materi 2: Demonstrasi Alat & Studi Kasus Klinis', pic: picDefault },
+        { id: `rd-${ts}-5`, startTime: '12:15', endTime: '13:15', activity: 'ISHOMA (Istirahat, Sholat, Makan Siang)', pic: 'Panitia' },
+        { id: `rd-${ts}-6`, startTime: '13:15', endTime: '15:00', activity: 'Hands-On Praktik Stasiun 1: Simulasi Keterampilan Mandiri', pic: picDefault },
+        { id: `rd-${ts}-7`, startTime: '15:00', endTime: '16:30', activity: 'Hands-On Praktik Stasiun 2: Evaluasi Kasus & Troubleshooting', pic: picDefault },
+        { id: `rd-${ts}-8`, startTime: '16:30', endTime: end || '17:00', activity: 'Diskusi Akhir, Post-Test & Penyerahan Sertifikat (Selesai)', pic: 'Panitia & Instruktur' }
+      ];
+    }
+
+    return [
+      { id: `rd-${ts}-1`, startTime: start || '08:00', endTime: '08:30', activity: 'Registrasi Peserta, Pembagian Kit & Pre-Test Workshop', pic: 'Panitia Workshop' },
+      { id: `rd-${ts}-2`, startTime: '08:30', endTime: '10:00', activity: 'Sesi Materi 1: Pengantar Teori Klinis & Standar Prosedur', pic: picDefault },
+      { id: `rd-${ts}-3`, startTime: '10:00', endTime: '10:15', activity: 'Coffee Break Pagi', pic: 'Panitia' },
+      { id: `rd-${ts}-4`, startTime: '10:15', endTime: '12:00', activity: 'Sesi Materi 2: Demonstrasi Alat & Studi Kasus Klinis', pic: picDefault },
+      { id: `rd-${ts}-5`, startTime: '12:00', endTime: '13:00', activity: 'ISHOMA (Istirahat, Sholat, Makan Siang)', pic: 'Panitia' },
+      { id: `rd-${ts}-6`, startTime: '13:00', endTime: '15:00', activity: 'Hands-On Praktik Stasiun 1: Simulasi Keterampilan Mandiri', pic: picDefault },
+      { id: `rd-${ts}-7`, startTime: '15:00', endTime: '16:30', activity: 'Hands-On Praktik Stasiun 2: Evaluasi Kasus & Troubleshooting', pic: picDefault },
+      { id: `rd-${ts}-8`, startTime: '16:30', endTime: end || '17:00', activity: 'Diskusi Akhir, Post-Test & Penyerahan Sertifikat (Selesai)', pic: 'Panitia & Instruktur' }
+    ];
+  };
 
   const handleOpenSessionModal = (targetType: 'symposium' | 'workshop', session?: Session) => {
     setSessionFormType(targetType);
@@ -258,7 +288,8 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
           conclusion: session.abstract.conclusion
         },
         keyTakeaways: session.keyTakeaways ? [...session.keyTakeaways] : [],
-        capacity: session.capacity || (targetType === 'workshop' ? 50 : 250)
+        capacity: session.capacity || (targetType === 'workshop' ? 60 : 250),
+        rundown: session.rundown && session.rundown.length > 0 ? session.rundown.map(r => ({ ...r })) : []
       });
     } else {
       setEditingSessionId(null);
@@ -270,11 +301,11 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
       setSessionForm({
         day: isWs ? 'Workshop (28 Nov)' : 'Hari I',
         date: isWs ? 'Sabtu, 28 November 2026' : 'Minggu, 29 November 2026',
-        startTime: isWs ? '08:00' : '09:00',
-        endTime: isWs ? '17:00' : '10:30',
-        timeString: isWs ? '08:00 - 17:00 WIB' : '09:00 - 10:30 WIB',
-        title: isWs ? 'Workshop Hands-On: Keterampilan Veteriner Klinis' : 'Simposium Klinis KIVNAHK IV & MUNAS V ADHPHKI',
-        category: isWs ? 'Workshop Pre-Congress' : 'Onkologi & Bedah',
+        startTime: isWs ? '08:30' : '09:00',
+        endTime: isWs ? '10:00' : '10:30',
+        timeString: isWs ? '08:30 - 10:00 WIB' : '09:00 - 10:30 WIB',
+        title: isWs ? 'Sesi Workshop Hands-On: Keterampilan Veteriner Klinis' : 'Simposium Klinis KIVNAHK IV & MUNAS V ADHPHKI',
+        category: isWs ? 'Workshop Versus - MASS Hunt' : 'Onkologi & Bedah',
         type: isWs ? 'Workshop Hands-On' : 'Simposium Paralel',
         room: defaultRoom?.name || 'Antareja Room',
         floor: defaultRoom?.floor || 'Ground Floor',
@@ -293,18 +324,92 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
           conclusion: 'Peserta diharapkan mampu menerapkan keterampilan praktis secara mandiri pada fasilitas klinik hewan.'
         },
         keyTakeaways: ['Evidence-Based Protocol', 'Hands-On Skill Certification', 'Direct Expert Guidance'],
-        capacity: isWs ? 60 : 350
+        capacity: isWs ? 60 : 350,
+        rundown: []
       });
     }
     setIsSessionModalOpen(true);
+  };
+
+  // Rundown item management helpers
+  const handleAddRundownRow = () => {
+    const currentRundown = sessionForm.rundown || [];
+    let nextStart = sessionForm.startTime || '08:00';
+    if (currentRundown.length > 0) {
+      const lastItem = currentRundown[currentRundown.length - 1];
+      if (lastItem.endTime) {
+        nextStart = lastItem.endTime;
+      }
+    }
+    // Calculate +60 mins for nextEnd
+    const [hh, mm] = nextStart.split(':').map(n => parseInt(n, 10) || 0);
+    const nextHour = Math.min(23, hh + 1);
+    const nextEnd = `${String(nextHour).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+
+    const newItem: WorkshopRundownItem = {
+      id: `rd-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      startTime: nextStart,
+      endTime: nextEnd > (sessionForm.endTime || '17:00') ? (sessionForm.endTime || '17:00') : nextEnd,
+      activity: '',
+      pic: sessionForm.speakers[0]?.name.split(',')[0] || ''
+    };
+
+    setSessionForm({
+      ...sessionForm,
+      rundown: [...currentRundown, newItem]
+    });
+  };
+
+  const handleUpdateRundownRow = (id: string, field: keyof WorkshopRundownItem, value: string) => {
+    const currentRundown = sessionForm.rundown || [];
+    setSessionForm({
+      ...sessionForm,
+      rundown: currentRundown.map(item => item.id === id ? { ...item, [field]: value } : item)
+    });
+  };
+
+  const handleRemoveRundownRow = (id: string) => {
+    const currentRundown = sessionForm.rundown || [];
+    setSessionForm({
+      ...sessionForm,
+      rundown: currentRundown.filter(item => item.id !== id)
+    });
+  };
+
+  const handleSortRundownRows = () => {
+    const currentRundown = [...(sessionForm.rundown || [])];
+    currentRundown.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    setSessionForm({
+      ...sessionForm,
+      rundown: currentRundown
+    });
+  };
+
+  const handleResetRundownTemplate = () => {
+    const generated = buildDefaultWorkshopRundown(
+      sessionForm.startTime || '08:00',
+      sessionForm.endTime || '17:00',
+      sessionForm.speakers[0]?.name
+    );
+    setSessionForm({
+      ...sessionForm,
+      rundown: generated
+    });
   };
 
   const handleSaveSession = (e: React.FormEvent) => {
     e.preventDefault();
     if (!sessionForm.title.trim()) return;
 
-    // recalculate timeString
-    const fullTimeString = `${sessionForm.startTime} - ${sessionForm.endTime} WIB`;
+    // Clean rundown items (keep non-empty activity rows, sort by startTime)
+    const cleanedRundown = (sessionForm.rundown || [])
+      .filter(r => r.activity.trim() !== '')
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+    // If rundown exists for workshop, sync overall session startTime & endTime from first and last rundown item if appropriate
+    const effectiveStartTime = sessionForm.startTime;
+    const effectiveEndTime = sessionForm.endTime;
+    const fullTimeString = `${effectiveStartTime} - ${effectiveEndTime} WIB`;
     const selectedRoomObj = rooms.find(r => r.name === sessionForm.room || r.id === sessionForm.room);
     const resolvedFloor = selectedRoomObj ? selectedRoomObj.floor : sessionForm.floor;
 
@@ -312,15 +417,16 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
       ...sessionForm,
       id: editingSessionId || `session-${Date.now()}`,
       timeString: fullTimeString,
-      floor: resolvedFloor
+      floor: resolvedFloor,
+      rundown: cleanedRundown.length > 0 ? cleanedRundown : undefined
     };
 
     if (editingSessionId) {
       onSaveSessions(sessions.map(s => s.id === editingSessionId ? payload : s));
-      showToast(`Sesi "${payload.title}" berhasil diperbarui.`);
+      showToast(`Sesi "${payload.title}" beserta rundown berhasil diperbarui.`);
     } else {
       onSaveSessions([payload, ...sessions]);
-      showToast(`Sesi "${payload.title}" berhasil ditambahkan.`);
+      showToast(`Sesi "${payload.title}" beserta rundown berhasil ditambahkan.`);
     }
     setIsSessionModalOpen(false);
   };
@@ -611,8 +717,11 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
   };
 
   // Categorize sessions
+  const [selectedWorkshopRoomFilter, setSelectedWorkshopRoomFilter] = useState<string>('all');
   const symposiumSessions = sessions.filter(s => s.type !== 'Workshop Hands-On' && !s.category.includes('Workshop'));
-  const workshopSessions = sessions.filter(s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop'));
+  const workshopSessions = sessions
+    .filter(s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.includes('Workshop'))
+    .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 pb-16">
@@ -842,9 +951,9 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
               }`}
             >
               <Settings className="w-4 h-4 text-indigo-400" />
-              <span>Pengaturan Event</span>
+              <span>Pengaturan Sistem & Event</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-500/30 text-indigo-200 font-black">
-                Info
+                Sistem
               </span>
             </button>
 
@@ -1071,7 +1180,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                   Manajemen Daftar Speaker & Narasumber
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Input data profil pembicara, gelar akademis, institusi tempat bertugas, keahlian subspesialis, dan topik materi.
+                  Input data profil pembicara, gelar akademis, institusi tempat bertugas, dan keahlian subspesialis.
                 </p>
               </div>
 
@@ -1133,13 +1242,6 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                         </p>
                       </div>
                     </div>
-
-                    {sp.talkTitle && (
-                      <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800/80 text-[11px] text-slate-300">
-                        <span className="font-extrabold text-blue-400 block mb-0.5">Materi Kuliah / Sesi:</span>
-                        <p className="line-clamp-2 leading-relaxed">{sp.talkTitle}</p>
-                      </div>
-                    )}
 
                     <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
                       <span className="text-[10px] text-slate-500 font-mono">ID: {sp.id}</span>
@@ -1321,7 +1423,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* SECTION 3: JADWAL WORKSHOP */}
+        {/* SECTION 3: JADWAL WORKSHOP (SESI & JAM SEPERTI SYMPOSIUM) */}
         {/* ------------------------------------------------------------- */}
         {activeAdminTab === 'workshop' && (
           <div className="space-y-4">
@@ -1329,14 +1431,33 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
               <div>
                 <h2 className="text-lg font-black text-white flex items-center gap-2">
                   <Stethoscope className="w-5 h-5 text-emerald-400" />
-                  Manajemen Jadwal Workshop (Hands-On Clinical Skills)
+                  Manajemen Jadwal Sesi & Jam Workshop (Hands-On)
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Input sesi workshop praktik hands-on, stasiun simulasi manekin/alat, instruktur konsultan, dan kuota peserta.
+                  Input dan kelola setiap sesi workshop beserta jam mulai–selesai per sesi, alokasi ruangan, moderator, instruktur, dan kuota peserta (seperti jadwal Symposium).
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nonWorkshops = sessions.filter(
+                      s => s.type !== 'Workshop Hands-On' && !s.category.includes('Workshop') && !s.day.includes('Workshop')
+                    );
+                    const defaultWorkshops = MUNAS_SESSIONS.filter(
+                      s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.includes('Workshop')
+                    );
+                    onSaveSessions([...defaultWorkshops, ...nonWorkshops]);
+                    showToast("Jadwal Sesi & Jam Workshop (28 Nov 2026) berhasil diterapkan!");
+                  }}
+                  className="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-md shrink-0 cursor-pointer"
+                  title="Terapkan seluruh sesi & jam Workshop Versus (Antareja Room) dan Workshop Vet Nurse (Wisanggeni Room)"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                  <span>Terapkan Sesi Workshop Default</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => { setActiveAdminTab('ai_pdf'); setSearchTerm(''); }}
@@ -1369,92 +1490,129 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
 
                 <button
                   onClick={() => handleOpenSessionModal('workshop')}
-                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shrink-0"
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shrink-0 cursor-pointer"
                 >
                   <Plus className="w-4 h-4" />
-                  <span>Tambah Workshop Baru</span>
+                  <span>Tambah Sesi Workshop</span>
                 </button>
               </div>
             </div>
 
-            {/* List */}
-            <div className="space-y-4">
-              {workshopSessions.map((ws) => (
-                <div 
-                  key={ws.id}
-                  className="bg-slate-950 border border-slate-800 rounded-2xl p-4 sm:p-5 hover:border-emerald-800/80 transition-all space-y-3"
+            {/* Filter Ruangan / Track & Pencarian Sesi Workshop (Seperti Symposium) */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSelectedWorkshopRoomFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    selectedWorkshopRoomFilter === 'all'
+                      ? 'bg-emerald-600 text-white font-black'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                  }`}
                 >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <span className="px-2.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 font-black uppercase">
-                        {ws.day} • {ws.type}
-                      </span>
-                      <span className="text-amber-400 font-bold flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {ws.timeString}
-                      </span>
-                      <span className="text-slate-400 flex items-center gap-1">
-                        <MapPin className="w-3.5 h-3.5 text-rose-400" />
-                        {ws.room}
-                      </span>
+                  Semua Sesi ({workshopSessions.length})
+                </button>
+                {Array.from(new Set(workshopSessions.map(w => w.room))).map(roomName => {
+                  const count = workshopSessions.filter(w => w.room === roomName).length;
+                  const isActive = selectedWorkshopRoomFilter === roomName;
+                  return (
+                    <button
+                      key={roomName}
+                      type="button"
+                      onClick={() => setSelectedWorkshopRoomFilter(roomName)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        isActive
+                          ? 'bg-emerald-600 text-white font-black'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-900'
+                      }`}
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-rose-400" />
+                      <span>{roomName} ({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="Cari sesi workshop berdasarkan jam (cth: 08:30), judul sesi, kategori, ruangan, atau instruktur..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 text-xs sm:text-sm pl-9 pr-3 py-2.5 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+
+            {/* Daftar Sesi & Jam Workshop (Format Seperti Symposium) */}
+            <div className="space-y-3">
+              {workshopSessions
+                .filter(s => selectedWorkshopRoomFilter === 'all' || s.room === selectedWorkshopRoomFilter)
+                .filter(s =>
+                  s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  s.timeString.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  s.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  s.room.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  s.speakers.some(sp => sp.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                )
+                .map((ws) => (
+                  <div
+                    key={ws.id}
+                    className="bg-slate-950 border border-slate-800 rounded-2xl p-4 hover:border-emerald-800/80 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-2 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-black">
+                          {ws.day}
+                        </span>
+                        <span className="text-slate-400 font-semibold">{ws.date}</span>
+                        <span className="text-slate-500">•</span>
+                        <span className="text-amber-400 font-bold flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                          <Clock className="w-3.5 h-3.5" />
+                          {ws.timeString}
+                        </span>
+                        <span className="text-slate-500">•</span>
+                        <span className="text-slate-300 flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-rose-400" />
+                          {ws.room} ({ws.floor})
+                        </span>
+                      </div>
+
+                      <h3 className="text-base font-black text-white">
+                        {ws.title}
+                      </h3>
+
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                        <span>Track / Kategori: <strong className="text-emerald-300">{ws.category}</strong></span>
+                        <span>•</span>
+                        <span>Moderator / PIC: <strong className="text-slate-200">{ws.moderator || '-'}</strong></span>
+                        <span>•</span>
+                        <span>Instruktur ({ws.speakers.length}): <strong className="text-slate-200">{ws.speakers.map(s => s.name.split(',')[0]).join(', ') || 'Tim Panitia / Instruktur'}</strong></span>
+                        <span>•</span>
+                        <span>Kuota: <strong className="text-slate-200">{ws.capacity || 60} Peserta</strong></span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-slate-400 bg-slate-900 px-2 py-1 rounded-lg border border-slate-800">
-                        Kuota: {ws.capacity || 50} Peserta
-                      </span>
+                    <div className="flex items-center gap-2 shrink-0 border-t md:border-t-0 pt-3 md:pt-0 border-slate-800">
                       <button
                         onClick={() => handleOpenSessionModal('workshop', ws)}
-                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors flex items-center gap-1"
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
                       >
                         <Edit3 className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Edit Workshop</span>
+                        <span>Edit Sesi</span>
                       </button>
+
                       <button
                         onClick={() => handleDeleteSession(ws.id, ws.title)}
-                        className="p-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 transition-colors"
-                        title="Hapus workshop"
+                        className="p-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 transition-colors cursor-pointer"
+                        title="Hapus sesi workshop"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
-
-                  <h3 className="text-base sm:text-lg font-black text-white">
-                    {ws.title}
-                  </h3>
-
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    {ws.abstract.background}
-                  </p>
-
-                  {/* Stasiun Keterampilan */}
-                  <div className="bg-slate-900/90 rounded-xl p-3 border border-slate-800/80 space-y-1.5">
-                    <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider block">
-                      Stasiun Keterampilan / Poin Hands-On ({ws.abstract.clinicalUpdates.length}):
-                    </span>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      {ws.abstract.clinicalUpdates.map((st, i) => (
-                        <div key={i} className="bg-slate-950 p-2 rounded-lg border border-slate-800 text-xs text-slate-300 flex items-start gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-300 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">
-                            {i + 1}
-                          </span>
-                          <span className="line-clamp-2">{st}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-900 text-xs text-slate-400">
-                    <span>Instruktur ({ws.speakers.length}):</span>
-                    {ws.speakers.map(sp => (
-                      <span key={sp.id} className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 font-semibold border border-slate-800">
-                        {sp.name.split(',')[0]}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
         )}
@@ -1929,17 +2087,6 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="font-bold text-slate-300 block">Judul Materi Pembahasan:</label>
-                <input
-                  type="text"
-                  placeholder="Judul presentasi / kuliah pakar"
-                  value={speakerForm.talkTitle}
-                  onChange={(e) => setSpeakerForm({ ...speakerForm, talkTitle: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="space-y-1">
                 <label className="font-bold text-slate-300 block">Biografi Singkat Narasumber:</label>
                 <textarea
                   rows={3}
@@ -2181,6 +2328,152 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
+
+              {/* RUNDOWN WORKSHOP DARI MULAI SAMPAI SELESAI */}
+              {(sessionFormType === 'workshop' || sessionForm.type === 'Workshop Hands-On' || sessionForm.category.includes('Workshop')) && (
+                <div className="bg-slate-950/90 border border-emerald-500/30 rounded-2xl p-3.5 sm:p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <ListOrdered className="w-4 h-4 text-emerald-400" />
+                        <span className="font-black text-white text-xs sm:text-sm">
+                          Rundown Acara Workshop (Dari Mulai Sampai Selesai)
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Susun tahapan kegiatan workshop secara berurutan mulai pukul <strong className="text-amber-400">{sessionForm.startTime} WIB</strong> hingga selesai pukul <strong className="text-amber-400">{sessionForm.endTime} WIB</strong>.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleSortRundownRows}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold transition-colors cursor-pointer"
+                        title="Urutkan baris rundown berdasarkan jam mulai"
+                      >
+                        Urutkan Jam
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleResetRundownTemplate}
+                        className="px-2.5 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 text-[11px] font-bold transition-colors cursor-pointer"
+                        title="Buat template rundown otomatis dari jam mulai sampai selesai"
+                      >
+                        Template Mulai–Selesai
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddRundownRow}
+                        className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tambah Baris</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Daftar Input Baris Rundown */}
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {(sessionForm.rundown || []).length === 0 ? (
+                      <div className="text-center py-6 bg-slate-900/60 rounded-xl border border-slate-800 text-xs text-slate-400 space-y-2">
+                        <p>Belum ada baris rundown yang diinput.</p>
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={handleAddRundownRow}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer"
+                          >
+                            + Tambah Baris Pertama
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleResetRundownTemplate}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs cursor-pointer"
+                          >
+                            Isi Otomatis ({sessionForm.startTime} - {sessionForm.endTime})
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      (sessionForm.rundown || []).map((row, idx) => (
+                        <div
+                          key={row.id}
+                          className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-2.5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
+                        >
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-300 font-black text-[10px] flex items-center justify-center shrink-0">
+                              {idx + 1}
+                            </span>
+                            <input
+                              type="time"
+                              value={row.startTime}
+                              onChange={(e) => handleUpdateRundownRow(row.id, 'startTime', e.target.value)}
+                              className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs font-mono text-amber-300 focus:outline-none focus:border-emerald-500"
+                              title="Jam Mulai Sesi Rundown"
+                              required
+                            />
+                            <span className="text-slate-500 font-bold text-xs">–</span>
+                            <input
+                              type="time"
+                              value={row.endTime}
+                              onChange={(e) => handleUpdateRundownRow(row.id, 'endTime', e.target.value)}
+                              className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs font-mono text-amber-300 focus:outline-none focus:border-emerald-500"
+                              title="Jam Selesai Sesi Rundown"
+                              required
+                            />
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <input
+                              type="text"
+                              value={row.activity}
+                              onChange={(e) => handleUpdateRundownRow(row.id, 'activity', e.target.value)}
+                              placeholder="Nama kegiatan / materi / stasiun hands-on (cth: Registrasi, Materi 1, Wetlab...)"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                              required
+                            />
+                          </div>
+
+                          <div className="sm:w-40 shrink-0 flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={row.pic || ''}
+                              onChange={(e) => handleUpdateRundownRow(row.id, 'pic', e.target.value)}
+                              placeholder="Instruktur / PIC"
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveRundownRow(row.id)}
+                              className="p-1.5 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 shrink-0 transition-colors cursor-pointer"
+                              title="Hapus baris rundown ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {(sessionForm.rundown || []).length > 0 && (
+                    <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
+                      <span>
+                        Total <strong>{(sessionForm.rundown || []).length} tahapan kegiatan</strong> ({sessionForm.rundown?.[0]?.startTime || sessionForm.startTime} s/d {sessionForm.rundown?.[sessionForm.rundown.length - 1]?.endTime || sessionForm.endTime} WIB)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleAddRundownRow}
+                        className="text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Tambah Tahapan Berikutnya</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
                 <button

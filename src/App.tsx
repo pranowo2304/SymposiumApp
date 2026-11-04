@@ -20,7 +20,9 @@ import { BroadcastNotificationToast } from './components/BroadcastNotificationTo
 import { AdminPageView } from './components/AdminPageView';
 import { LandingPageView } from './components/LandingPageView';
 import { AdminLoginModal } from './components/AdminLoginModal';
+import { PWAInstallModal, OfflineIndicator } from './components/PWAInstallModal';
 import { playBroadcastChime } from './utils/broadcastSound';
+import { syncAppIconWithEventLogo } from './utils/appIconSync';
 import { SESSIONS_DATA, SPEAKERS_DATABASE, SYMPOSIUM_INFO } from './data/symposiumData';
 import { EXHIBITORS_DATA } from './data/exhibitorsData';
 import { DEFAULT_ROOMS_DATA } from './data/roomsData';
@@ -37,6 +39,9 @@ import { Sparkles, Lock } from 'lucide-react';
 export default function App() {
   // Mobile Frame Simulation Mode Toggle
   const [isMobileFrame, setIsMobileFrame] = useState(false);
+
+  // Mobile App PWA Installer Modal State
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
 
   // Active Identified Participant & Participants Database
   const [participants, setParticipants] = useState<Participant[]>(() => getStoredParticipants());
@@ -138,7 +143,9 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         const isOldDemo = parsed.some((s: any) => s.id === 's1' && s.name?.includes('Bambang Sutrisno'));
-        if (!isOldDemo && parsed.length > 0) return parsed;
+        if (!isOldDemo && parsed.length > 0) {
+          return parsed.map(({ talkTitle, ...rest }: any) => rest);
+        }
       }
       return Object.values(SPEAKERS_DATABASE);
     } catch (e) {
@@ -153,27 +160,30 @@ export default function App() {
         const parsed = JSON.parse(saved);
         const isOldDemo = parsed.some((s: any) => s.id === 'session-101' || s.title?.includes('SINDROM KORONER AKUT'));
         if (!isOldDemo && parsed.length > 0) {
-          const hasVersus = parsed.some((s: any) => s.title?.includes('Workshop Versus') || s.id === 'ws-versus-01');
-          const hasVetNurse = parsed.some((s: any) => s.title?.includes('Workshop Vet Nurse') || s.id === 'ws-vetnurse-02');
-          if (hasVersus && hasVetNurse) {
-            return parsed;
+          const storedWorkshops = parsed.filter(
+            (s: Session) => s.type === 'Workshop Hands-On' || s.category?.includes('Workshop') || s.day?.includes('Workshop')
+          );
+          const hasOldMonolithicWorkshop = storedWorkshops.some(
+            (s: Session) => (s.id === 'ws-versus-01' && s.endTime === '17:00') || (s.id === 'ws-vetnurse-02' && s.startTime === '09:00' && s.endTime === '17:00')
+          );
+
+          if (hasOldMonolithicWorkshop || storedWorkshops.length < 6) {
+            const nonWorkshops = parsed.filter(
+              (s: Session) => s.type !== 'Workshop Hands-On' && !s.category?.includes('Workshop') && !s.day?.includes('Workshop')
+            );
+            const defaultWorkshops = SESSIONS_DATA.filter(
+              (s: Session) => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.includes('Workshop')
+            );
+            const merged = [...defaultWorkshops, ...nonWorkshops];
+            try {
+              localStorage.setItem('simposium_sessions_custom', JSON.stringify(merged));
+            } catch (e) {
+              console.error(e);
+            }
+            return merged;
           }
-          const workshopsToAdd: Session[] = [];
-          if (!hasVersus) {
-            const vs = SESSIONS_DATA.find(s => s.id === 'ws-versus-01');
-            if (vs) workshopsToAdd.push(vs);
-          }
-          if (!hasVetNurse) {
-            const vn = SESSIONS_DATA.find(s => s.id === 'ws-vetnurse-02');
-            if (vn) workshopsToAdd.push(vn);
-          }
-          const merged = [...workshopsToAdd, ...parsed];
-          try {
-            localStorage.setItem('simposium_sessions_custom', JSON.stringify(merged));
-          } catch (e) {
-            console.error(e);
-          }
-          return merged;
+
+          return parsed;
         }
       }
       return SESSIONS_DATA;
@@ -248,7 +258,8 @@ export default function App() {
     if (eventInfo?.title) {
       document.title = eventInfo.title;
     }
-  }, [eventInfo?.title]);
+    syncAppIconWithEventLogo(eventInfo);
+  }, [eventInfo]);
 
   const handleSaveEventInfo = (newEventInfo: SymposiumInfo) => {
     setEventInfo(newEventInfo);
@@ -257,6 +268,7 @@ export default function App() {
       if (newEventInfo.title) {
         document.title = newEventInfo.title;
       }
+      syncAppIconWithEventLogo(newEventInfo);
     } catch (e) {
       console.error(e);
     }
@@ -569,6 +581,7 @@ export default function App() {
           onOpenQrScanner={() => setIsQrModalOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenBookmarks={() => setActiveTab('jadwal-saya')}
+          onOpenInstallModal={() => setIsInstallModalOpen(true)}
           speakerCount={speakers.length}
           workshopCount={workshopsCount}
           symposiumCount={sessions.length}
@@ -723,6 +736,9 @@ export default function App() {
           </div>
         )}
 
+        {/* Offline Mode Status Banner */}
+        <OfflineIndicator />
+
         {/* App Header */}
         <Header
           bookmarkedCount={bookmarks.length}
@@ -730,6 +746,7 @@ export default function App() {
           onOpenQrScanner={() => setIsQrModalOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenAdmin={handleOpenAdmin}
+          onOpenInstallModal={() => setIsInstallModalOpen(true)}
           totalSkpPoints={totalSkpPoints}
           isMobileFrame={isMobileFrame}
           onToggleFrame={() => setIsMobileFrame(!isMobileFrame)}
@@ -792,7 +809,7 @@ export default function App() {
 
         {/* QR Code Presensi Modal */}
         <AnimatePresence>
-          {isQrModalOpen && (
+          {isQrModalOpen && eventInfo.enableQrAttendance !== false && (
             <QRScannerModal
               isOpen={isQrModalOpen}
               onClose={() => setIsQrModalOpen(false)}
@@ -868,7 +885,9 @@ export default function App() {
           onClose={() => setActiveBroadcast(null)}
           onNavigateTab={(tabKey) => {
             if (tabKey === 'presensi') {
-              setIsQrModalOpen(true);
+              if (eventInfo.enableQrAttendance !== false) {
+                setIsQrModalOpen(true);
+              }
             } else if (tabKey === 'profil') {
               setIsProfileModalOpen(true);
             } else {
@@ -887,6 +906,14 @@ export default function App() {
             />
           )}
         </AnimatePresence>
+
+        {/* Mobile App (PWA) Installer Modal */}
+        <PWAInstallModal
+          isOpen={isInstallModalOpen}
+          onClose={() => setIsInstallModalOpen(false)}
+          eventTitle={eventInfo.title}
+          eventInfo={eventInfo}
+        />
 
         {/* Toast Notification */}
         {toastMessage && (

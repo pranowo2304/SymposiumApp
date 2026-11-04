@@ -4,19 +4,13 @@ import {
   Calendar, 
   Clock, 
   MapPin, 
-  Users, 
-  Award, 
-  Sparkles, 
-  CheckCircle2, 
-  Bookmark, 
-  ChevronRight, 
-  Layers, 
-  AlertCircle,
-  FileText,
-  MessageSquare
+  Search,
+  Filter,
+  RotateCcw
 } from 'lucide-react';
 import { Session, Speaker } from '../types';
 import { SESSIONS_DATA } from '../data/symposiumData';
+import { SessionCard } from './SessionCard';
 
 interface WorkshopScheduleViewProps {
   sessions?: Session[];
@@ -35,228 +29,233 @@ export const WorkshopScheduleView: React.FC<WorkshopScheduleViewProps> = ({
   onToggleBookmark,
   onOpenVenue
 }) => {
-  const [selectedDayFilter, setSelectedDayFilter] = useState<string>('all');
+  const [selectedRoom, setSelectedRoom] = useState<string>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const sourceSessions = sessions && sessions.length > 0 ? sessions : SESSIONS_DATA;
-  const workshops = sourceSessions.filter(
-    s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop')
-  );
+  const workshops = React.useMemo(() => {
+    return sourceSessions
+      .filter(s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.includes('Workshop'))
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }, [sourceSessions]);
 
-  const availableWorkshopDays = React.useMemo(() => {
-    return Array.from(new Set(workshops.map(w => w.day)));
+  const availableRooms = React.useMemo(() => {
+    return Array.from(new Set(workshops.map(w => w.room)));
   }, [workshops]);
 
-  const filteredWorkshops = workshops.filter(w => {
-    if (selectedDayFilter === 'all') return true;
-    return w.day === selectedDayFilter;
+  const availableCategories = React.useMemo(() => {
+    return Array.from(new Set(workshops.map(w => w.category)));
+  }, [workshops]);
+
+  const filteredWorkshops = workshops.filter(session => {
+    if (selectedRoom !== 'all' && session.room !== selectedRoom) {
+      return false;
+    }
+
+    if (selectedCategory !== 'all' && session.category !== selectedCategory) {
+      return false;
+    }
+
+    if (searchQuery.trim() !== '') {
+      const q = searchQuery.toLowerCase();
+      const matchTitle = session.title.toLowerCase().includes(q);
+      const matchTime = session.timeString.toLowerCase().includes(q);
+      const matchRoom = session.room.toLowerCase().includes(q);
+      const matchCategory = session.category.toLowerCase().includes(q);
+      const matchSpeaker = session.speakers.some(sp =>
+        sp.name.toLowerCase().includes(q) ||
+        sp.specialty.toLowerCase().includes(q) ||
+        sp.institution.toLowerCase().includes(q)
+      );
+      const matchAbstract =
+        session.abstract.background.toLowerCase().includes(q) ||
+        session.abstract.clinicalUpdates.some(u => u.toLowerCase().includes(q));
+
+      if (!matchTitle && !matchTime && !matchRoom && !matchCategory && !matchSpeaker && !matchAbstract) {
+        return false;
+      }
+    }
+
+    return true;
   });
 
   return (
     <div className="max-w-6xl mx-auto p-2.5 sm:p-4 space-y-3 animate-in fade-in duration-200">
       
-      {/* Top Banner - Compact */}
-      <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white rounded-xl p-3 sm:p-4 border border-emerald-800/80 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="space-y-0.5">
-            <div className="flex items-center space-x-1.5 text-emerald-300 text-[11px] font-bold uppercase tracking-wider">
-              <Stethoscope className="w-3.5 h-3.5" />
-              <span>Program Keterampilan Hands-On</span>
-              <span>•</span>
-              <span className="text-amber-300">Kuota Terbatas</span>
-            </div>
-            <h2 className="text-base sm:text-lg font-black text-white">
-              Jadwal Workshop & Simulasi Medis
-            </h2>
+      {/* Top Banner - Like Symposium Schedule */}
+      <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-950 text-white rounded-xl p-3 sm:p-4 border border-emerald-800/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center space-x-1.5 text-emerald-300 text-[11px] font-bold uppercase tracking-wider mb-0.5">
+            <Stethoscope className="w-3.5 h-3.5" />
+            <span>Jadwal Sesi & Jam Pre-Congress Workshop (Hands-On)</span>
           </div>
-
-          <div className="bg-emerald-500/20 border border-emerald-400/30 rounded-lg px-2.5 py-1 text-center shrink-0 self-start sm:self-auto flex items-center gap-2">
-            <span className="text-xs font-black text-amber-300">+2.5 SKP / Sesi</span>
-            <span className="text-[10px] text-emerald-200 block">• Sertifikat Khusus</span>
-          </div>
+          <h2 className="text-sm sm:text-base font-black text-white">
+            Sabtu, 28 November 2026 • The Sunan Hotel Solo (Ground Floor)
+          </h2>
+          <p className="text-xs text-emerald-100/80 mt-0.5">
+            Workshop Versus - MASS Hunt (08:00 - 17:00 WIB) & Workshop Vet Nurse (09:00 - 17:00 WIB)
+          </p>
         </div>
 
-        {/* Day Filter Pills */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-emerald-800/60 mt-2">
-          <span className="text-xs font-bold text-emerald-200">Hari:</span>
+        {/* Track / Room Switcher Toggle (Like Symposium Day Switcher) */}
+        <div className="bg-white/10 p-1 rounded-xl border border-white/10 flex flex-wrap items-center gap-1 self-start md:self-auto shrink-0">
           <button
-            onClick={() => setSelectedDayFilter('all')}
-            className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-              selectedDayFilter === 'all'
-                ? 'bg-emerald-400 text-slate-950 shadow-xs font-black'
-                : 'bg-emerald-900/60 hover:bg-emerald-900 text-emerald-100'
+            type="button"
+            onClick={() => setSelectedRoom('all')}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              selectedRoom === 'all'
+                ? 'bg-emerald-500 text-slate-950 shadow-xs font-black'
+                : 'text-slate-200 hover:text-white hover:bg-white/10'
             }`}
           >
-            Semua ({workshops.length})
+            <span>Semua Sesi</span>
+            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              selectedRoom === 'all' ? 'bg-slate-950 text-emerald-300' : 'bg-white/20 text-slate-200'
+            }`}>
+              {workshops.length}
+            </span>
           </button>
-          {availableWorkshopDays.map(dayName => {
-            const count = workshops.filter(w => w.day === dayName).length;
-            const isSelected = selectedDayFilter === dayName;
+
+          {availableRooms.map(roomName => {
+            const count = workshops.filter(w => w.room === roomName).length;
+            const isActive = selectedRoom === roomName;
             return (
               <button
-                key={dayName}
-                onClick={() => setSelectedDayFilter(dayName)}
-                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-emerald-400 text-slate-950 shadow-xs font-black'
-                    : 'bg-emerald-900/60 hover:bg-emerald-900 text-emerald-100'
+                key={roomName}
+                type="button"
+                onClick={() => setSelectedRoom(roomName)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  isActive
+                    ? 'bg-emerald-500 text-slate-950 shadow-xs font-black'
+                    : 'text-slate-200 hover:text-white hover:bg-white/10'
                 }`}
               >
-                {dayName} ({count})
+                <MapPin className="w-3 h-3" />
+                <span>{roomName}</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  isActive ? 'bg-slate-950 text-emerald-300' : 'bg-white/20 text-slate-200'
+                }`}>
+                  {count}
+                </span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Workshop List */}
-      <div className="space-y-4">
-        {filteredWorkshops.map((workshop) => {
-          const isBookmarked = bookmarks.includes(workshop.id);
+      {/* Filter Toolbar (Like Symposium FilterSection) */}
+      <div className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-2xs space-y-2.5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+          {/* Search Input */}
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari sesi workshop berdasarkan jam (cth: 08:30), judul sesi, ruangan, atau instruktur..."
+              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-all"
+            />
+          </div>
 
-          return (
-            <div 
-              key={workshop.id}
-              className="bg-white rounded-2xl border border-slate-200 hover:border-emerald-500/80 shadow-xs hover:shadow-md transition-all overflow-hidden"
-            >
-              {/* Card Header Strip */}
-              <div className="bg-slate-900 text-white px-4 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-                <div className="flex items-center space-x-2">
-                  <span className="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-black text-[11px] uppercase tracking-wider">
-                    {workshop.day}
-                  </span>
-                  <span className="font-semibold text-slate-300">{workshop.date}</span>
-                </div>
-
-                <div className="flex items-center space-x-3 text-slate-300">
-                  <span className="flex items-center gap-1 font-bold text-amber-300">
-                    <Clock className="w-3.5 h-3.5" />
-                    {workshop.timeString}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1 text-slate-200">
-                    <MapPin className="w-3.5 h-3.5 text-rose-400" />
-                    {workshop.room}
-                  </span>
-                </div>
-              </div>
-
-              {/* Main Content */}
-              <div className="p-4 sm:p-5 space-y-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] font-extrabold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                        {workshop.type}
-                      </span>
-                      <span className="text-[11px] font-bold text-slate-500">
-                        Kapasitas Maksimal {workshop.capacity || 60} Dokter
-                      </span>
-                    </div>
-
-                    <h3 
-                      onClick={() => onSelectSession(workshop)}
-                      className="text-base sm:text-lg font-black text-slate-900 hover:text-emerald-700 cursor-pointer transition-colors"
-                    >
-                      {workshop.title}
-                    </h3>
-                  </div>
-
-                  <button
-                    onClick={() => onToggleBookmark(workshop.id)}
-                    title={isBookmarked ? "Hapus dari Jadwal Saya" : "Simpan ke Jadwal Saya"}
-                    className={`p-2.5 rounded-xl border transition-all shrink-0 ${
-                      isBookmarked
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                        : 'bg-slate-50 hover:bg-slate-100 text-slate-400 hover:text-slate-700 border-slate-200'
-                    }`}
-                  >
-                    <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
-                  </button>
-                </div>
-
-                {/* Abstract Preview */}
-                <p className="text-xs sm:text-sm text-slate-600 leading-relaxed line-clamp-2">
-                  {workshop.abstract.background}
-                </p>
-
-                {/* Skill Stations / Poin Latihan */}
-                <div className="bg-slate-50 rounded-xl p-3 sm:p-4 border border-slate-200/80 space-y-2">
-                  <h4 className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                    Materi Stasiun Keterampilan Praktik (Hands-On):
-                  </h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    {workshop.abstract.clinicalUpdates.map((update, idx) => (
-                      <div 
-                        key={idx}
-                        className="bg-white p-2.5 rounded-lg border border-slate-200 text-xs text-slate-700 font-medium flex items-start gap-2 shadow-2xs"
-                      >
-                        <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[10px] flex items-center justify-center shrink-0 mt-0.5">
-                          {idx + 1}
-                        </span>
-                        <span className="leading-snug">{update}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Instructors List */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-500">Instruktur:</span>
-                    <div className="flex items-center gap-2">
-                      {workshop.speakers.map((sp) => (
-                        <button
-                          key={sp.id}
-                          onClick={() => onSelectSpeaker(sp)}
-                          className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 hover:bg-emerald-50 rounded-lg text-xs font-bold text-slate-800 hover:text-emerald-800 transition-colors border border-slate-200"
-                        >
-                          <img 
-                            src={sp.photoUrl} 
-                            alt={sp.name} 
-                            className="w-5 h-5 rounded-full object-cover" 
-                          />
-                          <span>{sp.name.split(',')[0]}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => onSelectSession(workshop, 'livechat')}
-                      className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
-                      title="Buka forum Live Chat & Tanya Pembicara"
-                    >
-                      <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>Live Q&A</span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                    </button>
-
-                    <button
-                      onClick={onOpenVenue}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1"
-                    >
-                      <MapPin className="w-3.5 h-3.5 text-rose-500" />
-                      <span>Lihat Ruangan</span>
-                    </button>
-
-                    <button
-                      onClick={() => onSelectSession(workshop, 'abstract')}
-                      className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1 shadow-2xs"
-                    >
-                      <FileText className="w-3.5 h-3.5" />
-                      <span>Rincian Lengkap</span>
-                    </button>
-                  </div>
-                </div>
-
-              </div>
+          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+            {/* Category Filter */}
+            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
+              >
+                <option value="all">Semua Track Workshop</option>
+                {availableCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
-          );
-        })}
+
+            <button
+              type="button"
+              onClick={onOpenVenue}
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <MapPin className="w-3.5 h-3.5 text-rose-500" />
+              <span>Peta Ruangan</span>
+            </button>
+
+            {(selectedRoom !== 'all' || selectedCategory !== 'all' || searchQuery !== '') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedRoom('all');
+                  setSelectedCategory('all');
+                  setSearchQuery('');
+                }}
+                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[11px] text-slate-500">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-slate-700">Track Ruangan:</span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
+              <Clock className="w-3 h-3 text-amber-600" />
+              Antareja Room: Workshop Versus (08:00 - 17:00 WIB)
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-violet-50 text-violet-800 border border-violet-200 font-semibold">
+              <Clock className="w-3 h-3 text-violet-600" />
+              Wisanggeni Room: Workshop Vet Nurse (09:00 - 17:00 WIB)
+            </span>
+          </div>
+          <span className="font-bold text-emerald-700">
+            Menampilkan {filteredWorkshops.length} Sesi Workshop
+          </span>
+        </div>
       </div>
+
+      {/* Workshop Sessions List - Using SessionCard just like SymposiumScheduleView */}
+      {filteredWorkshops.length === 0 ? (
+        <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 my-4 space-y-3">
+          <Search className="w-10 h-10 text-slate-300 mx-auto" />
+          <h3 className="text-sm font-bold text-slate-700">
+            Tidak Ada Sesi Workshop Ditemukan
+          </h3>
+          <p className="text-xs text-slate-500 max-w-xs mx-auto">
+            Cobalah mengubah kata kunci pencarian atau menyetel ulang filter ruangan dan track workshop.
+          </p>
+          <button
+            onClick={() => {
+              setSelectedRoom('all');
+              setSelectedCategory('all');
+              setSearchQuery('');
+            }}
+            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+          >
+            Reset Semua Filter
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          {filteredWorkshops.map(session => (
+            <SessionCard
+              key={session.id}
+              session={session}
+              isBookmarked={bookmarks.includes(session.id)}
+              onToggleBookmark={onToggleBookmark}
+              onSelectSession={onSelectSession}
+              onSelectSpeaker={onSelectSpeaker}
+            />
+          ))}
+        </div>
+      )}
 
     </div>
   );
 };
+

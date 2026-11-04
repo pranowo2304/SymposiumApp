@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Bookmark, MapPin, Search, Smartphone, Monitor, Award, QrCode, User, Sliders, Lock, ShieldCheck, ChevronDown } from 'lucide-react';
+import { Bookmark, MapPin, Search, Smartphone, Monitor, Award, QrCode, User, Sliders, Lock, ShieldCheck, ChevronDown, Download } from 'lucide-react';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { Participant, SymposiumInfo } from '../types';
 import { getThemePalette } from '../utils/themeColors';
+import { usePWAInstall } from '../hooks/usePWAInstall';
 
 interface HeaderProps {
   bookmarkedCount: number;
@@ -10,6 +11,7 @@ interface HeaderProps {
   onOpenQrScanner: () => void;
   onOpenProfile: () => void;
   onOpenAdmin: () => void;
+  onOpenInstallModal?: () => void;
   totalSkpPoints: number;
   isMobileFrame: boolean;
   onToggleFrame: () => void;
@@ -29,6 +31,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenQrScanner,
   onOpenProfile,
   onOpenAdmin,
+  onOpenInstallModal,
   totalSkpPoints,
   isMobileFrame,
   onToggleFrame,
@@ -44,6 +47,18 @@ export const Header: React.FC<HeaderProps> = ({
   const info = eventInfo || SYMPOSIUM_INFO;
   const palette = getThemePalette(info);
   const [showSearchMobile, setShowSearchMobile] = useState(false);
+  const { isInstallable, isInstalled, installApp } = usePWAInstall();
+
+  const handleInstallClick = async () => {
+    if (isInstallable) {
+      const outcome = await installApp();
+      if (outcome === 'unavailable' && onOpenInstallModal) {
+        onOpenInstallModal();
+      }
+    } else if (onOpenInstallModal) {
+      onOpenInstallModal();
+    }
+  };
 
   return (
     <header className="bg-white/95 backdrop-blur-md text-slate-900 shadow-xs sticky top-0 z-30 border-b border-slate-200/80">
@@ -124,15 +139,29 @@ export const Header: React.FC<HeaderProps> = ({
               <Search className="w-4 h-4" />
             </button>
 
-            {/* Presensi QR */}
-            <button
-              onClick={onOpenQrScanner}
-              title="Absensi & Pindai QR Code SKP"
-              className="px-2 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 border border-blue-200 shrink-0"
-            >
-              <QrCode className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              <span className="hidden sm:inline">Presensi QR</span>
-            </button>
+            {/* Install Aplikasi Mobile (PWA) Button */}
+            {!isInstalled && (
+              <button
+                onClick={handleInstallClick}
+                title="Install Aplikasi Mobile ke Layar Utama HP"
+                className="px-2 py-1.5 bg-gradient-to-r from-emerald-700 to-teal-700 hover:from-emerald-600 hover:to-teal-600 text-white rounded-lg transition-all text-xs font-bold flex items-center gap-1 shadow-2xs shrink-0 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span className="hidden md:inline">Install App</span>
+              </button>
+            )}
+
+            {/* Presensi QR (Hanya tampil jika diaktifkan di Pengaturan Sistem) */}
+            {info.enableQrAttendance !== false && (
+              <button
+                onClick={onOpenQrScanner}
+                title="Absensi & Pindai QR Code SKP"
+                className="px-2 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 border border-blue-200 shrink-0"
+              >
+                <QrCode className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="hidden sm:inline">Presensi QR</span>
+              </button>
+            )}
 
             {/* Jadwal Saya */}
             <button

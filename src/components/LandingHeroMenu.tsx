@@ -90,29 +90,11 @@ export const LandingHeroMenu: React.FC<LandingHeroMenuProps> = ({
     <div className="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white border-b border-slate-800">
       <div className="max-w-5xl mx-auto px-3 sm:px-4 pt-5 pb-6 space-y-4">
         
-        {/* Top Badges & Title */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 text-xs font-bold border border-blue-500/30 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-              {info.accreditation}
-            </span>
-            <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30">
-              {info.dateString || `${info.dates.day1} - ${info.dates.day2.split(', ')[1] || info.dates.day2}`}
-            </span>
-          </div>
-
-          <div className="text-xs text-slate-400 flex items-center gap-1 font-medium">
-            <MapPin className="w-3.5 h-3.5 text-rose-400" />
-            <span>{info.location}</span>
-          </div>
-        </div>
-
-        {/* Hero Section Header */}
+        {/* Hero Section Header at the Top */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-start gap-3.5">
+          <div className="flex items-center gap-3.5">
             {info.logoUrl ? (
-              <div className="w-12 h-12 rounded-xl bg-white p-1 border border-slate-700 shadow-md shrink-0 flex items-center justify-center overflow-hidden hidden sm:flex">
+              <div className="w-12 h-12 rounded-xl bg-white p-1 border border-slate-700 shadow-md shrink-0 flex items-center justify-center overflow-hidden">
                 <img
                   src={info.logoUrl}
                   alt={info.title}
@@ -144,6 +126,20 @@ export const LandingHeroMenu: React.FC<LandingHeroMenuProps> = ({
               <span>Admin Page (Input Data)</span>
             </button>
           )}
+        </div>
+
+        {/* Dates & Venue Badges */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/80 pt-3">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/30">
+              {info.dateString || `${info.dates.day1} - ${info.dates.day2.split(', ')[1] || info.dates.day2}`}
+            </span>
+          </div>
+
+          <div className="text-xs text-slate-400 flex items-center gap-1 font-medium">
+            <MapPin className="w-3.5 h-3.5 text-rose-400" />
+            <span>{info.location}</span>
+          </div>
         </div>
 
         {/* Main Menu Cards - 3 per row on mobile/tablet */}

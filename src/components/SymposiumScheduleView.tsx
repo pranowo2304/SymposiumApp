@@ -30,11 +30,19 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
   const info = eventInfo || SYMPOSIUM_INFO;
   const palette = getThemePalette(info);
 
-  const sourceSessions = sessions && sessions.length > 0 ? sessions : SESSIONS_DATA;
+  const allSessions = sessions && sessions.length > 0 ? sessions : SESSIONS_DATA;
+  const sourceSessions = React.useMemo(() => {
+    return allSessions.filter(
+      s =>
+        s.type !== 'Workshop Hands-On' &&
+        !s.category?.toLowerCase().includes('workshop') &&
+        !s.day?.toLowerCase().includes('workshop')
+    );
+  }, [allSessions]);
 
-  // Compute available days dynamically from actual sessions
+  // Compute available days dynamically from actual symposium sessions (excluding Workshop)
   const availableDays = React.useMemo(() => {
-    const orderPriority = ['Workshop (28 Nov)', 'Pre-Congress', 'Hari I', 'Hari II', 'Hari III'];
+    const orderPriority = ['Pre-Congress', 'Hari I', 'Hari II', 'Hari III'];
     const uniqueDays = Array.from(new Set<string>(sourceSessions.map(s => s.day)));
 
     const sortedDays = uniqueDays.sort((a: string, b: string) => {

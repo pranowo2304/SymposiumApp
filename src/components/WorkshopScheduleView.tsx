@@ -8,8 +8,8 @@ import {
   Filter,
   RotateCcw
 } from 'lucide-react';
-import { Session, Speaker } from '../types';
-import { SESSIONS_DATA } from '../data/symposiumData';
+import { Session, Speaker, SymposiumInfo } from '../types';
+import { SESSIONS_DATA, SYMPOSIUM_INFO } from '../data/symposiumData';
 import { SessionCard } from './SessionCard';
 
 interface WorkshopScheduleViewProps {
@@ -19,6 +19,7 @@ interface WorkshopScheduleViewProps {
   bookmarks: string[];
   onToggleBookmark: (sessionId: string) => void;
   onOpenVenue: () => void;
+  eventInfo?: SymposiumInfo;
 }
 
 export const WorkshopScheduleView: React.FC<WorkshopScheduleViewProps> = ({
@@ -27,8 +28,10 @@ export const WorkshopScheduleView: React.FC<WorkshopScheduleViewProps> = ({
   onSelectSpeaker,
   bookmarks,
   onToggleBookmark,
-  onOpenVenue
+  onOpenVenue,
+  eventInfo
 }) => {
+  const info = eventInfo || SYMPOSIUM_INFO;
   const [selectedRoom, setSelectedRoom] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -88,10 +91,10 @@ export const WorkshopScheduleView: React.FC<WorkshopScheduleViewProps> = ({
         <div>
           <div className="flex items-center space-x-1.5 text-emerald-300 text-[11px] font-bold uppercase tracking-wider mb-0.5">
             <Stethoscope className="w-3.5 h-3.5" />
-            <span>Jadwal Sesi & Jam Pre-Congress Workshop (Hands-On)</span>
+            <span>Jadwal Workshop</span>
           </div>
           <h2 className="text-sm sm:text-base font-black text-white">
-            Sabtu, 28 November 2026 • The Sunan Hotel Solo (Ground Floor)
+            {info.dates?.workshop || workshops[0]?.date || 'Sabtu, 28 November 2026'} • {info.location}
           </h2>
           <p className="text-xs text-emerald-100/80 mt-0.5">
             Workshop Versus - MASS Hunt (08:00 - 17:00 WIB) & Workshop Vet Nurse (09:00 - 17:00 WIB)

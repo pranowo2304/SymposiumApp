@@ -91,12 +91,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <h1 className="text-sm sm:text-base font-extrabold text-slate-900 truncate leading-tight group-hover:text-blue-600 transition-colors">
                   {info.title}
                 </h1>
-                <span 
-                  style={{ color: palette.primaryHex }} 
-                  className="hidden lg:inline-flex items-center text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 shrink-0"
-                >
-                  {info.accreditation}
-                </span>
               </div>
               <p className="text-[11px] text-slate-500 truncate hidden md:block font-normal">
                 {info.theme} • <span className="text-slate-400">{info.location}</span>

@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 import { 
   Users, 
-  Sparkles, 
   Calendar, 
   Store, 
   MapPin, 
@@ -41,6 +41,15 @@ export const MainMenuTabs: React.FC<MainMenuTabsProps> = ({
   eventInfo
 }) => {
   const palette = getThemePalette(eventInfo);
+  const navRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!navRef.current) return;
+    const activeButton = navRef.current.querySelector(`#menu-tab-${activeTab}`) as HTMLElement | null;
+    if (activeButton) {
+      activeButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [activeTab]);
 
   const menuItems = [
     {
@@ -97,30 +106,41 @@ export const MainMenuTabs: React.FC<MainMenuTabsProps> = ({
   ];
 
   return (
-    <div className="bg-white/95 backdrop-blur-md border-b border-slate-200 sticky top-[48px] sm:top-[52px] z-20 shadow-2xs">
+    <div className="bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
       <div className="max-w-6xl mx-auto px-2 sm:px-4">
         <nav 
+          ref={navRef}
           id="main-navigation-menu"
           aria-label="Menu Utama Simposium"
-          className="flex items-center overflow-x-auto no-scrollbar space-x-1 sm:space-x-1.5 py-1"
+          className="flex items-center overflow-x-auto no-scrollbar space-x-1 sm:space-x-1.5 py-1.5"
         >
           {menuItems.map((item) => {
             const Icon = item.icon;
             const isActive = activeTab === item.id;
 
             return (
-              <button
+              <motion.button
                 key={item.id}
                 id={`menu-tab-${item.id}`}
                 onClick={() => onSelectTab(item.id)}
-                style={isActive ? { backgroundColor: palette.primaryHex, borderColor: palette.primaryHex } : undefined}
-                className={`py-1.5 px-2.5 sm:px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border shrink-0 ${
+                whileTap={{ scale: 0.96 }}
+                whileHover={{ y: -1 }}
+                className={`relative py-1.5 px-2.5 sm:px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 border shrink-0 cursor-pointer overflow-hidden ${
                   isActive
-                    ? 'text-white shadow-xs ring-1 ring-white/20'
+                    ? 'text-white border-transparent shadow-xs'
                     : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 shrink-0 ${
+                {isActive && (
+                  <motion.div
+                    layoutId="mainMenuActiveTabPill"
+                    style={{ backgroundColor: palette.primaryHex }}
+                    className="absolute inset-0 rounded-lg shadow-xs"
+                    transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.8 }}
+                  />
+                )}
+
+                <Icon className={`relative z-10 w-3.5 h-3.5 shrink-0 transition-colors ${
                   isActive 
                     ? 'text-amber-200' 
                     : item.id === 'workshop' 
@@ -133,9 +153,9 @@ export const MainMenuTabs: React.FC<MainMenuTabsProps> = ({
                             ? 'text-rose-600' 
                             : 'text-indigo-600'
                 }`} />
-                <span className="whitespace-nowrap tracking-tight">{item.label}</span>
+                <span className="relative z-10 whitespace-nowrap tracking-tight">{item.label}</span>
 
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold whitespace-nowrap leading-none ${
+                <span className={`relative z-10 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold whitespace-nowrap leading-none transition-colors ${
                   isActive
                     ? 'bg-white/20 text-white'
                     : item.badgeHighlight 
@@ -144,30 +164,39 @@ export const MainMenuTabs: React.FC<MainMenuTabsProps> = ({
                 }`}>
                   {item.badge}
                 </span>
-              </button>
+              </motion.button>
             );
           })}
 
           {/* Optional bookmark tab shortcut if user has bookmarks */}
           {bookmarkCount > 0 && (
-            <button
+            <motion.button
               id="menu-tab-jadwal-saya"
               onClick={() => onSelectTab('jadwal-saya')}
-              style={activeTab === 'jadwal-saya' ? { backgroundColor: palette.primaryHex, borderColor: palette.primaryHex } : undefined}
-              className={`py-1.5 px-2.5 sm:px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border whitespace-nowrap shrink-0 ${
+              whileTap={{ scale: 0.96 }}
+              whileHover={{ y: -1 }}
+              className={`relative py-1.5 px-2.5 sm:px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 border whitespace-nowrap shrink-0 cursor-pointer overflow-hidden ${
                 activeTab === 'jadwal-saya'
-                  ? 'text-white shadow-xs'
+                  ? 'text-white border-transparent shadow-xs'
                   : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200'
               }`}
             >
-              <BookmarkCheck className={`w-3.5 h-3.5 ${activeTab === 'jadwal-saya' ? 'text-white' : 'text-blue-500'} fill-current`} />
-              <span>Jadwal Saya</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+              {activeTab === 'jadwal-saya' && (
+                <motion.div
+                  layoutId="mainMenuActiveTabPill"
+                  style={{ backgroundColor: palette.primaryHex }}
+                  className="absolute inset-0 rounded-lg shadow-xs"
+                  transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.8 }}
+                />
+              )}
+              <BookmarkCheck className={`relative z-10 w-3.5 h-3.5 ${activeTab === 'jadwal-saya' ? 'text-white' : 'text-blue-500'} fill-current`} />
+              <span className="relative z-10">Jadwal Saya</span>
+              <span className={`relative z-10 px-1.5 py-0.2 rounded-full text-[10px] font-black ${
                 activeTab === 'jadwal-saya' ? 'bg-white text-slate-900' : 'bg-blue-600 text-white'
               }`}>
                 {bookmarkCount}
               </span>
-            </button>
+            </motion.button>
           )}
         </nav>
       </div>

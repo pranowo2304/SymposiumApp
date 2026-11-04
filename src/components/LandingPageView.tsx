@@ -211,55 +211,48 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           style={{ backgroundColor: palette.accentHex }}
         ></div>
 
-        <div className="relative z-10 space-y-3">
+        <div className="relative z-10 space-y-3.5">
           
-          {/* Top Badges: Accreditation, Dates, Venue */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2.5">
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className={`px-2.5 py-0.5 rounded-lg text-xs font-bold border flex items-center gap-1.5 shadow-2xs ${palette.accentBadge}`}>
-                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                <span>{info.accreditation}</span>
-              </span>
+          {/* Event Identity & Title at the Top */}
+          <div className="flex items-center gap-3.5">
+            {info.logoUrl ? (
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white p-1.5 border border-white/20 shadow-md shrink-0 flex items-center justify-center overflow-hidden">
+                <img
+                  src={info.logoUrl}
+                  alt={info.title}
+                  className="w-full h-full object-contain"
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            ) : null}
 
-              <span className="px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/40 flex items-center gap-1.5 shadow-2xs">
-                <CalendarDays className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>{info.dateString || `${info.dates.day1} - ${info.dates.day2.split(', ')[1] || info.dates.day2}`}</span>
+            <div className="space-y-0.5 min-w-0">
+              <span style={{ color: palette.accentHex }} className="text-[11px] font-extrabold uppercase tracking-widest block leading-snug">
+                {info.organizer}
               </span>
-            </div>
-
-            <div className="flex items-center gap-1.5 text-xs text-slate-300 font-medium bg-white/5 px-2.5 py-0.5 rounded-lg border border-white/10">
-              <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-              <span>{info.location}</span>
+              <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white leading-snug">
+                {info.title}
+              </h1>
+              <p className="text-xs text-slate-300 max-w-2xl leading-normal line-clamp-2 sm:line-clamp-1">
+                {info.theme}
+              </p>
             </div>
           </div>
 
-          {/* Event Identity & Title */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pt-0.5">
-            <div className="flex items-center gap-3">
-              {info.logoUrl ? (
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl bg-white p-1.5 border border-white/20 shadow-md shrink-0 flex items-center justify-center overflow-hidden">
-                  <img
-                    src={info.logoUrl}
-                    alt={info.title}
-                    className="w-full h-full object-contain"
-                    referrerPolicy="no-referrer"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                  />
-                </div>
-              ) : null}
+          {/* Dates, Venue & Current Identified Participant */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-t border-white/10 pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/40 flex items-center gap-1.5 shadow-2xs">
+                <CalendarDays className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>{info.dateString || `${info.dates.day1} - ${info.dates.day2.split(', ')[1] || info.dates.day2}`}</span>
+              </span>
 
-              <div className="space-y-0.5">
-                <span style={{ color: palette.accentHex }} className="text-[11px] font-extrabold uppercase tracking-widest block">
-                  {info.organizer}
-                </span>
-                <h1 className="text-lg sm:text-2xl font-black tracking-tight text-white leading-snug">
-                  {info.title}
-                </h1>
-                <p className="text-xs text-slate-300 max-w-2xl leading-normal line-clamp-1">
-                  {info.theme}
-                </p>
+              <div className="flex items-center gap-1.5 text-xs text-slate-200 font-medium bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
+                <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                <span>{info.location}</span>
               </div>
             </div>
 
@@ -273,10 +266,10 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                   <div className="text-[9px] text-emerald-300 font-bold uppercase tracking-wider">
                     Peserta Terdaftar
                   </div>
-                  <div className="text-xs font-extrabold text-white max-w-[150px] truncate">
+                  <div className="text-xs font-extrabold text-white max-w-[180px] truncate">
                     {currentUser.name}
                   </div>
-                  <div className="text-[10px] text-slate-300 truncate max-w-[150px]">
+                  <div className="text-[10px] text-slate-300 truncate max-w-[180px]">
                     {currentUser.institution || currentUser.role}
                   </div>
                 </div>
@@ -417,7 +410,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           {info.title} • {info.organizer}
         </p>
         <p className="text-[11px] text-slate-500">
-          Diselenggarakan di {info.location} ({info.city || 'Jakarta'}). Terakreditasi resmi {info.accreditation}.
+          Diselenggarakan di {info.location} ({info.city || 'Jakarta'}).
         </p>
       </div>
 

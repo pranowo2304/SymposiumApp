@@ -36,6 +36,38 @@ import {
 import { Session, Speaker, AttendanceRecord, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification } from './types';
 import { Sparkles, Lock } from 'lucide-react';
 
+const TAB_ORDER: MainTabType[] = [
+  'home',
+  'speaker',
+  'workshop',
+  'symposium',
+  'pameran',
+  'venue',
+  'jadwal-saya',
+  'admin',
+];
+
+const tabSlideVariants = {
+  enter: (direction: number) => ({
+    x: direction > 0 ? 56 : -56,
+    opacity: 0,
+    scale: 0.985,
+    filter: 'blur(4px)',
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    scale: 1,
+    filter: 'blur(0px)',
+  },
+  exit: (direction: number) => ({
+    x: direction > 0 ? -56 : 56,
+    opacity: 0,
+    scale: 0.985,
+    filter: 'blur(4px)',
+  }),
+};
+
 export default function App() {
   // Mobile Frame Simulation Mode Toggle
   const [isMobileFrame, setIsMobileFrame] = useState(false);
@@ -50,6 +82,7 @@ export default function App() {
 
   // Navigation Active Tab: 'home' (Landing page default) | 'speaker' | 'workshop' | 'symposium' | 'pameran' | 'venue' | 'jadwal-saya' | 'admin'
   const [activeTab, setActiveTab] = useState<MainTabType>('home');
+  const [tabDirection, setTabDirection] = useState<number>(1);
 
   // Admin Authentication State
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
@@ -202,10 +235,18 @@ export default function App() {
   });
 
   const [rooms, setRooms] = useState<Room[]>(() => {
+    const dedupeRooms = (list: Room[]) => {
+      const seen = new Set<string>();
+      return list.filter(r => {
+        if (!r?.id || seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      });
+    };
     try {
       const saved = localStorage.getItem('simposium_rooms_custom');
       if (saved) {
-        const parsed = JSON.parse(saved);
+        const parsed = dedupeRooms(JSON.parse(saved));
         const isOldDemo = parsed.some((r: any) => r.id === 'Ruang Sulawesi' || r.name === 'Ruang Sulawesi');
         if (!isOldDemo && parsed.length > 0) {
           const hasAntareja = parsed.some((r: any) => r.name === 'Antareja Room' || r.id === 'Antareja Room');
@@ -222,7 +263,7 @@ export default function App() {
             const r2 = DEFAULT_ROOMS_DATA.find(r => r.id === 'Wisanggeni Room');
             if (r2) roomsToAdd.push(r2);
           }
-          const mergedRooms = [...roomsToAdd, ...parsed];
+          const mergedRooms = dedupeRooms([...roomsToAdd, ...parsed]);
           try {
             localStorage.setItem('simposium_rooms_custom', JSON.stringify(mergedRooms));
           } catch (e) {
@@ -511,10 +552,23 @@ export default function App() {
     }, 2500);
   };
 
+  // Directional Tab Navigation Helper for Smooth Framer Motion Slide Transitions
+  const navigateToTab = (nextTab: MainTabType) => {
+    if (nextTab === activeTab) return;
+    const prevIdx = TAB_ORDER.indexOf(activeTab);
+    const nextIdx = TAB_ORDER.indexOf(nextTab);
+    const direction = prevIdx !== -1 && nextIdx !== -1 ? (nextIdx > prevIdx ? 1 : -1) : 1;
+    setTabDirection(direction);
+    setActiveTab(nextTab);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   // Guarded Admin Navigation and Auth Handlers
   const handleOpenAdmin = () => {
     if (isAdminAuthenticated) {
-      setActiveTab('admin');
+      navigateToTab('admin');
     } else {
       setIsAdminLoginModalOpen(true);
     }
@@ -523,7 +577,7 @@ export default function App() {
   const handleAdminLoginSuccess = () => {
     setIsAdminAuthenticated(true);
     setIsAdminLoginModalOpen(false);
-    setActiveTab('admin');
+    navigateToTab('admin');
     showToast("Login Admin Berhasil! Selamat datang di Panel Pengaturan.");
   };
 
@@ -535,7 +589,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    setActiveTab('home');
+    navigateToTab('home');
     showToast("Anda telah keluar dari sesi Admin.");
   };
 
@@ -544,7 +598,7 @@ export default function App() {
       handleOpenAdmin();
       return;
     }
-    setActiveTab(tab);
+    navigateToTab(tab);
   };
 
   const handleToggleBookmark = (sessionId: string) => {
@@ -566,7 +620,11 @@ export default function App() {
   };
 
   const workshopsCount = sessions.filter(
-    s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop')
+    s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.toLowerCase().includes('workshop')
+  ).length;
+
+  const symposiumsCount = sessions.filter(
+    s => s.type !== 'Workshop Hands-On' && !s.category.includes('Workshop') && !s.day.toLowerCase().includes('workshop')
   ).length;
 
   const bookmarkedSessionObjects = sessions.filter(s => bookmarks.includes(s.id));
@@ -580,11 +638,11 @@ export default function App() {
           onOpenAdmin={handleOpenAdmin}
           onOpenQrScanner={() => setIsQrModalOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
-          onOpenBookmarks={() => setActiveTab('jadwal-saya')}
+          onOpenBookmarks={() => navigateToTab('jadwal-saya')}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
           speakerCount={speakers.length}
           workshopCount={workshopsCount}
-          symposiumCount={sessions.length}
+          symposiumCount={symposiumsCount}
           exhibitorCount={exhibitors.length}
           bookmarkCount={bookmarks.length}
           currentUser={currentUser}
@@ -632,7 +690,7 @@ export default function App() {
           activeParticipant={currentUser}
           onSetActiveParticipant={handleSelectParticipant}
           onResetToDefault={handleResetToDefault}
-          onBackToApp={() => setActiveTab('home')}
+          onBackToApp={() => navigateToTab('home')}
           onLogout={handleAdminLogout}
           onSendBroadcast={handleSendBroadcast}
           onClearActiveBroadcast={handleClearActiveBroadcast}
@@ -651,7 +709,7 @@ export default function App() {
           onSelectSession={(s, tab) => handleOpenSession(s, tab || 'abstract')}
           onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
           onClearAllBookmarks={handleClearAllBookmarks}
-          onBackToSchedule={() => setActiveTab('symposium')}
+          onBackToSchedule={() => navigateToTab('symposium')}
           onTriggerReminderToast={triggerReminderToast}
         />
       );
@@ -674,7 +732,8 @@ export default function App() {
           onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
           bookmarks={bookmarks}
           onToggleBookmark={handleToggleBookmark}
-          onOpenVenue={() => setActiveTab('venue')}
+          onOpenVenue={() => navigateToTab('venue')}
+          eventInfo={eventInfo}
         />
       );
     }
@@ -683,7 +742,7 @@ export default function App() {
       return (
         <ExhibitionView
           exhibitors={exhibitors}
-          onOpenVenue={() => setActiveTab('venue')}
+          onOpenVenue={() => navigateToTab('venue')}
         />
       );
     }
@@ -742,7 +801,7 @@ export default function App() {
         {/* App Header */}
         <Header
           bookmarkedCount={bookmarks.length}
-          onOpenBookmarks={() => setActiveTab('jadwal-saya')}
+          onOpenBookmarks={() => navigateToTab('jadwal-saya')}
           onOpenQrScanner={() => setIsQrModalOpen(true)}
           onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenAdmin={handleOpenAdmin}
@@ -761,29 +820,48 @@ export default function App() {
         />
 
         {/* Main Sticky Navigation Menu Bar (only shown on sub-pages, keeping Landing Page dedicated to Header + Menus) */}
-        {activeTab !== 'home' && activeTab !== 'admin' && (
-          <MainMenuTabs
-            activeTab={activeTab}
-            onSelectTab={handleSelectTab}
-            speakerCount={speakers.length}
-            workshopCount={workshopsCount}
-            symposiumCount={sessions.length}
-            exhibitorCount={exhibitors.length}
-            bookmarkCount={bookmarks.length}
-            isAdminAuthenticated={isAdminAuthenticated}
-            eventInfo={eventInfo}
-          />
-        )}
+        <AnimatePresence initial={false}>
+          {activeTab !== 'home' && activeTab !== 'admin' && (
+            <motion.div
+              key="main-menu-tabs-bar"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="sticky top-[48px] sm:top-[52px] z-20"
+            >
+              <MainMenuTabs
+                activeTab={activeTab}
+                onSelectTab={handleSelectTab}
+                speakerCount={speakers.length}
+                workshopCount={workshopsCount}
+                symposiumCount={symposiumsCount}
+                exhibitorCount={exhibitors.length}
+                bookmarkCount={bookmarks.length}
+                isAdminAuthenticated={isAdminAuthenticated}
+                eventInfo={eventInfo}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        {/* Main Content Area */}
-        <main className="flex-1 pb-24 sm:pb-28 overflow-hidden">
-          <AnimatePresence mode="wait">
+        {/* Main Content Area with Directional Framer Motion Slide Transitions */}
+        <main className="flex-1 pb-24 sm:pb-28 overflow-x-hidden">
+          <AnimatePresence mode="wait" custom={tabDirection} initial={false}>
             <motion.div
               key={activeTab}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.22, ease: "easeInOut" }}
+              custom={tabDirection}
+              variants={tabSlideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{
+                x: { type: 'spring', stiffness: 340, damping: 32, mass: 0.85 },
+                opacity: { duration: 0.2, ease: 'easeOut' },
+                scale: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
+                filter: { duration: 0.2, ease: 'easeOut' },
+              }}
+              className="will-change-transform"
             >
               {renderMainContent()}
             </motion.div>
@@ -928,7 +1006,7 @@ export default function App() {
           activeTab={activeTab}
           onSelectTab={handleSelectTab}
           workshopCount={workshopsCount}
-          symposiumCount={sessions.length}
+          symposiumCount={symposiumsCount}
           speakerCount={speakers.length}
           eventInfo={eventInfo}
         />

@@ -62,13 +62,17 @@ export function exportSessionsToCSV(sessions: Session[]): string {
     'Abstrak_LatarBelakang',
     'Pembaruan_Klinis',
     'Kesimpulan',
-    'Key_Takeaways'
+    'Key_Takeaways',
+    'Rundown_Workshop'
   ];
 
   const rows = sessions.map(s => {
     const speakerNames = s.speakers.map(sp => sp.name).join(' | ');
     const clinicalUpdatesStr = (s.abstract?.clinicalUpdates || []).join(' | ');
     const keyTakeawaysStr = (s.keyTakeaways || []).join(' | ');
+    const rundownStr = (s.rundown || [])
+      .map(r => `${r.startTime}-${r.endTime}::${r.activity}${r.pic ? `::${r.pic}` : ''}`)
+      .join(' | ');
 
     return [
       escapeCSV(s.id),
@@ -83,12 +87,13 @@ export function exportSessionsToCSV(sessions: Session[]): string {
       escapeCSV(s.room),
       escapeCSV(s.floor),
       escapeCSV(s.moderator || ''),
-      escapeCSV(s.capacity || 200),
+      escapeCSV(s.capacity || (s.type === 'Workshop Hands-On' ? 60 : 300)),
       escapeCSV(speakerNames),
       escapeCSV(s.abstract?.background || ''),
       escapeCSV(clinicalUpdatesStr),
       escapeCSV(s.abstract?.conclusion || ''),
-      escapeCSV(keyTakeawaysStr)
+      escapeCSV(keyTakeawaysStr),
+      escapeCSV(rundownStr)
     ].join(',');
   });
 
@@ -96,93 +101,190 @@ export function exportSessionsToCSV(sessions: Session[]): string {
 }
 
 /**
- * Generate CSV template with instructions & sample data
+ * Generate CSV template with instructions & sample data for Workshop & Symposium
  */
-export function generateSessionsCSVTemplate(): string {
-  const sampleSessions: Session[] = [
+export function generateSessionsCSVTemplate(filter: 'all' | 'symposium' | 'workshop' = 'all'): string {
+  const workshopSamples: Session[] = [
     {
-      id: 'session-sample-1',
-      day: 'Hari I',
-      date: 'Sabtu, 15 Agustus 2026',
-      startTime: '08:00',
-      endTime: '09:30',
-      timeString: '08:00 - 09:30 WIB',
-      title: 'Plenary Keynote: Terobosan Terapi Kardiovaskular Terintegrasi',
-      category: 'Kardiologi',
-      type: 'Plenary Session',
-      room: 'Grand Ballroom A (Lt. 1)',
-      floor: 'Lantai 1',
-      roomColor: 'bg-rose-500',
-      moderator: 'dr. Budi Setiawan, Sp.JP',
-      capacity: 350,
+      id: 'ws-sample-1',
+      day: 'Workshop (28 Nov)',
+      date: 'Sabtu, 28 November 2026',
+      startTime: '08:30',
+      endTime: '10:00',
+      timeString: '08:30 - 10:00 WIB',
+      title: 'Approach to Cutaneous Masses: From Cytology to Biopsy Planning',
+      category: 'Workshop Versus - MASS Hunt',
+      type: 'Workshop Hands-On',
+      room: 'Antareja Room',
+      floor: 'Ground Floor',
+      roomColor: 'bg-amber-600',
+      moderator: 'drh. Moderator Workshop',
+      capacity: 60,
       speakers: [
         {
-          id: 'sp-1',
-          name: 'Prof. dr. Bambang Sutrisno, Sp.JP(K)',
-          title: 'Guru Besar Kardiologi',
-          institution: 'RSUPN Cipto Mangunkusumo, Jakarta',
+          id: 'sp-ws-1',
+          name: 'Prof. Dr. Kelvinesen',
+          title: 'Veterinary Surgical Oncologist',
+          institution: 'WSAVA Oncology Faculty',
           photoUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&auto=format&fit=crop&q=80',
-          bio: 'Konsultan intervensi vaskular terkemuka.',
-          specialty: 'Kardiologi'
+          bio: 'Instruktur bedah onkologi veteriner.',
+          specialty: 'Bedah Onkologi'
         }
       ],
       abstract: {
-        background: 'Update tatalaksana sindrom koroner akut dan pencegahan sekunder terintegrasi.',
+        background: 'Pendekatan diagnostik sistematis massa kulit dari sitologi FNA hingga perencanaan margin biopsi.',
         clinicalUpdates: [
-          'Protokol revaskularisasi cepat < 90 menit',
-          'Aplikasi antikoagulan oral generasi baru',
-          'Pemantauan biomarka hs-Troponin serial'
+          'Teknik Fine Needle Aspiration (FNA) bebas artefak',
+          'Penentuan margin eksisi lateral dan deep fascial plane',
+          'Interpretasi sitologi cepat di klinik'
         ],
-        conclusion: 'Penanganan komprehensif sedini mungkin memperbaiki luaran klinis jangka panjang.'
+        conclusion: 'Perencanaan biopsi yang tepat mencegah re-eksisi dan meningkatkan keberhasilan operasi.'
       },
       keyTakeaways: [
-        'Waktu adalah miokardium',
-        'Pemberian DAPT sesuai stratifikasi risiko'
+        'FNA wajib sebelum eksisi massa kulit',
+        'Tandai batas tumor sebelum anestesi'
+      ],
+      rundown: [
+        { id: 'rd-1', startTime: '08:30', endTime: '09:15', activity: 'Pemaparan Teori & Studi Kasus Sitologi Massa Kulit', pic: 'Prof. Dr. Kelvinesen' },
+        { id: 'rd-2', startTime: '09:15', endTime: '10:00', activity: 'Hands-On Wet Lab: Teknik Biopsi Punch, Wedge & Pemetaan Margin', pic: 'Tim Instruktur Versus' }
       ]
     },
     {
-      id: 'session-sample-2',
-      day: 'Hari I',
-      date: 'Sabtu, 15 Agustus 2026',
-      startTime: '13:00',
-      endTime: '15:30',
-      timeString: '13:00 - 15:30 WIB',
-      title: 'Workshop Hands-On: Ultrasonografi Vaskular & Emergency Echocardiography',
-      category: 'Workshop Hands-On',
+      id: 'ws-sample-2',
+      day: 'Workshop (28 Nov)',
+      date: 'Sabtu, 28 November 2026',
+      startTime: '09:00',
+      endTime: '10:30',
+      timeString: '09:00 - 10:30 WIB',
+      title: 'Patient Preparation & Aseptic Technique in Veterinary Surgery',
+      category: 'Workshop Vet Nurse / Paramedis',
       type: 'Workshop Hands-On',
-      room: 'Ruang Workshop C (Lt. 3)',
-      floor: 'Lantai 3',
-      roomColor: 'bg-indigo-500',
-      moderator: 'dr. Lukman Hakim, Sp.PD',
-      capacity: 40,
+      room: 'Wisanggeni Room',
+      floor: 'Ground Floor',
+      roomColor: 'bg-emerald-600',
+      moderator: 'drh. Koordinator Paramedis',
+      capacity: 60,
       speakers: [
         {
-          id: 'sp-2',
-          name: 'dr. Ratna Setyowati, Sp.N(K)',
-          title: 'Konsultan Vaskular',
-          institution: 'RSUP Dr. Sardjito Yogyakarta',
+          id: 'sp-ws-2',
+          name: 'drh. Rina Kusumawati, M.Vet',
+          title: 'Instruktur Keperawatan Bedah Veteriner',
+          institution: 'ADHPHKI Surgical Nursing Division',
           photoUrl: 'https://images.unsplash.com/photo-1594824813566-88855ce78347?w=400&auto=format&fit=crop&q=80',
-          bio: 'Instruktur bersertifikasi simulasi klinis ultrasound.',
-          specialty: 'Neurologi'
+          bio: 'Praktisi keperawatan perioperatif hewan kecil.',
+          specialty: 'Veterinary Nursing'
         }
       ],
       abstract: {
-        background: 'Pelatihan langsung teknik ultrasound point-of-care (POCUS) pada pasien gawat darurat.',
+        background: 'Standar persiapan pasien pra-bedah, pencukuran area operasi, dan teknik aseptik ruang bedah.',
         clinicalUpdates: [
-          'Stasiun 1: Teknik scanning vaskular karotis & femoralis',
-          'Stasiun 2: Evaluasi fungsi sistolik ventrikel kiri',
-          'Stasiun 3: Deteksi efusi perikardial & tamponade'
+          'Protokol scrubbing chlorhexidine vs povidone iodine',
+          'Teknik draping empat kuadran bebas kontaminasi',
+          'Checklist keselamatan anestesi & instrumen pra-insisi'
         ],
-        conclusion: 'Peserta menguasai interpretasi cepat ultrasound bedside secara mandiri.'
+        conclusion: 'Kepatuhan teknik aseptik menekan risiko infeksi luka operasi (SSI) secara signifikan.'
       },
       keyTakeaways: [
-        'Hands-on practice pada model phantom & relawan',
-        'Sertifikat kompetensi workshop berskredit IDI'
+        'Persiapan area insisi minimal 3x lebar margin',
+        'Sterilitas instrumen dan draping wajib terjaga'
+      ],
+      rundown: [
+        { id: 'rd-3', startTime: '09:00', endTime: '09:45', activity: 'Materi Persiapan Pasien & Aseptik Bedah', pic: 'drh. Rina Kusumawati, M.Vet' },
+        { id: 'rd-4', startTime: '09:45', endTime: '10:30', activity: 'Praktik Gowning, Gloving & Draping Pasien', pic: 'Tim Instruktur Vet Nurse' }
       ]
     }
   ];
 
-  return exportSessionsToCSV(sampleSessions);
+  const symposiumSamples: Session[] = [
+    {
+      id: 'sym-sample-1',
+      day: 'Hari I',
+      date: 'Minggu, 29 November 2026',
+      startTime: '09:15',
+      endTime: '10:45',
+      timeString: '09:15 - 10:45 WIB',
+      title: 'Plenary WSAVA Lecture: Contemporary Surgical Management of Feline & Canine Mammary Tumors',
+      category: 'Onkologi & Bedah',
+      type: 'Plenary Session',
+      room: 'Ballroom Amartapura A',
+      floor: 'Lantai 1',
+      roomColor: 'bg-indigo-600',
+      moderator: 'drh. Listriani Wistawan',
+      capacity: 400,
+      speakers: [
+        {
+          id: 'sp-sym-1',
+          name: 'Prof. Dr. Kelvinesen',
+          title: 'WSAVA Keynote Speaker',
+          institution: 'WSAVA Oncology Committee',
+          photoUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&auto=format&fit=crop&q=80',
+          bio: 'Pakar bedah onkologi hewan kecil internasional.',
+          specialty: 'Onkologi Veteriner'
+        }
+      ],
+      abstract: {
+        background: 'Pembaruan pedoman WSAVA terkait klasifikasi klinis dan strategi mastektomi radikal maupun regional pada anjing dan kucing.',
+        clinicalUpdates: [
+          'Indikasi unilateral vs bilateral chain mastectomy pada kucing',
+          'Evaluasi limfonodus sentinel inguinalis dan aksilaris',
+          'Kombinasi kemoterapi adjuvan pasca-mastektomi'
+        ],
+        conclusion: 'Pendekatan bedah agresif pada tumor mamaria kucing memberikan angka bebas penyakit (DFS) terbaik.'
+      },
+      keyTakeaways: [
+        'Chain mastectomy direkomendasikan untuk tumor mamaria kucing',
+        'Staging TNM dan histopatologi limfonodus wajib dilakukan'
+      ]
+    },
+    {
+      id: 'sym-sample-2',
+      day: 'Hari I',
+      date: 'Minggu, 29 November 2026',
+      startTime: '13:30',
+      endTime: '15:00',
+      timeString: '13:30 - 15:00 WIB',
+      title: 'Parallel Session Oncology: Reconstructive Axial Pattern Flaps After Wide Tumor Excision',
+      category: 'Bedah Rekonstruksi',
+      type: 'Simposium Paralel',
+      room: 'Ballroom Amartapura B',
+      floor: 'Lantai 1',
+      roomColor: 'bg-blue-600',
+      moderator: 'drh. Listriani Wistawan',
+      capacity: 300,
+      speakers: [
+        {
+          id: 'sp-sym-2',
+          name: 'Dr. Ivan Satriawan, drh.',
+          title: 'Praktisi Bedah & Onkologi Hewan Kecil',
+          institution: 'ADHPHKI',
+          photoUrl: 'https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=400&auto=format&fit=crop&q=80',
+          bio: 'Spesialis bedah jaringan lunak dan rekonstruksi kulit veteriner.',
+          specialty: 'Bedah Jaringan Lunak'
+        }
+      ],
+      abstract: {
+        background: 'Penutupan defek kulit luas pasca-eksisi tumor menggunakan teknik subdermal plexus flap dan axial pattern flap.',
+        clinicalUpdates: [
+          'Perencanaan thoracodorsal dan caudal superficial epigastric flap',
+          'Manajemen tegangan tepi luka (tension-relieving sutures)',
+          'Pencegahan nekrosis tepi flap dan seroma pasca-operasi'
+        ],
+        conclusion: 'Pemahaman vaskularisasi kulit memastikan viabilitas flap pada defek onkologi ekstrem.'
+      },
+      keyTakeaways: [
+        'Jaga arteri dan vena kutaneus direk saat diseksi flap',
+        'Hindari tegangan berlebih pada garis jahitan utama'
+      ]
+    }
+  ];
+
+  if (filter === 'workshop') {
+    return exportSessionsToCSV(workshopSamples);
+  }
+  if (filter === 'symposium') {
+    return exportSessionsToCSV(symposiumSamples);
+  }
+  return exportSessionsToCSV([...workshopSamples, ...symposiumSamples]);
 }
 
 /**
@@ -252,11 +354,12 @@ export function importSessionsFromCSV(
     floor: rawHeaders.findIndex(h => h.includes('lantai') || h === 'floor'),
     moderator: rawHeaders.findIndex(h => h.includes('moderator')),
     capacity: rawHeaders.findIndex(h => h.includes('kapasitas') || h.includes('capacity') || h.includes('kuota')),
-    speakers: rawHeaders.findIndex(h => h.includes('narasumber') || h.includes('pembicara') || h.includes('speaker')),
+    speakers: rawHeaders.findIndex(h => h.includes('narasumber') || h.includes('pembicara') || h.includes('speaker') || h.includes('instruktur')),
     background: rawHeaders.findIndex(h => h.includes('abstrak') || h.includes('latar') || h.includes('background')),
     clinicalUpdates: rawHeaders.findIndex(h => h.includes('pembaruan') || h.includes('clinical') || h.includes('update')),
     conclusion: rawHeaders.findIndex(h => h.includes('kesimpulan') || h.includes('conclusion')),
-    keyTakeaways: rawHeaders.findIndex(h => h.includes('takeaway') || h.includes('poinpenting') || h.includes('ringkasan'))
+    keyTakeaways: rawHeaders.findIndex(h => h.includes('takeaway') || h.includes('poinpenting') || h.includes('ringkasan')),
+    rundown: rawHeaders.findIndex(h => h.includes('rundown') || h.includes('agenda'))
   };
 
   const importedSessions: Session[] = [];
@@ -275,42 +378,61 @@ export function importSessionsFromCSV(
       continue;
     }
 
-    // Day resolution
-    let dayVal: 'Hari I' | 'Hari II' = 'Hari I';
-    const rawDay = getVal(colIdx.day);
-    if (rawDay.includes('2') || rawDay.toLowerCase().includes('ii') || rawDay.toLowerCase().includes('minggu')) {
-      dayVal = 'Hari II';
-    }
-
-    // Date resolution
-    const dateVal = getVal(colIdx.date, dayVal === 'Hari I' ? 'Sabtu, 15 Agustus 2026' : 'Minggu, 16 Agustus 2026');
-
-    // Time
-    const startTime = getVal(colIdx.startTime, '08:00');
-    const endTime = getVal(colIdx.endTime, '09:30');
-    const timeString = getVal(colIdx.timeString, `${startTime} - ${endTime} WIB`);
-
-    // Category & Type
+    // Category & Type resolution first so Day can use it as fallback
     const category = getVal(colIdx.category, 'Simposium Klinis');
     let sessionType: Session['type'] = 'Simposium Paralel';
     const rawType = getVal(colIdx.type).toLowerCase();
     if (rawType.includes('plenary')) sessionType = 'Plenary Session';
-    else if (rawType.includes('workshop') || rawTitle.toLowerCase().includes('workshop')) sessionType = 'Workshop Hands-On';
+    else if (rawType.includes('workshop') || category.toLowerCase().includes('workshop') || rawTitle.toLowerCase().includes('workshop')) sessionType = 'Workshop Hands-On';
     else if (rawType.includes('keynote')) sessionType = 'Keynote Lecture';
     else if (rawType.includes('panel')) sessionType = 'Panel Discussion';
 
+    // Flexible Day resolution supporting Workshop (28 Nov), Hari I, Hari II, Hari III
+    const rawDay = getVal(colIdx.day);
+    let dayVal: string = 'Hari I';
+    if (rawDay) {
+      const lowerDay = rawDay.toLowerCase();
+      if (lowerDay.includes('workshop') || lowerDay.includes('28') || lowerDay.includes('pre')) {
+        dayVal = 'Workshop (28 Nov)';
+      } else if (lowerDay.includes('iii') || lowerDay.includes('3') || lowerDay.includes('selasa') || lowerDay.includes('1 des')) {
+        dayVal = 'Hari III';
+      } else if (lowerDay.includes('ii') || lowerDay.includes('2') || lowerDay.includes('senin') || lowerDay.includes('30')) {
+        dayVal = 'Hari II';
+      } else if (lowerDay.includes('i') || lowerDay.includes('1') || lowerDay.includes('minggu') || lowerDay.includes('29')) {
+        dayVal = 'Hari I';
+      } else {
+        dayVal = rawDay;
+      }
+    } else if (sessionType === 'Workshop Hands-On') {
+      dayVal = 'Workshop (28 Nov)';
+    }
+
+    // Date resolution
+    const defaultDateMap: Record<string, string> = {
+      'Workshop (28 Nov)': 'Sabtu, 28 November 2026',
+      'Hari I': 'Minggu, 29 November 2026',
+      'Hari II': 'Senin, 30 November 2026',
+      'Hari III': 'Selasa, 1 Desember 2026'
+    };
+    const dateVal = getVal(colIdx.date, defaultDateMap[dayVal] || 'Minggu, 29 November 2026');
+
+    // Time
+    const startTime = getVal(colIdx.startTime, '08:30');
+    const endTime = getVal(colIdx.endTime, '10:00');
+    const timeString = getVal(colIdx.timeString, `${startTime} - ${endTime} WIB`);
+
     // Room & Floor
-    const roomName = getVal(colIdx.room, sessionType === 'Workshop Hands-On' ? 'Ruang Workshop A' : 'Grand Ballroom A');
+    const roomName = getVal(colIdx.room, sessionType === 'Workshop Hands-On' ? 'Antareja Room' : 'Ballroom Amartapura A');
     const matchedRoom = existingRooms.find(r => r.name.toLowerCase() === roomName.toLowerCase());
-    const floor = getVal(colIdx.floor, matchedRoom?.floor || 'Lantai 1');
-    const roomColor = matchedRoom?.color || (sessionType === 'Workshop Hands-On' ? 'bg-indigo-500' : 'bg-blue-600');
+    const floor = getVal(colIdx.floor, matchedRoom?.floor || (sessionType === 'Workshop Hands-On' ? 'Ground Floor' : 'Lantai 1'));
+    const roomColor = matchedRoom?.color || (sessionType === 'Workshop Hands-On' ? 'bg-amber-600' : 'bg-indigo-600');
 
     // Moderator
-    const moderator = getVal(colIdx.moderator, 'dr. Moderator Simposium, Sp.PD');
+    const moderator = getVal(colIdx.moderator, 'drh. Moderator Sesi');
 
     // Capacity
     const capacityRaw = parseInt(getVal(colIdx.capacity), 10);
-    const capacity = !isNaN(capacityRaw) && capacityRaw > 0 ? capacityRaw : (sessionType === 'Workshop Hands-On' ? 50 : 250);
+    const capacity = !isNaN(capacityRaw) && capacityRaw > 0 ? capacityRaw : (sessionType === 'Workshop Hands-On' ? 60 : 300);
 
     // Speakers resolution
     const speakersStr = getVal(colIdx.speakers);
@@ -319,17 +441,15 @@ export function importSessionsFromCSV(
 
     if (speakerNames.length > 0) {
       speakerNames.forEach((name, spIdx) => {
-        // Try match existing
         const existing = existingSpeakers.find(sp => sp.name.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(sp.name.toLowerCase()));
         if (existing) {
           resolvedSpeakers.push(existing);
         } else {
-          // Create speaker stub
           resolvedSpeakers.push({
-            id: `sp-imp-${Date.now()}-${spIdx}`,
+            id: `sp-imp-${Date.now()}-${i}-${spIdx}`,
             name,
-            title: 'Narasumber Simposium',
-            institution: 'RS / Fakultas Kedokteran Mitra',
+            title: sessionType === 'Workshop Hands-On' ? 'Instruktur Workshop' : 'Narasumber Simposium',
+            institution: 'ADHPHKI / Praktisi Klinis',
             photoUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&auto=format&fit=crop&q=80',
             bio: `Narasumber ahli pada sesi: ${rawTitle}.`,
             specialty: category
@@ -355,6 +475,28 @@ export function importSessionsFromCSV(
       ? takeawaysStr.split(/[|;]/).map(t => t.trim()).filter(Boolean)
       : ['Evidence-based approach', 'Protokol klinis standar'];
 
+    // Optional Workshop Rundown parsing ("08:30-09:15::Materi 1::Prof. Kelvin | 09:15-10:00::Wet Lab::Tim Instruktur")
+    const rundownStr = getVal(colIdx.rundown);
+    const rundown = rundownStr
+      ? rundownStr
+          .split('|')
+          .map((itemStr, rIdx) => {
+            const parts = itemStr.split('::').map(p => p.trim());
+            const timeRange = parts[0] || '';
+            const [rStart, rEnd] = timeRange.split('-').map(t => t.trim());
+            const activity = parts[1] || parts[0] || '';
+            const pic = parts[2] || resolvedSpeakers[0]?.name || 'Instruktur';
+            return {
+              id: `rd-imp-${Date.now()}-${i}-${rIdx}`,
+              startTime: rStart || startTime,
+              endTime: rEnd || endTime,
+              activity,
+              pic
+            };
+          })
+          .filter(r => r.activity.length > 0)
+      : undefined;
+
     const id = getVal(colIdx.id, `session-imp-${Date.now()}-${i}`);
 
     importedSessions.push({
@@ -378,7 +520,8 @@ export function importSessionsFromCSV(
         clinicalUpdates,
         conclusion
       },
-      keyTakeaways
+      keyTakeaways,
+      rundown: rundown && rundown.length > 0 ? rundown : undefined
     });
   }
 

@@ -111,10 +111,11 @@ export const SessionImportExportModal: React.FC<SessionImportExportModalProps> =
   };
 
   // Handle Download CSV Template
-  const handleDownloadTemplate = () => {
-    const templateContent = generateSessionsCSVTemplate();
-    downloadFile('template_jadwal_simposium_workshop.csv', templateContent, 'text/csv;charset=utf-8;');
-    onShowToast('Template format CSV berhasil diunduh. Anda dapat membukanya di Excel.');
+  const handleDownloadTemplate = (targetFilter: 'all' | 'symposium' | 'workshop' = exportFilter) => {
+    const templateContent = generateSessionsCSVTemplate(targetFilter);
+    const suffix = targetFilter === 'workshop' ? 'workshop' : targetFilter === 'symposium' ? 'symposium' : 'lengkap';
+    downloadFile(`template_csv_jadwal_${suffix}.csv`, templateContent, 'text/csv;charset=utf-8;');
+    onShowToast(`Template CSV Jadwal (${suffix.toUpperCase()}) berhasil diunduh!`);
   };
 
   // Handle File Upload
@@ -519,25 +520,43 @@ export const SessionImportExportModal: React.FC<SessionImportExportModalProps> =
               </div>
 
               {/* Template Download Help Box */}
-              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3">
                 <div className="flex items-start gap-3">
                   <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div className="text-xs">
-                    <span className="font-bold text-slate-200">Butuh template kolom CSV untuk pengisian manual?</span>
+                    <span className="font-bold text-slate-200">Butuh Template Format CSV untuk Master Jadwal Workshop & Symposium?</span>
                     <p className="text-slate-400 mt-0.5">
-                      Unduh template contoh berisikan format header lengkap (Hari, Tanggal, Jam, Judul, Kategori, Ruangan, Moderator, Pembicara, Abstrak).
+                      Unduh contoh format kolom CSV resmi lengkap dengan contoh baris data untuk diisi di Microsoft Excel atau Google Sheets.
                     </p>
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={handleDownloadTemplate}
-                  className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 text-xs font-bold transition-all border border-slate-700 flex items-center gap-1.5 shrink-0"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Unduh Template CSV</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadTemplate('all')}
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-amber-200 text-xs font-bold transition-all border border-slate-700 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Template CSV Gabungan (Workshop + Symposium)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadTemplate('workshop')}
+                    className="px-3 py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 text-xs font-bold transition-all border border-emerald-500/30 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Template CSV Khusus Workshop</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadTemplate('symposium')}
+                    className="px-3 py-2 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-300 text-xs font-bold transition-all border border-indigo-500/30 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Template CSV Khusus Symposium</span>
+                  </button>
+                </div>
               </div>
 
             </div>
@@ -715,14 +734,34 @@ export const SessionImportExportModal: React.FC<SessionImportExportModalProps> =
                   <label className="text-xs font-bold text-slate-300">
                     Atau Tempel (Paste) Teks Jadwal / CSV / JSON di Sini:
                   </label>
-                  <button
-                    type="button"
-                    onClick={handleDownloadTemplate}
-                    className="text-[11px] text-amber-400 hover:underline flex items-center gap-1"
-                  >
-                    <Download className="w-3 h-3" />
-                    <span>Unduh Contoh Template CSV</span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadTemplate('all')}
+                      className="text-[11px] text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Unduh Template CSV Gabungan</span>
+                    </button>
+                    <span className="text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadTemplate('workshop')}
+                      className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Template Workshop</span>
+                    </button>
+                    <span className="text-slate-600">•</span>
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadTemplate('symposium')}
+                      className="text-[11px] text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Template Symposium</span>
+                    </button>
+                  </div>
                 </div>
                 <textarea
                   rows={4}

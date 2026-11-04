@@ -26,12 +26,24 @@ import {
   PanelRightOpen,
   ArrowUp,
   ArrowDown,
+  WifiOff,
+  Check,
+  DownloadCloud,
+  RefreshCw,
   X
 } from 'lucide-react';
 import { SESSIONS_DATA, SYMPOSIUM_INFO } from '../data/symposiumData';
 import { DEFAULT_ROOMS_DATA } from '../data/roomsData';
 import { Session, Speaker, Room, SymposiumInfo } from '../types';
 import { getThemePalette } from '../utils/themeColors';
+import {
+  saveVenueMapToCache,
+  loadVenueMapFromCache,
+  loadVenueMapFromLocalSync,
+  saveVenueMapUIState,
+  loadVenueMapUIState,
+  VenueMapOfflineSnapshot
+} from '../utils/venueMapCache';
 
 interface InteractiveVenueMapProps {
   rooms?: Room[];
@@ -309,9 +321,48 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
   onSelectSpeaker,
   eventInfo
 }) => {
-  const currentRooms = rooms && rooms.length > 0 ? rooms : DEFAULT_ROOMS_DATA;
-  const currentSessions = sessions && sessions.length > 0 ? sessions : SESSIONS_DATA;
-  const info = eventInfo || SYMPOSIUM_INFO;
+  // Offline Cache Snapshot & Connectivity State
+  const [cachedSnapshot, setCachedSnapshot] = useState<VenueMapOfflineSnapshot | null>(() =>
+    loadVenueMapFromLocalSync()
+  );
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [isSyncingCache, setIsSyncingCache] = useState<boolean>(false);
+  const [lastCachedAt, setLastCachedAt] = useState<string | null>(() => {
+    const initial = loadVenueMapFromLocalSync();
+    return initial?.cachedAt || null;
+  });
+
+  const currentRooms = useMemo(() => {
+    const rawRooms =
+      rooms && rooms.length > 0
+        ? rooms
+        : cachedSnapshot?.rooms && cachedSnapshot.rooms.length > 0
+        ? cachedSnapshot.rooms
+        : DEFAULT_ROOMS_DATA;
+    const seen = new Set<string>();
+    return rawRooms.filter(r => {
+      if (!r?.id || seen.has(r.id)) return false;
+      seen.add(r.id);
+      return true;
+    });
+  }, [rooms, cachedSnapshot]);
+
+  const currentSessions = useMemo(() => {
+    if (sessions && sessions.length > 0) return sessions;
+    if (cachedSnapshot?.sessions && cachedSnapshot.sessions.length > 0) return cachedSnapshot.sessions;
+    return SESSIONS_DATA;
+  }, [sessions, cachedSnapshot]);
+
+  const activeFloorPolygonsMap = useMemo(() => {
+    if (!isOnline && cachedSnapshot?.floorPolygons && Object.keys(cachedSnapshot.floorPolygons).length > 0) {
+      return cachedSnapshot.floorPolygons;
+    }
+    return FLOOR_ROOM_POLYGONS;
+  }, [isOnline, cachedSnapshot]);
+
+  const info = eventInfo || cachedSnapshot?.eventInfo || SYMPOSIUM_INFO;
   const palette = getThemePalette(info);
 
   // Compute available floors dynamically from actual rooms list
@@ -324,8 +375,11 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     return list.length > 0 ? [...list, 'Semua'] : ['Ground Floor', 'Lantai 1', 'Semua'];
   }, [currentRooms]);
 
+  const savedUIState = useMemo(() => loadVenueMapUIState(), []);
+
   // Floor Selection & Smooth Transition Animation States
   const [selectedFloor, setSelectedFloor] = useState<string>(() => {
+    if (savedUIState?.selectedFloor) return savedUIState.selectedFloor;
     return currentRooms[0]?.floor || 'Ground Floor';
   });
   const [isFloorTransitioning, setIsFloorTransitioning] = useState<boolean>(false);
@@ -333,12 +387,78 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
   const [showFloorToast, setShowFloorToast] = useState<boolean>(false);
   const floorToastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const [activePinId, setActivePinId] = useState<string>(currentRooms[0]?.id || 'Antareja Room');
+  const [activePinId, setActivePinId] = useState<string>(() => {
+    if (savedUIState?.activePinId && currentRooms.some(r => r.id === savedUIState.activePinId)) {
+      return savedUIState.activePinId;
+    }
+    return currentRooms[0]?.id || 'Antareja Room';
+  });
   const [popupRoomId, setPopupRoomId] = useState<string | null>(null);
   const [popupTimingFilter, setPopupTimingFilter] = useState<'all' | 'ongoing' | 'upcoming'>('all');
   const [mapSearchQuery, setMapSearchQuery] = useState<string>('');
-  const [selectedDayFilter, setSelectedDayFilter] = useState<string>('Semua');
+  const [selectedDayFilter, setSelectedDayFilter] = useState<string>(() => {
+    return savedUIState?.selectedDayFilter || 'Semua';
+  });
   const [roomSessionTimingFilter, setRoomSessionTimingFilter] = useState<'all' | 'ongoing' | 'upcoming'>('all');
+
+  // Listen to online/offline connectivity changes & hydrate from Cache Storage API on mount
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    loadVenueMapFromCache().then(snapshot => {
+      if (snapshot) {
+        setCachedSnapshot(snapshot);
+        setLastCachedAt(snapshot.cachedAt);
+      }
+    });
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Automatically cache the venue map data (rooms, sessions, floor polygons, eventInfo) for offline access
+  const handleManualSyncOfflineCache = useCallback(async () => {
+    setIsSyncingCache(true);
+    try {
+      const result = await saveVenueMapToCache(
+        currentRooms,
+        currentSessions,
+        FLOOR_ROOM_POLYGONS,
+        info
+      );
+      if (result.success) {
+        setLastCachedAt(result.cachedAt);
+      }
+    } finally {
+      setTimeout(() => setIsSyncingCache(false), 350);
+    }
+  }, [currentRooms, currentSessions, info]);
+
+  useEffect(() => {
+    let isMounted = true;
+    saveVenueMapToCache(currentRooms, currentSessions, FLOOR_ROOM_POLYGONS, info).then(res => {
+      if (isMounted && res.success) {
+        setLastCachedAt(res.cachedAt);
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, [currentRooms, currentSessions, info]);
+
+  // Persist user's active floor, pin, and day filter for seamless offline navigation
+  useEffect(() => {
+    saveVenueMapUIState({
+      selectedFloor,
+      activePinId,
+      selectedDayFilter,
+    });
+  }, [selectedFloor, activePinId, selectedDayFilter]);
 
   // Interactive Live Session Simulation Filter
   // Allows the user to select or simulate specific time slots to see rooms actively holding sessions
@@ -658,13 +778,26 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
   // Active session in selected room right now (if any)
   const currentOngoingInActivePin = roomOngoingSessionsMap.get(activePin.id);
 
-  // Active polygons for current floor
+  // Active polygons for current floor (deduplicated by roomId)
   const currentFloorPolygons = useMemo(() => {
+    const seen = new Set<string>();
     if (selectedFloor === 'Semua') {
-      return Object.values(FLOOR_ROOM_POLYGONS).flat();
+      const activeFloors = availableFloors.filter(f => f !== 'Semua');
+      const polys = activeFloors.length > 0
+        ? activeFloors.flatMap(f => activeFloorPolygonsMap[f] || [])
+        : Object.values(activeFloorPolygonsMap).flat();
+      return polys.filter(p => {
+        if (seen.has(p.roomId)) return false;
+        seen.add(p.roomId);
+        return true;
+      });
     }
-    return FLOOR_ROOM_POLYGONS[selectedFloor] || [];
-  }, [selectedFloor]);
+    return (activeFloorPolygonsMap[selectedFloor] || []).filter(p => {
+      if (seen.has(p.roomId)) return false;
+      seen.add(p.roomId);
+      return true;
+    });
+  }, [selectedFloor, availableFloors, activeFloorPolygonsMap]);
 
   // Direct Interactive Pin Click Handler (pops up session schedule directly on canvas)
   const handlePinClick = useCallback((pinId: string) => {
@@ -1727,6 +1860,37 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
             </span>
             <span>•</span>
             <span className="text-slate-300">{info.location}</span>
+            <span>•</span>
+            {!isOnline ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[10px] font-black tracking-wide normal-case">
+                <WifiOff className="w-3 h-3 text-amber-400" />
+                <span>Mode Offline Aktif (Denah Tersimpan)</span>
+              </span>
+            ) : lastCachedAt ? (
+              <button
+                type="button"
+                onClick={handleManualSyncOfflineCache}
+                disabled={isSyncingCache}
+                title={`Denah tersimpan untuk navigasi offline. Terakhir disinkronkan: ${new Date(lastCachedAt).toLocaleTimeString('id-ID')}. Klik untuk memperbarui cache offline.`}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 text-[10px] font-bold tracking-wide normal-case transition-colors cursor-pointer"
+              >
+                {isSyncingCache ? (
+                  <RefreshCw className="w-3 h-3 text-emerald-300 animate-spin" />
+                ) : (
+                  <Check className="w-3 h-3 text-emerald-400" />
+                )}
+                <span>{isSyncingCache ? 'Menyimpan Cache...' : 'Siap Offline'}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleManualSyncOfflineCache}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-400/40 text-[10px] font-bold tracking-wide normal-case transition-colors cursor-pointer"
+              >
+                <DownloadCloud className="w-3 h-3 text-sky-400" />
+                <span>Simpan Denah Offline</span>
+              </button>
+            )}
           </div>
           <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
             Denah Ruangan & Highlight Sesi Berlangsung

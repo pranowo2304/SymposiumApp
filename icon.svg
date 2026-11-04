@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#065f46" />
+      <stop offset="50%" stop-color="#047857" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#d97706" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)" />
+  <rect x="28" y="28" width="456" height="456" rx="92" fill="none" stroke="url(#gold)" stroke-width="6" stroke-opacity="0.45" />
+  <!-- Medical Cross + Veterinary V Emblem -->
+  <g transform="translate(256, 230)">
+    <rect x="-36" y="-110" width="72" height="220" rx="18" fill="#10b981" opacity="0.25" />
+    <rect x="-110" y="-36" width="220" height="72" rx="18" fill="#10b981" opacity="0.25" />
+    <path d="M-85 -75 L-28 85 L28 85 L85 -75 L42 -75 L0 48 L-42 -75 Z" fill="url(#gold)" />
+    <circle cx="0" cy="-95" r="20" fill="#ffffff" />
+  </g>
+  <text x="256" y="418" font-family="system-ui, -apple-system, sans-serif" font-size="44" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="3">KIVNAHK IV</text>
+  <text x="256" y="456" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="700" fill="#fbbf24" text-anchor="middle" letter-spacing="4">ADHPHKI 2026</text>
+</svg>

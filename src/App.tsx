@@ -34,18 +34,10 @@ import {
   registerOrUpdateParticipant 
 } from './data/participantData';
 import { Session, Speaker, AttendanceRecord, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification } from './types';
+import { TAB_HASH_ORDER, parseTabFromHash, syncTabToUrlHash } from './utils/hashRouter';
 import { Sparkles, Lock } from 'lucide-react';
 
-const TAB_ORDER: MainTabType[] = [
-  'home',
-  'speaker',
-  'workshop',
-  'symposium',
-  'pameran',
-  'venue',
-  'jadwal-saya',
-  'admin',
-];
+const TAB_ORDER: MainTabType[] = TAB_HASH_ORDER;
 
 const tabSlideVariants = {
   enter: (direction: number) => ({
@@ -80,19 +72,6 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<Participant>(() => getActiveParticipant());
   const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
 
-  // Navigation Active Tab: 'home' (Landing page default) | 'speaker' | 'workshop' | 'symposium' | 'pameran' | 'venue' | 'jadwal-saya' | 'admin'
-  // Uses state + optional URL hash (never History API pathname) so routing works seamlessly on GitHub Pages subpaths
-  const [activeTab, setActiveTab] = useState<MainTabType>(() => {
-    if (typeof window !== 'undefined' && window.location.hash) {
-      const hashTab = window.location.hash.replace(/^#\/?/, '') as MainTabType;
-      if (TAB_ORDER.includes(hashTab) && hashTab !== 'admin') {
-        return hashTab;
-      }
-    }
-    return 'home';
-  });
-  const [tabDirection, setTabDirection] = useState<number>(1);
-
   // Admin Authentication State
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
     try {
@@ -103,6 +82,29 @@ export default function App() {
     }
   });
   const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState<boolean>(false);
+
+  // Navigation Active Tab: 'home' | 'speaker' | 'workshop' | 'symposium' | 'pameran' | 'venue' | 'jadwal-saya' | 'admin'
+  // Exclusively uses URL hashes (e.g. #symposium, #workshop) so static hosts like GitHub Pages never 404
+  const [activeTab, setActiveTab] = useState<MainTabType>(() => {
+    if (typeof window !== 'undefined') {
+      const hashTab = parseTabFromHash(window.location.hash);
+      if (hashTab) {
+        if (hashTab === 'admin') {
+          try {
+            const isAuth =
+              sessionStorage.getItem('simposium_admin_auth') === 'true' ||
+              localStorage.getItem('simposium_admin_auth') === 'true';
+            return isAuth ? 'admin' : 'home';
+          } catch {
+            return 'home';
+          }
+        }
+        return hashTab;
+      }
+    }
+    return 'home';
+  });
+  const [tabDirection, setTabDirection] = useState<number>(1);
 
   // Broadcast Notification State (Cross-Tab & Real-Time Sync)
   const [activeBroadcast, setActiveBroadcast] = useState<BroadcastNotification | null>(() => {
@@ -562,8 +564,9 @@ export default function App() {
   };
 
   // Directional Tab Navigation Helper for Smooth Framer Motion Slide Transitions
-  // Syncs with URL hash (not History API paths) for GitHub Pages compatibility
+  // Consistently updates URL hash (e.g. #symposium) instead of History API paths for GitHub Pages compatibility
   const navigateToTab = (nextTab: MainTabType) => {
+    syncTabToUrlHash(nextTab);
     if (nextTab === activeTab) return;
     const prevIdx = TAB_ORDER.indexOf(activeTab);
     const nextIdx = TAB_ORDER.indexOf(nextTab);
@@ -571,35 +574,35 @@ export default function App() {
     setTabDirection(direction);
     setActiveTab(nextTab);
     if (typeof window !== 'undefined') {
-      const targetHash = nextTab === 'home' ? '#home' : `#${nextTab}`;
-      if (window.location.hash !== targetHash) {
-        window.location.hash = targetHash;
-      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   useEffect(() => {
+    // Ensure initial load sets canonical hash if none is present
+    if (typeof window !== 'undefined' && !window.location.hash) {
+      syncTabToUrlHash(activeTab);
+    }
+
     const handleHashChange = () => {
-      const rawHash = window.location.hash.replace(/^#\/?/, '') as MainTabType;
-      if (!rawHash || rawHash === 'home') {
+      const parsedTab = parseTabFromHash(window.location.hash);
+      if (!parsedTab || parsedTab === 'home') {
         if (activeTab !== 'home') {
           setTabDirection(-1);
           setActiveTab('home');
         }
         return;
       }
-      if (TAB_ORDER.includes(rawHash)) {
-        if (rawHash === 'admin' && !isAdminAuthenticated) {
-          setIsAdminLoginModalOpen(true);
-          return;
-        }
-        if (rawHash !== activeTab) {
-          const prevIdx = TAB_ORDER.indexOf(activeTab);
-          const nextIdx = TAB_ORDER.indexOf(rawHash);
-          setTabDirection(prevIdx !== -1 && nextIdx !== -1 ? (nextIdx > prevIdx ? 1 : -1) : 1);
-          setActiveTab(rawHash);
-        }
+      if (parsedTab === 'admin' && !isAdminAuthenticated) {
+        setIsAdminLoginModalOpen(true);
+        syncTabToUrlHash(activeTab);
+        return;
+      }
+      if (parsedTab !== activeTab) {
+        const prevIdx = TAB_ORDER.indexOf(activeTab);
+        const nextIdx = TAB_ORDER.indexOf(parsedTab);
+        setTabDirection(prevIdx !== -1 && nextIdx !== -1 ? (nextIdx > prevIdx ? 1 : -1) : 1);
+        setActiveTab(parsedTab);
       }
     };
     window.addEventListener('hashchange', handleHashChange);

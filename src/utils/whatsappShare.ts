@@ -1,12 +1,17 @@
 import { Session, SymposiumInfo } from '../types';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
+import { buildShareableHashUrl } from './hashRouter';
 
 /**
  * Generates an elegantly formatted WhatsApp message for a symposium session.
  */
 export function formatSessionWhatsAppMessage(session: Session, eventInfo?: SymposiumInfo): string {
   const info = eventInfo || SYMPOSIUM_INFO;
-  const currentUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const isWorkshop =
+    session.type === 'Workshop Hands-On' ||
+    session.category?.includes('Workshop') ||
+    session.day?.toLowerCase().includes('workshop');
+  const currentUrl = buildShareableHashUrl(isWorkshop ? 'workshop' : 'symposium');
 
   const speakerLines = session.speakers.length > 0
     ? session.speakers.map((sp, idx) => `  ${idx + 1}. *${sp.name}*\n     _${sp.institution}_`).join('\n')

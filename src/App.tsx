@@ -81,7 +81,16 @@ export default function App() {
   const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
 
   // Navigation Active Tab: 'home' (Landing page default) | 'speaker' | 'workshop' | 'symposium' | 'pameran' | 'venue' | 'jadwal-saya' | 'admin'
-  const [activeTab, setActiveTab] = useState<MainTabType>('home');
+  // Uses state + optional URL hash (never History API pathname) so routing works seamlessly on GitHub Pages subpaths
+  const [activeTab, setActiveTab] = useState<MainTabType>(() => {
+    if (typeof window !== 'undefined' && window.location.hash) {
+      const hashTab = window.location.hash.replace(/^#\/?/, '') as MainTabType;
+      if (TAB_ORDER.includes(hashTab) && hashTab !== 'admin') {
+        return hashTab;
+      }
+    }
+    return 'home';
+  });
   const [tabDirection, setTabDirection] = useState<number>(1);
 
   // Admin Authentication State
@@ -514,7 +523,7 @@ export default function App() {
       try {
         new Notification(`🔔 15 Menit Lagi: ${session.title}`, {
           body: `Sesi akan dimulai jam ${session.startTime} WIB di ${session.room}`,
-          icon: '/favicon.ico'
+          icon: './pwa-192x192.png'
         });
       } catch (e) {
         console.log('Notification API error:', e);
@@ -553,6 +562,7 @@ export default function App() {
   };
 
   // Directional Tab Navigation Helper for Smooth Framer Motion Slide Transitions
+  // Syncs with URL hash (not History API paths) for GitHub Pages compatibility
   const navigateToTab = (nextTab: MainTabType) => {
     if (nextTab === activeTab) return;
     const prevIdx = TAB_ORDER.indexOf(activeTab);
@@ -561,9 +571,40 @@ export default function App() {
     setTabDirection(direction);
     setActiveTab(nextTab);
     if (typeof window !== 'undefined') {
+      const targetHash = nextTab === 'home' ? '#home' : `#${nextTab}`;
+      if (window.location.hash !== targetHash) {
+        window.location.hash = targetHash;
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const rawHash = window.location.hash.replace(/^#\/?/, '') as MainTabType;
+      if (!rawHash || rawHash === 'home') {
+        if (activeTab !== 'home') {
+          setTabDirection(-1);
+          setActiveTab('home');
+        }
+        return;
+      }
+      if (TAB_ORDER.includes(rawHash)) {
+        if (rawHash === 'admin' && !isAdminAuthenticated) {
+          setIsAdminLoginModalOpen(true);
+          return;
+        }
+        if (rawHash !== activeTab) {
+          const prevIdx = TAB_ORDER.indexOf(activeTab);
+          const nextIdx = TAB_ORDER.indexOf(rawHash);
+          setTabDirection(prevIdx !== -1 && nextIdx !== -1 ? (nextIdx > prevIdx ? 1 : -1) : 1);
+          setActiveTab(rawHash);
+        }
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [activeTab, isAdminAuthenticated]);
 
   // Guarded Admin Navigation and Auth Handlers
   const handleOpenAdmin = () => {

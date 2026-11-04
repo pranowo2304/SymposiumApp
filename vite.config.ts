@@ -4,9 +4,9 @@ import path from 'path';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
-export default defineConfig(({command}) => {
+export default defineConfig(() => {
   return {
-    base: process.env.GITHUB_PAGES_BASE || (command === 'build' ? './' : '/'),
+    base: './',
     plugins: [
       {
         name: 'disable-vite-client-ws',

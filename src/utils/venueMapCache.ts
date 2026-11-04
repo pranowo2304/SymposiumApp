@@ -27,7 +27,7 @@ export interface VenueMapUIState {
 }
 
 const CACHE_NAME = 'kivnahk-venue-map-cache-v1';
-const CACHE_ENDPOINT = '/__offline_cache__/venue-map-snapshot.json';
+const CACHE_ENDPOINT = './__offline_cache__/venue-map-snapshot.json';
 const LOCAL_STORAGE_SNAPSHOT_KEY = 'simposium_venue_map_offline_v1';
 const LOCAL_STORAGE_UI_STATE_KEY = 'simposium_venue_map_ui_state_v1';
 

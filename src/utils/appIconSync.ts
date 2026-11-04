@@ -110,7 +110,7 @@ export function syncAppIconWithEventLogo(eventInfo?: SymposiumInfo): void {
 
   const info = eventInfo || SYMPOSIUM_INFO;
   const palette = getThemePalette(info);
-  const logoUrl = info.logoUrl || SYMPOSIUM_INFO.logoUrl || '/pwa-192x192.png';
+  const logoUrl = info.logoUrl || SYMPOSIUM_INFO.logoUrl || './pwa-192x192.png';
   const appTitle = info.title || SYMPOSIUM_INFO.title;
   const shortName = appTitle.length > 15 ? appTitle.split('&')[0].trim().slice(0, 15) : appTitle;
 

@@ -4,8 +4,9 @@ import path from 'path';
 import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
-export default defineConfig(() => {
+export default defineConfig(({command}) => {
   return {
+    base: process.env.GITHUB_PAGES_BASE || (command === 'build' ? './' : '/'),
     plugins: [
       {
         name: 'disable-vite-client-ws',
@@ -29,7 +30,7 @@ export default defineConfig(() => {
           'pwa-maskable-512x512.png',
         ],
         manifest: {
-          id: '/',
+          id: './',
           name: 'KIVNAHK IV & MUNAS V ADHPHKI 2026',
           short_name: 'KIVNAHK IV',
           description:
@@ -38,8 +39,8 @@ export default defineConfig(() => {
           background_color: '#0f172a',
           display: 'standalone',
           orientation: 'portrait',
-          scope: '/',
-          start_url: '/',
+          scope: './',
+          start_url: './',
           icons: [
             {
               src: 'pwa-192x192.png',

@@ -204,23 +204,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
         </div>
       </section>
 
-      {/* Event Menus Section Header */}
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
-            <h2 className="text-base sm:text-xl font-black text-slate-900">
-              Menu Utama Simposium
-            </h2>
-          </div>
-          <span className="text-xs text-slate-500 font-medium">
-            Pilih menu untuk menjelajahi kegiatan
-          </span>
-        </div>
-        <p className="text-xs text-slate-600">
-          Akses cepat seluruh agenda ilmiah, pelatihan keterampilan, profil pembicara, pameran alkes, serta peta denah lokasi.
-        </p>
-      </div>
+
 
       {/* Grid Menu-Menu Event - 3 items per row like a mobile app (3 columns grid) */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3.5 lg:gap-4">

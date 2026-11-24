@@ -49,7 +49,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
   const info = eventInfo || SYMPOSIUM_INFO;
   const displayTitle = info.title || eventTitle || SYMPOSIUM_INFO.title;
   const shortAppName = displayTitle.length > 14 ? displayTitle.split('&')[0].trim().slice(0, 14) : displayTitle;
-  const appLogoUrl = info.logoUrl || SYMPOSIUM_INFO.logoUrl || '/pwa-192x192.png';
+  const appLogoUrl = info.logoUrl || SYMPOSIUM_INFO.logoUrl || './pwa-192x192.png';
 
   const { isInstallable, isInstalled, isIframe, platform, installApp } = usePWAInstall();
   const [activeTab, setActiveTab] = useState<'android' | 'ios' | 'qr'>('android');

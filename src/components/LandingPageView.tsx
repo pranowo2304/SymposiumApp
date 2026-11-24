@@ -6,13 +6,12 @@ import {
   Store, 
   MapPin, 
   Lock, 
-  UserCheck,
   CalendarDays,
   Smartphone,
   Download
 } from 'lucide-react';
 import { MainTabType } from './MainMenuTabs';
-import { SymposiumInfo, Participant } from '../types';
+import { SymposiumInfo } from '../types';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { getThemePalette } from '../utils/themeColors';
 import { usePWAInstall } from '../hooks/usePWAInstall';
@@ -25,7 +24,6 @@ interface LandingPageViewProps {
   workshopCount: number;
   symposiumCount: number;
   exhibitorCount: number;
-  currentUser?: Participant;
   isAdminAuthenticated?: boolean;
   eventInfo?: SymposiumInfo;
 }
@@ -38,7 +36,6 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   workshopCount,
   symposiumCount,
   exhibitorCount,
-  currentUser,
   isAdminAuthenticated,
   eventInfo
 }) => {
@@ -203,26 +200,6 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                 <span>{info.location}</span>
               </div>
             </div>
-
-            {/* Current Identified Participant Badge */}
-            {currentUser?.name && (
-              <div className="self-start md:self-auto bg-white/10 backdrop-blur-xs border border-white/15 p-2 rounded-xl flex items-center gap-2.5 shrink-0">
-                <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shrink-0">
-                  <UserCheck className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-[9px] text-emerald-300 font-bold uppercase tracking-wider">
-                    Peserta Terdaftar
-                  </div>
-                  <div className="text-xs font-extrabold text-white max-w-[180px] truncate">
-                    {currentUser.name}
-                  </div>
-                  <div className="text-[10px] text-slate-300 truncate max-w-[180px]">
-                    {currentUser.institution || currentUser.role}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </section>
@@ -319,7 +296,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           <div className="flex items-center gap-3.5">
             <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-white p-1 border-2 border-amber-400 shadow-md flex items-center justify-center shrink-0 overflow-hidden">
               <img
-                src={info.logoUrl || '/pwa-192x192.png'}
+                src={info.logoUrl || './pwa-192x192.png'}
                 alt={info.title}
                 className="w-full h-full object-contain rounded-xl"
                 referrerPolicy="no-referrer"

@@ -39,7 +39,7 @@ export const EVENT_LOGO_PRESETS = [
     id: 'kivnahk-veterinary',
     label: 'KIVNAHK IV & MUNAS V ADHPHKI (Default)',
     description: 'Lambang Konferensi Ilmiah Veteriner Nasional Hewan Kecil & Praktisi Hewan Kecil',
-    url: 'https://images.unsplash.com/photo-1576201836106-db1758fd1c97?w=300&auto=format&fit=crop&q=80',
+    url: './pwa-512x512.png',
     themeColor: 'emerald-green' as LogoPaletteType
   },
   {

@@ -2,8 +2,6 @@ import { SymposiumInfo } from '../types';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { getThemePalette } from './themeColors';
 
-let currentManifestBlobUrl: string | null = null;
-
 /**
  * Generates a square PNG data URL from an HTMLImageElement for PWA icons.
  */
@@ -42,8 +40,8 @@ function renderLogoToPngDataUrl(
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, size, size);
 
-    // Calculate aspect-fit or aspect-fill within safe zone
-    const padding = maskable ? Math.round(size * 0.1) : Math.round(size * 0.04);
+    // Calculate aspect-fit within safe zone
+    const padding = maskable ? Math.round(size * 0.12) : Math.round(size * 0.04);
     const drawArea = size - padding * 2;
 
     const imgRatio = (img.naturalWidth || size) / (img.naturalHeight || size);
@@ -59,7 +57,6 @@ function renderLogoToPngDataUrl(
     const offsetX = Math.round((size - drawW) / 2);
     const offsetY = Math.round((size - drawH) / 2);
 
-    // Optional rounded inner frame for photo logos
     ctx.save();
     const innerRadius = Math.round(drawArea * 0.16);
     ctx.beginPath();
@@ -101,6 +98,53 @@ function updateHeadLink(rel: string, href: string, type?: string) {
   link.href = href;
 }
 
+function resolveAbsoluteUrl(url: string): string {
+  if (!url) return '';
+  if (url.startsWith('data:') || url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  try {
+    return new URL(url, window.location.href).href;
+  } catch {
+    return url;
+  }
+}
+
+function applyManifestIcons(
+  info: SymposiumInfo,
+  appTitle: string,
+  shortName: string,
+  themeHex: string,
+  icons: Array<{ src: string; sizes: string; type: string; purpose: string }>
+) {
+  const origin = window.location.origin;
+  const basePath = origin + window.location.pathname.replace(/\/[^/]*$/, '/');
+
+  const dynamicManifest = {
+    id: basePath,
+    name: appTitle,
+    short_name: shortName,
+    description: info.subtitle || info.theme || appTitle,
+    theme_color: themeHex,
+    background_color: '#0f172a',
+    display: 'standalone',
+    orientation: 'portrait',
+    scope: basePath,
+    start_url: basePath,
+    icons,
+  };
+
+  try {
+    // Use data: URI instead of blob: URI so browsers can persist and mint PWA icons reliably
+    const dataUrl = `data:application/manifest+json;charset=utf-8,${encodeURIComponent(
+      JSON.stringify(dynamicManifest)
+    )}`;
+    updateHeadLink('manifest', dataUrl);
+  } catch {
+    // Ignore if manifest update fails
+  }
+}
+
 /**
  * Dynamically synchronizes the browser favicon, Apple touch icon, theme-color,
  * and PWA Web App Manifest with the active Event Logo (`eventInfo.logoUrl`).
@@ -110,14 +154,16 @@ export function syncAppIconWithEventLogo(eventInfo?: SymposiumInfo): void {
 
   const info = eventInfo || SYMPOSIUM_INFO;
   const palette = getThemePalette(info);
-  const logoUrl = info.logoUrl || SYMPOSIUM_INFO.logoUrl || './pwa-192x192.png';
+  const rawLogoUrl = info.logoUrl || SYMPOSIUM_INFO.logoUrl || './pwa-512x512.png';
+  const resolvedLogoUrl = resolveAbsoluteUrl(rawLogoUrl);
   const appTitle = info.title || SYMPOSIUM_INFO.title;
-  const shortName = appTitle.length > 15 ? appTitle.split('&')[0].trim().slice(0, 15) : appTitle;
+  const shortName = appTitle.length > 12 ? appTitle.split('&')[0].trim().slice(0, 12) : appTitle;
+  const themeHex = palette.primaryHex || '#065f46';
 
   // 1. Update theme-color and apple-mobile-web-app-title meta tags
   const themeMeta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
-  if (themeMeta && palette.primaryHex) {
-    themeMeta.content = palette.primaryHex;
+  if (themeMeta) {
+    themeMeta.content = themeHex;
   }
   const appleTitleMeta = document.querySelector(
     'meta[name="apple-mobile-web-app-title"]'
@@ -126,20 +172,22 @@ export function syncAppIconWithEventLogo(eventInfo?: SymposiumInfo): void {
     appleTitleMeta.content = shortName;
   }
 
-  // 2. Immediately set favicon & apple-touch-icon to the logoUrl as fallback
-  updateHeadLink('icon', logoUrl);
-  updateHeadLink('apple-touch-icon', logoUrl);
+  // 2. Immediately set favicon & apple-touch-icon to the resolved event logo
+  updateHeadLink('icon', resolvedLogoUrl);
+  updateHeadLink('apple-touch-icon', resolvedLogoUrl);
 
   // 3. Load the event logo into an offscreen image to generate crisp square PNG icons
   const img = new Image();
-  img.crossOrigin = 'anonymous';
+  if (!resolvedLogoUrl.startsWith('data:')) {
+    img.crossOrigin = 'anonymous';
+  }
 
   img.onload = () => {
     const icon192 = renderLogoToPngDataUrl(img, 192, { rounded: true, bgColor: '#ffffff' });
     const icon512 = renderLogoToPngDataUrl(img, 512, { rounded: true, bgColor: '#ffffff' });
     const iconMaskable512 = renderLogoToPngDataUrl(img, 512, {
       maskable: true,
-      bgColor: palette.primaryHex || '#065f46',
+      bgColor: themeHex,
     });
     const appleIcon180 = renderLogoToPngDataUrl(img, 180, { rounded: false, bgColor: '#ffffff' });
 
@@ -150,58 +198,25 @@ export function syncAppIconWithEventLogo(eventInfo?: SymposiumInfo): void {
       updateHeadLink('apple-touch-icon', appleIcon180);
     }
 
-    // Update Web App Manifest dynamically if custom PNGs were generated
     if (icon192 && icon512 && iconMaskable512) {
-      const origin = window.location.origin;
-      const basePath = origin + window.location.pathname.replace(/\/[^/]*$/, '/');
-
-      const dynamicManifest = {
-        id: basePath,
-        name: appTitle,
-        short_name: shortName,
-        description: info.subtitle || info.theme || appTitle,
-        theme_color: palette.primaryHex || '#065f46',
-        background_color: '#0f172a',
-        display: 'standalone',
-        orientation: 'portrait',
-        scope: basePath,
-        start_url: basePath,
-        icons: [
-          {
-            src: icon192,
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: icon512,
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: iconMaskable512,
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable',
-          },
-        ],
-      };
-
-      try {
-        if (currentManifestBlobUrl) {
-          URL.revokeObjectURL(currentManifestBlobUrl);
-        }
-        const blob = new Blob([JSON.stringify(dynamicManifest)], {
-          type: 'application/manifest+json',
-        });
-        currentManifestBlobUrl = URL.createObjectURL(blob);
-        updateHeadLink('manifest', currentManifestBlobUrl);
-      } catch {
-        // Ignore if Blob URL creation fails
-      }
+      applyManifestIcons(info, appTitle, shortName, themeHex, [
+        { src: icon192, sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: icon512, sizes: '512x512', type: 'image/png', purpose: 'any' },
+        { src: iconMaskable512, sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ]);
     }
   };
 
-  img.src = logoUrl;
+  // Fallback if an external URL blocks CORS canvas export: still point manifest to the event logo
+  img.onerror = () => {
+    if (resolvedLogoUrl) {
+      const iconType = resolvedLogoUrl.endsWith('.svg') ? 'image/svg+xml' : 'image/png';
+      applyManifestIcons(info, appTitle, shortName, themeHex, [
+        { src: resolvedLogoUrl, sizes: '192x192', type: iconType, purpose: 'any' },
+        { src: resolvedLogoUrl, sizes: '512x512', type: iconType, purpose: 'any' },
+      ]);
+    }
+  };
+
+  img.src = resolvedLogoUrl;
 }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Smartphone, Monitor, Sliders, Lock, Download, LogOut } from 'lucide-react';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
-import { Participant, SymposiumInfo } from '../types';
+import { SymposiumInfo } from '../types';
 import { getThemePalette } from '../utils/themeColors';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
@@ -15,8 +15,6 @@ interface HeaderProps {
   onSelectTab: (tab: any) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
-  currentUser: Participant;
-  onOpenEmailIdentification: () => void;
   eventInfo?: SymposiumInfo;
   isAdminAuthenticated?: boolean;
 }
@@ -31,8 +29,6 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectTab,
   searchQuery,
   onSearchChange,
-  currentUser,
-  onOpenEmailIdentification,
   eventInfo,
   isAdminAuthenticated
 }) => {
@@ -136,18 +132,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="hidden md:inline">Install App</span>
               </button>
             )}
-
-            {/* Identifikasi Email User Button */}
-            <button
-              onClick={onOpenEmailIdentification}
-              title={currentUser?.name ? `Akun: ${currentUser.name} (${currentUser.email || ''}). Klik untuk ganti.` : 'Identifikasi'}
-              className="px-2 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-950 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 border border-emerald-200 shrink-0"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
-              <span className="max-w-[70px] sm:max-w-[100px] truncate text-[11px] font-bold">
-                {currentUser?.name ? currentUser.name.split(' ')[0] : 'Akun'}
-              </span>
-            </button>
 
             {/* Admin Access Button */}
             <button

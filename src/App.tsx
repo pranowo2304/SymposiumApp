@@ -15,7 +15,6 @@ import {
   saveBroadcastToFirestore,
   clearBroadcastInFirestore,
   syncParticipantsToFirestore,
-  saveOwnParticipantToFirestore,
 } from './services/firestoreSyncService';
 import { Header } from './components/Header';
 import { MainMenuTabs, MainTabType } from './components/MainMenuTabs';
@@ -27,7 +26,6 @@ import { SpeakerDirectory } from './components/SpeakerDirectory';
 import { InteractiveVenueMap } from './components/InteractiveVenueMap';
 import { SessionDetailModal } from './components/SessionDetailModal';
 import { SpeakerModal } from './components/SpeakerModal';
-import { EmailIdentificationModal } from './components/EmailIdentificationModal';
 import { BroadcastNotificationToast } from './components/BroadcastNotificationToast';
 import { AdminPageView } from './components/AdminPageView';
 import { LandingPageView } from './components/LandingPageView';
@@ -79,10 +77,9 @@ export default function App() {
   // Mobile App PWA Installer Modal State
   const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
 
-  // Active Identified Participant & Participants Database
+  // Participants Database (managed in Admin)
   const [participants, setParticipants] = useState<Participant[]>(() => getStoredParticipants());
   const [currentUser, setCurrentUser] = useState<Participant>(() => getActiveParticipant());
-  const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
 
   // Firebase Auth & Cloud Database Sync State
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
@@ -458,23 +455,6 @@ export default function App() {
     showToast(`Identitas aktif: ${p.name}`);
   };
 
-  const handleRegisterNewParticipant = (p: Participant) => {
-    const { participants: updatedList, saved } = registerOrUpdateParticipant(p);
-    setParticipants(updatedList);
-    setCurrentUser(saved);
-    setActiveParticipant(saved);
-    showToast(`Registrasi berhasil! Selamat datang, ${saved.name}`);
-    if (
-      firebaseUser &&
-      (isCloudAdmin ||
-        saved.email.trim().toLowerCase() === (firebaseUser.email || '').trim().toLowerCase())
-    ) {
-      saveOwnParticipantToFirestore(saved, firebaseUser.uid).catch((err) =>
-        console.error('Firestore participant registration failed:', err)
-      );
-    }
-  };
-
   // Filter States
   const [selectedRoom, setSelectedRoom] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua Kategori');
@@ -797,7 +777,6 @@ export default function App() {
           workshopCount={workshopsCount}
           symposiumCount={symposiumsCount}
           exhibitorCount={exhibitors.length}
-          currentUser={currentUser}
           isAdminAuthenticated={isAdminAuthenticated}
           eventInfo={eventInfo}
         />
@@ -948,8 +927,6 @@ export default function App() {
           onSelectTab={handleSelectTab}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
-          currentUser={currentUser}
-          onOpenEmailIdentification={() => setIsEmailModalOpen(true)}
           eventInfo={eventInfo}
           isAdminAuthenticated={isAdminAuthenticated}
         />
@@ -1011,23 +988,6 @@ export default function App() {
               onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
               initialTab={selectedSessionTab}
               eventInfo={eventInfo}
-            />
-          )}
-        </AnimatePresence>
-
-        {/* Email Identification & Account Switcher Modal */}
-        <AnimatePresence>
-          {isEmailModalOpen && (
-            <EmailIdentificationModal
-              isOpen={isEmailModalOpen}
-              onClose={() => setIsEmailModalOpen(false)}
-              onSelectParticipant={handleSelectParticipant}
-              onSelectUser={handleSelectParticipant}
-              onRegisterNew={handleRegisterNewParticipant}
-              allParticipants={participants}
-              currentUser={currentUser}
-              currentParticipant={currentUser}
-              firebaseUser={firebaseUser}
             />
           )}
         </AnimatePresence>

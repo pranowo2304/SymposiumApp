@@ -12,10 +12,78 @@
     <meta name="apple-mobile-web-app-title" content="KIVNAHK IV" />
     <link rel="icon" type="image/png" href="./pwa-192x192.png" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <script>
+      // Early sync of Event Logo from cache or public Firestore catalog before first paint & install prompt
+      (function () {
+        try {
+          var applyIconEarly = function (logoUrl, title) {
+            if (!logoUrl) return;
+            var resolvedLogo = logoUrl;
+            try {
+              resolvedLogo = new URL(logoUrl, window.location.href).href;
+            } catch (err) {}
+            var iconLink = document.querySelector('link[rel="icon"]');
+            var appleLink = document.querySelector('link[rel="apple-touch-icon"]');
+            if (iconLink) iconLink.setAttribute('href', resolvedLogo);
+            if (appleLink) appleLink.setAttribute('href', resolvedLogo);
+            if (title) document.title = title;
+
+            var manifestLink = document.querySelector('link[rel="manifest"]');
+            if (manifestLink) {
+              var basePath = window.location.origin + window.location.pathname.replace(/\/[^/]*$/, '/');
+              var appName = title || 'KIVNAHK IV & MUNAS V ADHPHKI 2026';
+              var shortName = appName.length > 12 ? appName.split('&')[0].trim().slice(0, 12) : appName;
+              var iconType = resolvedLogo.indexOf('.svg') !== -1 ? 'image/svg+xml' : 'image/png';
+              var manifestObj = {
+                id: basePath,
+                name: appName,
+                short_name: shortName,
+                theme_color: '#065f46',
+                background_color: '#0f172a',
+                display: 'standalone',
+                orientation: 'portrait',
+                scope: basePath,
+                start_url: basePath,
+                icons: [
+                  { src: resolvedLogo, sizes: '192x192', type: iconType, purpose: 'any' },
+                  { src: resolvedLogo, sizes: '512x512', type: iconType, purpose: 'any' }
+                ]
+              };
+              manifestLink.setAttribute(
+                'href',
+                'data:application/manifest+json;charset=utf-8,' + encodeURIComponent(JSON.stringify(manifestObj))
+              );
+            }
+          };
+
+          var cachedRaw = localStorage.getItem('simposium_event_info_custom');
+          if (cachedRaw) {
+            var cached = JSON.parse(cachedRaw);
+            if (cached && cached.logoUrl) {
+              applyIconEarly(cached.logoUrl, cached.title);
+            }
+          }
+
+          var endpoint =
+            'https://firestore.googleapis.com/v1/projects/green-canto-3mbw7/databases/ai-studio-jadwalsimposiumk-d5badeec-7fab-46f9-b1a9-b5a9cccef9bf/documents/event_info/current';
+          fetch(endpoint)
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .then(function (doc) {
+              if (!doc || !doc.fields) return;
+              var f = doc.fields;
+              var cloudLogo = f.logoUrl && f.logoUrl.stringValue;
+              var cloudTitle = f.title && f.title.stringValue;
+              if (cloudLogo) {
+                applyIconEarly(cloudLogo, cloudTitle);
+              }
+            })
+            .catch(function () {});
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body class="bg-slate-900 text-slate-900 antialiased selection:bg-amber-400 selection:text-slate-950">
     <div id="root"></div>
     <script type="module" src="./src/main.tsx"></script>
   </body>
 </html>
-

@@ -16,7 +16,7 @@ export const MUNAS_ADHPHKI_EVENT_INFO: SymposiumInfo = {
   },
   organizer: "Asosiasi Dokter Hewan Praktisi Hewan Kecil Indonesia (ADHPHKI) & PB PDHI",
   accreditation: "32 SKP PB PDHI (Perhimpunan Dokter Hewan Indonesia)",
-  logoUrl: "https://images.unsplash.com/photo-1576201836106-db1758fd1c97?w=300&auto=format&fit=crop&q=80",
+  logoUrl: "./pwa-512x512.png",
   themeColor: "emerald-green",
   enableQrAttendance: false
 };

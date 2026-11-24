@@ -5,8 +5,8 @@ import {defineConfig} from 'vite';
 import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
-  // Default to './' for AI Studio & generic static hosting, or use explicit repo base path (e.g. '/SymposiumApp/') on GitHub Pages
-  const basePath = process.env.VITE_BASE_PATH || './';
+  // Default to '/' on Vercel, './' for AI Studio & generic static hosting, or explicit repo base path (e.g. '/SymposiumApp/') on GitHub Pages
+  const basePath = process.env.VITE_BASE_PATH || (process.env.VERCEL ? '/' : './');
 
   return {
     base: basePath,

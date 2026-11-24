@@ -11,6 +11,7 @@ import {
   writeBatch,
   where,
   serverTimestamp,
+  runTransaction,
   type Unsubscribe,
   type Timestamp,
 } from 'firebase/firestore';
@@ -92,7 +93,7 @@ const VALID_BROADCAST_TYPES = ['info', 'warning', 'urgent', 'success'] as const;
 
 function clampStr(val: unknown, maxLen: number, fallback = ''): string {
   const str = typeof val === 'string' ? val.trim() : fallback;
-  return str.slice(0, maxLen);
+  return (str || fallback).slice(0, maxLen);
 }
 
 function clampStringArray(val: unknown, maxItems: number, maxItemLen = 500): string[] {
@@ -342,49 +343,75 @@ function sanitizeParticipantPayload(
 // Auth Profile & Admin Role Check
 // ============================================================================
 
+const pendingProfileChecks = new Map<string, Promise<{ isAdmin: boolean }>>();
+
 export async function ensureUserProfileAndCheckAdmin(user: User): Promise<{ isAdmin: boolean }> {
   const uid = toFirestoreDocId(user.uid, 'user');
-  const userPath = `users/${uid}`;
-  const email = (user.email || '').trim().toLowerCase();
-  const isBootstrappedAdmin =
-    Boolean(user.emailVerified) && email === BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
-
-  let isAdminInDb = false;
-  try {
-    const adminSnap = await getDoc(doc(db, 'admins', uid));
-    isAdminInDb = adminSnap.exists();
-  } catch {
-    isAdminInDb = false;
+  const existingPromise = pendingProfileChecks.get(uid);
+  if (existingPromise) {
+    return existingPromise;
   }
 
-  const isAdmin = isBootstrappedAdmin || isAdminInDb;
+  const task = (async (): Promise<{ isAdmin: boolean }> => {
+    const userPath = `users/${uid}`;
+    const email = (user.email || '').trim().toLowerCase();
+    const isBootstrappedAdmin =
+      Boolean(user.emailVerified) && email === BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
 
-  try {
-    const userRef = doc(db, 'users', uid);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      await setDoc(userRef, {
-        uid,
-        email: clampStr(email || `${uid}@firebase.local`, 180),
-        displayName: clampStr(user.displayName || email.split('@')[0] || 'Peserta', 180),
-        photoURL: clampStr(user.photoURL, 500),
-        role: isAdmin ? 'admin' : 'attendee',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      await updateDoc(userRef, {
-        displayName: clampStr(user.displayName || email.split('@')[0] || 'Peserta', 180),
-        photoURL: clampStr(user.photoURL, 500),
-        updatedAt: serverTimestamp(),
-      });
+    let isAdminInDb = false;
+    try {
+      const adminSnap = await getDoc(doc(db, 'admins', uid));
+      isAdminInDb = adminSnap.exists();
+    } catch {
+      isAdminInDb = false;
     }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, userPath);
-  }
 
-  return { isAdmin };
+    const isAdmin = isBootstrappedAdmin || isAdminInDb;
+
+    try {
+      const userRef = doc(db, 'users', uid);
+      await runTransaction(db, async (tx) => {
+        const userSnap = await tx.get(userRef);
+        const safeDisplayName = clampStr(
+          user.displayName || email.split('@')[0] || 'Peserta',
+          180
+        );
+        const safePhotoUrl = clampStr(user.photoURL, 500);
+
+        if (!userSnap.exists()) {
+          tx.set(userRef, {
+            uid,
+            email: clampStr(email || `${uid}@firebase.local`, 180),
+            displayName: safeDisplayName,
+            photoURL: safePhotoUrl,
+            role: isAdmin ? 'admin' : 'attendee',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          const existingData = userSnap.data() as Record<string, any> | undefined;
+          const updatePayload: Record<string, any> = {
+            displayName: safeDisplayName,
+            photoURL: safePhotoUrl,
+            updatedAt: serverTimestamp(),
+          };
+          if (isAdmin && existingData?.role !== 'admin') {
+            updatePayload.role = 'admin';
+          }
+          tx.update(userRef, updatePayload);
+        }
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, userPath);
+    }
+
+    return { isAdmin };
+  })().finally(() => {
+    pendingProfileChecks.delete(uid);
+  });
+
+  pendingProfileChecks.set(uid, task);
+  return task;
 }
 
 // ============================================================================
@@ -414,6 +441,8 @@ async function commitBatchOps(
   }
 }
 
+let pendingSeedPromise: Promise<boolean> | null = null;
+
 export async function seedInitialCatalogIfEmpty(defaults: {
   eventInfo: SymposiumInfo;
   sessions: Session[];
@@ -423,46 +452,56 @@ export async function seedInitialCatalogIfEmpty(defaults: {
   participants: Participant[];
   adminUid: string;
 }): Promise<boolean> {
-  try {
-    const eventSnap = await getDoc(doc(db, 'event_info', 'main'));
-    if (eventSnap.exists()) {
-      return false; // Already seeded
-    }
-  } catch (error) {
-    handleFirestoreError(error, OperationType.GET, 'event_info/main');
+  if (pendingSeedPromise) {
+    return pendingSeedPromise;
   }
 
-  const ops: Array<{ type: 'set'; ref: ReturnType<typeof doc>; data: any }> = [];
+  pendingSeedPromise = (async (): Promise<boolean> => {
+    try {
+      const eventSnap = await getDoc(doc(db, 'event_info', 'main'));
+      if (eventSnap.exists()) {
+        return false; // Already seeded
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.GET, 'event_info/main');
+    }
 
-  ops.push({
-    type: 'set',
-    ref: doc(db, 'event_info', 'main'),
-    data: sanitizeEventInfoPayload(defaults.eventInfo, defaults.adminUid),
+    const ops: Array<{ type: 'set'; ref: ReturnType<typeof doc>; data: any }> = [];
+
+    ops.push({
+      type: 'set',
+      ref: doc(db, 'event_info', 'main'),
+      data: sanitizeEventInfoPayload(defaults.eventInfo, defaults.adminUid),
+    });
+
+    for (const s of defaults.sessions) {
+      const { docId, data } = sanitizeSessionPayload(s);
+      ops.push({ type: 'set', ref: doc(db, 'sessions', docId), data });
+    }
+    for (const sp of defaults.speakers) {
+      const { docId, data } = sanitizeSpeakerPayload(sp);
+      ops.push({ type: 'set', ref: doc(db, 'speakers', docId), data });
+    }
+    for (const ex of defaults.exhibitors) {
+      const { docId, data } = sanitizeExhibitorPayload(ex);
+      ops.push({ type: 'set', ref: doc(db, 'exhibitors', docId), data });
+    }
+    for (const r of defaults.rooms) {
+      const { docId, data } = sanitizeRoomPayload(r);
+      ops.push({ type: 'set', ref: doc(db, 'rooms', docId), data });
+    }
+    for (const p of defaults.participants) {
+      const { docId, data } = sanitizeParticipantPayload(p);
+      ops.push({ type: 'set', ref: doc(db, 'participants', docId), data });
+    }
+
+    await commitBatchOps(ops, 'catalog_seed');
+    return true;
+  })().finally(() => {
+    pendingSeedPromise = null;
   });
 
-  for (const s of defaults.sessions) {
-    const { docId, data } = sanitizeSessionPayload(s);
-    ops.push({ type: 'set', ref: doc(db, 'sessions', docId), data });
-  }
-  for (const sp of defaults.speakers) {
-    const { docId, data } = sanitizeSpeakerPayload(sp);
-    ops.push({ type: 'set', ref: doc(db, 'speakers', docId), data });
-  }
-  for (const ex of defaults.exhibitors) {
-    const { docId, data } = sanitizeExhibitorPayload(ex);
-    ops.push({ type: 'set', ref: doc(db, 'exhibitors', docId), data });
-  }
-  for (const r of defaults.rooms) {
-    const { docId, data } = sanitizeRoomPayload(r);
-    ops.push({ type: 'set', ref: doc(db, 'rooms', docId), data });
-  }
-  for (const p of defaults.participants) {
-    const { docId, data } = sanitizeParticipantPayload(p);
-    ops.push({ type: 'set', ref: doc(db, 'participants', docId), data });
-  }
-
-  await commitBatchOps(ops, 'catalog_seed');
-  return true;
+  return pendingSeedPromise;
 }
 
 // ============================================================================

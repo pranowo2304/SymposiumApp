@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Participant } from '../types';
 import { findParticipantByEmail, registerOrUpdateParticipant, getActiveParticipant } from '../data/participantData';
-import { signInWithGoogle, signOutFirebase } from '../firebase';
+import { signInWithGoogle, signOutFirebase, formatFirebaseAuthError } from '../firebase';
 import type { User as FirebaseUser } from 'firebase/auth';
 
 interface EmailIdentificationModalProps {
@@ -50,6 +50,7 @@ export const EmailIdentificationModal: React.FC<EmailIdentificationModalProps> =
   const [emailInput, setEmailInput] = useState('');
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
 
   // New participant registration form state
   const [newName, setNewName] = useState('');
@@ -78,6 +79,7 @@ export const EmailIdentificationModal: React.FC<EmailIdentificationModalProps> =
 
   const handleGoogleSignIn = async () => {
     setGoogleBusy(true);
+    setGoogleError(null);
     try {
       const user = await signInWithGoogle();
       if (user?.email) {
@@ -100,8 +102,12 @@ export const EmailIdentificationModal: React.FC<EmailIdentificationModalProps> =
           onClose();
         }
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Google Sign-In error:', err);
+      const formatted = formatFirebaseAuthError(err);
+      if (formatted) {
+        setGoogleError(formatted);
+      }
     } finally {
       setGoogleBusy(false);
     }
@@ -203,37 +209,44 @@ export const EmailIdentificationModal: React.FC<EmailIdentificationModalProps> =
         {/* Modal Body */}
         <div className="p-5 sm:p-6 space-y-5 max-h-[75vh] overflow-y-auto">
           {/* Cloud Sync via Google Sign-In */}
-          <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{firebaseUser ? 'Akun Google Tersinkron (Cloud Active)' : 'Sinkronisasi Cloud Antar Perangkat'}</span>
+          <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-3.5 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{firebaseUser ? 'Akun Google Tersinkron (Cloud Active)' : 'Sinkronisasi Cloud Antar Perangkat'}</span>
+                </div>
+                <p className="text-[11px] text-emerald-800 mt-0.5 truncate">
+                  {firebaseUser
+                    ? `Terhubung sebagai ${firebaseUser.email}`
+                    : 'Masuk dengan Google agar Bookmark, Presensi QR & Q&A tersimpan di cloud.'}
+                </p>
               </div>
-              <p className="text-[11px] text-emerald-800 mt-0.5 truncate">
-                {firebaseUser
-                  ? `Terhubung sebagai ${firebaseUser.email}`
-                  : 'Masuk dengan Google agar Bookmark, Presensi QR & Q&A tersimpan di cloud.'}
-              </p>
+              {firebaseUser ? (
+                <button
+                  type="button"
+                  onClick={() => signOutFirebase()}
+                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Keluar Google</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={googleBusy}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 shrink-0 disabled:opacity-60 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>{googleBusy ? 'Menghubungkan...' : 'Masuk dengan Google'}</span>
+                </button>
+              )}
             </div>
-            {firebaseUser ? (
-              <button
-                type="button"
-                onClick={() => signOutFirebase()}
-                className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Keluar Google</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                disabled={googleBusy}
-                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 shrink-0 disabled:opacity-60 cursor-pointer"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>{googleBusy ? 'Menghubungkan...' : 'Masuk dengan Google'}</span>
-              </button>
+            {googleError && (
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] leading-relaxed">
+                {googleError}
+              </div>
             )}
           </div>
 

@@ -18,7 +18,7 @@ export const MUNAS_ADHPHKI_EVENT_INFO: SymposiumInfo = {
   accreditation: "32 SKP PB PDHI (Perhimpunan Dokter Hewan Indonesia)",
   logoUrl: "https://images.unsplash.com/photo-1576201836106-db1758fd1c97?w=300&auto=format&fit=crop&q=80",
   themeColor: "emerald-green",
-  enableQrAttendance: true
+  enableQrAttendance: false
 };
 
 export const MUNAS_ROOMS: Room[] = [

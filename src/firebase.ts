@@ -88,6 +88,34 @@ export async function signInWithGoogle(): Promise<User> {
   return result.user;
 }
 
+export function formatFirebaseAuthError(error: unknown): string | null {
+  const code = (error as { code?: string })?.code || '';
+  const message = error instanceof Error ? error.message : String(error || '');
+
+  if (
+    code === 'auth/popup-closed-by-user' ||
+    code === 'auth/cancelled-popup-request' ||
+    message.includes('popup-closed-by-user')
+  ) {
+    return null;
+  }
+
+  if (code === 'auth/unauthorized-domain' || message.includes('unauthorized-domain')) {
+    const host = typeof window !== 'undefined' ? window.location.hostname : 'domain ini';
+    return `Domain "${host}" belum didaftarkan di Firebase Authentication → Settings → Authorized domains (proyek ${firebaseConfig.projectId}).`;
+  }
+
+  if (code === 'auth/popup-blocked' || message.includes('popup-blocked')) {
+    return 'Popup Login Google diblokir browser. Izinkan pop-up untuk situs ini lalu coba lagi.';
+  }
+
+  if (code === 'auth/network-request-failed' || message.includes('network-request-failed')) {
+    return 'Koneksi internet gagal menghubungi server Firebase Auth.';
+  }
+
+  return message || 'Gagal login dengan Google. Silakan coba kembali.';
+}
+
 export async function signOutFirebase(): Promise<void> {
   await signOut(auth);
 }

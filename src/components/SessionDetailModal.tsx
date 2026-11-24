@@ -1,41 +1,26 @@
 import React, { useState } from 'react';
-import { X, Clock, MapPin, User, Bookmark, FileText, Check, Share2, Copy, Sparkles, Building, BookOpen, AlertCircle, Award, QrCode, MessageSquare, Send } from 'lucide-react';
+import { X, Clock, MapPin, User, FileText, Check, Share2, Copy, Sparkles, Building, BookOpen, AlertCircle } from 'lucide-react';
 import { motion } from 'motion/react';
-import type { User as FirebaseUser } from 'firebase/auth';
-import { Session, Speaker, Participant, SymposiumInfo } from '../types';
-import { AddToCalendarButton } from './AddToCalendarButton';
-import { SessionLiveChat } from './SessionLiveChat';
+import { Session, Speaker, SymposiumInfo } from '../types';
 import { getThemePalette } from '../utils/themeColors';
 
 interface SessionDetailModalProps {
   session: Session | null;
   onClose: () => void;
-  isBookmarked: boolean;
-  onToggleBookmark: (sessionId: string) => void;
   onSelectSpeaker: (speaker: Speaker) => void;
-  onOpenQrScanner?: () => void;
-  initialTab?: 'abstract' | 'speakers' | 'livechat';
-  currentUser?: Participant;
+  initialTab?: 'abstract' | 'speakers';
   eventInfo?: SymposiumInfo;
-  firebaseUser?: FirebaseUser | null;
-  isCloudAdmin?: boolean;
 }
 
 export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
   session,
   onClose,
-  isBookmarked,
-  onToggleBookmark,
   onSelectSpeaker,
-  onOpenQrScanner,
   initialTab = 'abstract',
-  currentUser,
   eventInfo,
-  firebaseUser = null,
-  isCloudAdmin = false,
 }) => {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'abstract' | 'speakers' | 'livechat'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'abstract' | 'speakers'>(initialTab);
   const palette = getThemePalette(eventInfo);
 
   if (!session) return null;
@@ -168,37 +153,10 @@ ${takeawaysList}
             <User className="w-4 h-4" />
             <span>Pembicara & Biografi ({session.speakers.length})</span>
           </button>
-
-          <button
-            id="tab-btn-livechat"
-            onClick={() => setActiveTab('livechat')}
-            className={`pb-2.5 px-2 border-b-2 flex items-center space-x-1.5 transition-colors relative ${
-              activeTab === 'livechat'
-                ? 'border-emerald-600 text-emerald-700 font-bold'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span>Live Chat & Q&A</span>
-            <span className="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              LIVE
-            </span>
-          </button>
         </div>
 
         {/* Modal Content Body */}
         <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1 text-slate-700 text-sm">
-          
-          {activeTab === 'livechat' && (
-            <SessionLiveChat 
-              session={session} 
-              currentUserName={currentUser?.name}
-              currentUserRole={currentUser?.role}
-              firebaseUser={firebaseUser}
-              isCloudAdmin={isCloudAdmin}
-            />
-          )}
 
           {activeTab === 'abstract' && (
             <div className="space-y-5 animate-in fade-in duration-150">
@@ -365,8 +323,6 @@ ${takeawaysList}
         {/* Modal Footer Actions */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2.5">
           <div className="flex flex-wrap items-center gap-2">
-            <AddToCalendarButton session={session} variant="outline" />
-
             <button
               onClick={handleCopySummary}
               className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors"
@@ -385,45 +341,7 @@ ${takeawaysList}
               <Share2 className="w-3.5 h-3.5" />
               <span>Bagikan Sesi (WhatsApp)</span>
             </button>
-
-            {onOpenQrScanner && eventInfo?.enableQrAttendance !== false && (
-              <button
-                onClick={() => {
-                  onClose();
-                  onOpenQrScanner();
-                }}
-                className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-colors"
-              >
-                <QrCode className="w-4 h-4 text-blue-600" />
-                <span>Absen QR</span>
-              </button>
-            )}
-
-            {activeTab !== 'livechat' && (
-              <button
-                id="btn-switch-to-livechat"
-                onClick={() => setActiveTab('livechat')}
-                className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-colors"
-                title="Buka forum Live Chat dan ajukan pertanyaan ke narasumber"
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Tanya Pembicara (Live)</span>
-              </button>
-            )}
           </div>
-
-          <button
-            onClick={() => onToggleBookmark(session.id)}
-            style={!isBookmarked ? { backgroundColor: palette.primaryHex } : undefined}
-            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center space-x-2 transition-all shadow-sm ${
-              isBookmarked
-                ? 'bg-amber-500 hover:bg-amber-600 text-slate-950'
-                : 'hover:opacity-90 text-white'
-            }`}
-          >
-            <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
-            <span>{isBookmarked ? 'Tersimpan' : 'Simpan Ke Jadwal'}</span>
-          </button>
         </div>
 
       </motion.div>

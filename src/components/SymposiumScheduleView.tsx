@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Search, MapPin, Sparkles, Filter, Bookmark, Users, Clock, Award } from 'lucide-react';
+import { Calendar, Search } from 'lucide-react';
 import { Session, Speaker, SymposiumInfo } from '../types';
 import { SESSIONS_DATA, SYMPOSIUM_INFO } from '../data/symposiumData';
 import { getThemePalette } from '../utils/themeColors';
@@ -8,9 +8,7 @@ import { SessionCard } from './SessionCard';
 
 interface SymposiumScheduleViewProps {
   sessions?: Session[];
-  bookmarks: string[];
-  onToggleBookmark: (sessionId: string) => void;
-  onSelectSession: (session: Session, initialTab?: 'abstract' | 'speakers' | 'livechat') => void;
+  onSelectSession: (session: Session, initialTab?: 'abstract' | 'speakers') => void;
   onSelectSpeaker: (speaker: Speaker) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -19,8 +17,6 @@ interface SymposiumScheduleViewProps {
 
 export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
   sessions,
-  bookmarks,
-  onToggleBookmark,
   onSelectSession,
   onSelectSpeaker,
   searchQuery,
@@ -218,8 +214,6 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
             <SessionCard
               key={session.id}
               session={session}
-              isBookmarked={bookmarks.includes(session.id)}
-              onToggleBookmark={onToggleBookmark}
               onSelectSession={onSelectSession}
               onSelectSpeaker={onSelectSpeaker}
             />

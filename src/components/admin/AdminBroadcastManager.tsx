@@ -63,16 +63,6 @@ const BROADCAST_TEMPLATES: Array<{
     durationSeconds: 15
   },
   {
-    id: 'attendance-open',
-    category: 'Presensi',
-    type: 'success',
-    title: 'Presensi QR Code Sesi Telah Dibuka',
-    message: 'Barcode presensi kehadiran Sesi Simposium Siang telah diaktifkan di pintu masuk ruangan. Silakan pindai untuk akumulasi poin SKP.',
-    actionTab: 'presensi',
-    actionLabel: 'Buka Scanner QR',
-    durationSeconds: 15
-  },
-  {
     id: 'lunch-exhibition',
     category: 'Pameran',
     type: 'info',
@@ -81,16 +71,6 @@ const BROADCAST_TEMPLATES: Array<{
     actionTab: 'pameran',
     actionLabel: 'Jelajahi Pameran',
     durationSeconds: 12
-  },
-  {
-    id: 'certificate-ready',
-    category: 'Sertifikat',
-    type: 'success',
-    title: 'E-Sertifikat SKP IDI/Kemenkes Tersedia',
-    message: 'Sertifikat kepesertaan resmi ber-barcode dengan akumulasi poin SKP telah diterbitkan dan dapat diunduh di tab Profil & Sertifikat.',
-    actionTab: 'profil',
-    actionLabel: 'Unduh E-Sertifikat',
-    durationSeconds: 20
   },
   {
     id: 'coffee-break',
@@ -421,7 +401,6 @@ export const AdminBroadcastManager: React.FC<AdminBroadcastManagerProps> = ({
                   <option value="Ruangan">Ruangan</option>
                   <option value="Presensi">Presensi</option>
                   <option value="Pameran">Pameran</option>
-                  <option value="Sertifikat">Sertifikat</option>
                   <option value="Konsumsi">Konsumsi</option>
                   <option value="Umum">Umum</option>
                 </select>
@@ -460,9 +439,6 @@ export const AdminBroadcastManager: React.FC<AdminBroadcastManagerProps> = ({
                     else if (tab === 'workshop') setActionLabel('Buka Jadwal Workshop');
                     else if (tab === 'pameran') setActionLabel('Jelajahi Pameran Medis');
                     else if (tab === 'venue') setActionLabel('Lihat Denah Ruangan');
-                    else if (tab === 'presensi') setActionLabel('Buka Presensi QR');
-                    else if (tab === 'profil') setActionLabel('Lihat E-Sertifikat');
-                    else if (tab === 'jadwal-saya') setActionLabel('Buka Jadwal Saya');
                     else if (tab === 'speaker') setActionLabel('Lihat Pembicara');
                     else if (tab === 'home') setActionLabel('Buka Beranda');
                     else setActionLabel('');
@@ -474,9 +450,6 @@ export const AdminBroadcastManager: React.FC<AdminBroadcastManagerProps> = ({
                   <option value="workshop">Jadwal Workshop</option>
                   <option value="pameran">Pameran Medis</option>
                   <option value="venue">Denah Venue & Ruangan</option>
-                  <option value="presensi">Presensi QR Code</option>
-                  <option value="profil">Profil & Sertifikat</option>
-                  <option value="jadwal-saya">Jadwal Saya (Bookmark)</option>
                   <option value="speaker">Daftar Speaker</option>
                   <option value="home">Beranda Simposium</option>
                 </select>

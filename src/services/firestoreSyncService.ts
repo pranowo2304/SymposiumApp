@@ -129,7 +129,7 @@ function sanitizeEventInfoPayload(info: SymposiumInfo, updatedBy?: string) {
     contactEmail: clampStr(info.contactEmail, 160),
     contactPhone: clampStr(info.contactPhone, 60),
     websiteUrl: clampStr(info.websiteUrl, 300),
-    enableQrAttendance: info.enableQrAttendance !== false,
+    enableQrAttendance: Boolean(info.enableQrAttendance),
     isPublished: true,
     updatedAt: serverTimestamp(),
   };
@@ -632,8 +632,8 @@ export function subscribeUserPrivateData(
   email: string,
   isAdmin: boolean,
   callbacks: {
-    onBookmarks: (sessionIds: string[]) => void;
-    onAttendances: (records: AttendanceRecord[]) => void;
+    onBookmarks?: (sessionIds: string[]) => void;
+    onAttendances?: (records: AttendanceRecord[]) => void;
     onParticipants: (participants: Participant[]) => void;
   }
 ): () => void {
@@ -641,30 +641,34 @@ export function subscribeUserPrivateData(
   const cleanEmail = email.trim().toLowerCase();
   const unsubscribers: Unsubscribe[] = [];
 
-  unsubscribers.push(
-    onSnapshot(
-      query(collection(db, 'users', safeUid, 'bookmarks'), where('userId', '==', safeUid)),
-      (snapshot) => {
-        const ids = snapshot.docs.map((d) => (d.data().sessionId as string) || d.id);
-        callbacks.onBookmarks(ids);
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, `users/${safeUid}/bookmarks`)
-    )
-  );
+  if (callbacks.onBookmarks) {
+    unsubscribers.push(
+      onSnapshot(
+        query(collection(db, 'users', safeUid, 'bookmarks'), where('userId', '==', safeUid)),
+        (snapshot) => {
+          const ids = snapshot.docs.map((d) => (d.data().sessionId as string) || d.id);
+          callbacks.onBookmarks?.(ids);
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, `users/${safeUid}/bookmarks`)
+      )
+    );
+  }
 
-  unsubscribers.push(
-    onSnapshot(
-      query(collection(db, 'users', safeUid, 'attendances'), where('userId', '==', safeUid)),
-      (snapshot) => {
-        const records = snapshot.docs.map((d) => {
-          const { userId, createdAt, ...rest } = d.data() as any;
-          return rest as AttendanceRecord;
-        });
-        callbacks.onAttendances(records);
-      },
-      (error) => handleFirestoreError(error, OperationType.LIST, `users/${safeUid}/attendances`)
-    )
-  );
+  if (callbacks.onAttendances) {
+    unsubscribers.push(
+      onSnapshot(
+        query(collection(db, 'users', safeUid, 'attendances'), where('userId', '==', safeUid)),
+        (snapshot) => {
+          const records = snapshot.docs.map((d) => {
+            const { userId, createdAt, ...rest } = d.data() as any;
+            return rest as AttendanceRecord;
+          });
+          callbacks.onAttendances?.(records);
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, `users/${safeUid}/attendances`)
+      )
+    );
+  }
 
   if (isAdmin) {
     unsubscribers.push(

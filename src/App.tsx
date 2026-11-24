@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
-import { auth, signInWithGoogle, signOutFirebase } from './firebase';
+import { auth, signInWithGoogle, signOutFirebase, formatFirebaseAuthError } from './firebase';
 import {
   ensureUserProfileAndCheckAdmin,
   seedInitialCatalogIfEmpty,
@@ -16,12 +16,8 @@ import {
   clearBroadcastInFirestore,
   syncParticipantsToFirestore,
   saveOwnParticipantToFirestore,
-  toggleBookmarkInFirestore,
-  clearBookmarksInFirestore,
-  saveAttendanceToFirestore,
 } from './services/firestoreSyncService';
 import { Header } from './components/Header';
-import { LandingHeroMenu } from './components/LandingHeroMenu';
 import { MainMenuTabs, MainTabType } from './components/MainMenuTabs';
 import { BottomDock } from './components/BottomDock';
 import { SymposiumScheduleView } from './components/SymposiumScheduleView';
@@ -29,13 +25,9 @@ import { WorkshopScheduleView } from './components/WorkshopScheduleView';
 import { ExhibitionView } from './components/ExhibitionView';
 import { SpeakerDirectory } from './components/SpeakerDirectory';
 import { InteractiveVenueMap } from './components/InteractiveVenueMap';
-import { MyScheduleView } from './components/MyScheduleView';
 import { SessionDetailModal } from './components/SessionDetailModal';
 import { SpeakerModal } from './components/SpeakerModal';
-import { QRScannerModal } from './components/QRScannerModal';
-import { UserProfileModal } from './components/UserProfileModal';
 import { EmailIdentificationModal } from './components/EmailIdentificationModal';
-import { ReminderNotificationToast } from './components/ReminderNotificationToast';
 import { BroadcastNotificationToast } from './components/BroadcastNotificationToast';
 import { AdminPageView } from './components/AdminPageView';
 import { LandingPageView } from './components/LandingPageView';
@@ -53,7 +45,7 @@ import {
   saveStoredParticipants, 
   registerOrUpdateParticipant 
 } from './data/participantData';
-import { Session, Speaker, AttendanceRecord, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification } from './types';
+import { Session, Speaker, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification } from './types';
 import { TAB_HASH_ORDER, parseTabFromHash, syncTabToUrlHash } from './utils/hashRouter';
 import { Sparkles, Lock } from 'lucide-react';
 
@@ -98,32 +90,31 @@ export default function App() {
   const [isCloudAdmin, setIsCloudAdmin] = useState<boolean>(false);
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
 
-  // Admin Authentication State
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    try {
-      return sessionStorage.getItem('simposium_admin_auth') === 'true' || 
-             localStorage.getItem('simposium_admin_auth') === 'true';
-    } catch (e) {
-      return false;
+  // Admin Authentication State — always starts locked so entering Admin Page requires login
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+  const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return parseTabFromHash(window.location.hash) === 'admin';
     }
+    return false;
   });
-  const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState<boolean>(false);
 
-  // Navigation Active Tab: 'home' | 'speaker' | 'workshop' | 'symposium' | 'pameran' | 'venue' | 'jadwal-saya' | 'admin'
+  // Clear any legacy persisted admin auth flags so Admin Page always requires explicit login
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem('simposium_admin_auth');
+      localStorage.removeItem('simposium_admin_auth');
+    } catch {}
+  }, []);
+
+  // Navigation Active Tab: 'home' | 'speaker' | 'workshop' | 'symposium' | 'pameran' | 'venue' | 'admin'
   // Exclusively uses URL hashes (e.g. #symposium, #workshop) so static hosts like GitHub Pages never 404
   const [activeTab, setActiveTab] = useState<MainTabType>(() => {
     if (typeof window !== 'undefined') {
       const hashTab = parseTabFromHash(window.location.hash);
       if (hashTab) {
         if (hashTab === 'admin') {
-          try {
-            const isAuth =
-              sessionStorage.getItem('simposium_admin_auth') === 'true' ||
-              localStorage.getItem('simposium_admin_auth') === 'true';
-            return isAuth ? 'admin' : 'home';
-          } catch {
-            return 'home';
-          }
+          return 'home';
         }
         return hashTab;
       }
@@ -461,23 +452,6 @@ export default function App() {
     }
   };
 
-  const handleUpdateCurrentUser = (updatedUser: Participant) => {
-    setCurrentUser(updatedUser);
-    setActiveParticipant(updatedUser);
-    const { participants: updatedList } = registerOrUpdateParticipant(updatedUser);
-    setParticipants(updatedList);
-    showToast(`Profil ${updatedUser.name} berhasil diperbarui!`);
-    if (
-      firebaseUser &&
-      (isCloudAdmin ||
-        updatedUser.email.trim().toLowerCase() === (firebaseUser.email || '').trim().toLowerCase())
-    ) {
-      saveOwnParticipantToFirestore(updatedUser, firebaseUser.uid).catch((err) =>
-        console.error('Firestore profile update failed:', err)
-      );
-    }
-  };
-
   const handleSelectParticipant = (p: Participant) => {
     setCurrentUser(p);
     setActiveParticipant(p);
@@ -501,161 +475,23 @@ export default function App() {
     }
   };
 
-  // QR Code Scanner & User Profile Modals
-  const [isQrModalOpen, setIsQrModalOpen] = useState<boolean>(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
-
-  // Attendance Records saved in LocalStorage
-  const [attendances, setAttendances] = useState<AttendanceRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('symposium_attendance_2026');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-
-  const totalSkpPoints = attendances.reduce((acc, curr) => acc + curr.skpPoints, 0);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('symposium_attendance_2026', JSON.stringify(attendances));
-    } catch (e) {
-      console.error("Failed to save attendances", e);
-    }
-  }, [attendances]);
-
-  const handleAttendanceSaved = (record: AttendanceRecord) => {
-    const alreadyExists = attendances.some(r => r.sessionId === record.sessionId);
-    if (!alreadyExists) {
-      setAttendances(prev => [record, ...prev]);
-      if (firebaseUser) {
-        saveAttendanceToFirestore(firebaseUser.uid, record).catch((err) =>
-          console.error('Firestore attendance sync failed:', err)
-        );
-      }
-    }
-    showToast(`Presensi Berhasil! (+${record.skpPoints} SKP IDI)`);
-  };
-
-  const handleAddDemoAttendance = () => {
-    const demo1: AttendanceRecord = {
-      id: `att-demo-1-${Date.now()}`,
-      sessionId: 'sess-p1',
-      sessionTitle: SESSIONS_DATA[0]?.title || 'Sesi Pleno Kardiologi',
-      room: SESSIONS_DATA[0]?.room || 'Grand Ballroom A',
-      timestamp: new Date().toLocaleTimeString('id-ID'),
-      skpPoints: 2.5,
-      participantName: currentUser?.name || 'dr. Ahmad Pratama, Sp.PD',
-      badgeId: currentUser?.badgeId || 'ID-SIMP-8891',
-      day: 'Hari I'
-    };
-    const demo2: AttendanceRecord = {
-      id: `att-demo-2-${Date.now()}`,
-      sessionId: 'sess-p2',
-      sessionTitle: SESSIONS_DATA[1]?.title || 'Workshop Hands-On EKG',
-      room: SESSIONS_DATA[1]?.room || 'Hall B (Lt. 2)',
-      timestamp: new Date().toLocaleTimeString('id-ID'),
-      skpPoints: 2.5,
-      participantName: currentUser?.name || 'dr. Ahmad Pratama, Sp.PD',
-      badgeId: currentUser?.badgeId || 'ID-SIMP-8891',
-      day: 'Hari I'
-    };
-
-    const exists1 = attendances.some(r => r.sessionId === demo1.sessionId);
-    const exists2 = attendances.some(r => r.sessionId === demo2.sessionId);
-
-    setAttendances(prev => {
-      const newItems = [...prev];
-      if (!exists1 && !newItems.some(r => r.sessionId === demo1.sessionId)) newItems.unshift(demo1);
-      if (!exists2 && !newItems.some(r => r.sessionId === demo2.sessionId)) newItems.unshift(demo2);
-      return newItems;
-    });
-
-    if (firebaseUser) {
-      if (!exists1) saveAttendanceToFirestore(firebaseUser.uid, demo1).catch(console.error);
-      if (!exists2) saveAttendanceToFirestore(firebaseUser.uid, demo2).catch(console.error);
-    }
-
-    showToast('Presensi Demo Berhasil Ditambahkan (+5.0 SKP IDI)');
-  };
-
   // Filter States
   const [selectedRoom, setSelectedRoom] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('Semua Kategori');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
-  // Modals & Reminders
+  // Modals
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [selectedSessionTab, setSelectedSessionTab] = useState<'abstract' | 'speakers' | 'livechat'>('abstract');
+  const [selectedSessionTab, setSelectedSessionTab] = useState<'abstract' | 'speakers'>('abstract');
   const [selectedSpeaker, setSelectedSpeaker] = useState<Speaker | null>(null);
-  const [activeReminderSession, setActiveReminderSession] = useState<Session | null>(null);
 
-  const handleOpenSession = (session: Session, tab: 'abstract' | 'speakers' | 'livechat' = 'abstract') => {
+  const handleOpenSession = (session: Session, tab: 'abstract' | 'speakers' = 'abstract') => {
     setSelectedSession(session);
     setSelectedSessionTab(tab);
   };
 
-  // Trigger 15-Minute Reminder Notification Toast with Audio Chime
-  const triggerReminderToast = (session: Session) => {
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (AudioCtx) {
-        const ctx = new AudioCtx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
-        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.15); // E5
-        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.3); // G5
-        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.5);
-      }
-    } catch (e) {
-      console.log('Audio chime error:', e);
-    }
-
-    setActiveReminderSession(session);
-
-    // Browser Notification API
-    if ('Notification' in window && Notification.permission === 'granted') {
-      try {
-        new Notification(`🔔 15 Menit Lagi: ${session.title}`, {
-          body: `Sesi akan dimulai jam ${session.startTime} WIB di ${session.room}`,
-          icon: './pwa-192x192.png'
-        });
-      } catch (e) {
-        console.log('Notification API error:', e);
-      }
-    } else if ('Notification' in window && Notification.permission !== 'denied') {
-      Notification.requestPermission();
-    }
-  };
-
-  // Bookmarks saved in LocalStorage
-  const [bookmarks, setBookmarks] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('symposium_bookmarks_2026');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-
   // Toast feedback state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('symposium_bookmarks_2026', JSON.stringify(bookmarks));
-    } catch (e) {
-      console.error("Failed to save bookmarks", e);
-    }
-  }, [bookmarks]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -699,12 +535,6 @@ export default function App() {
         const { isAdmin } = await ensureUserProfileAndCheckAdmin(user);
         setIsCloudAdmin(isAdmin);
         if (isAdmin) {
-          setIsAdminAuthenticated(true);
-          try {
-            sessionStorage.setItem('simposium_admin_auth', 'true');
-            localStorage.setItem('simposium_admin_auth', 'true');
-          } catch {}
-
           setIsCloudSyncing(true);
           try {
             const didSeed = await seedInitialCatalogIfEmpty({
@@ -783,7 +613,7 @@ export default function App() {
     return () => unsubscribeCatalog();
   }, []);
 
-  // 3. Authenticated User Private Data Subscription (Bookmarks, Attendance, Participants)
+  // 3. Authenticated User Private Data Subscription (Participants)
   useEffect(() => {
     if (!authReady || !firebaseUser) return;
 
@@ -792,12 +622,6 @@ export default function App() {
       firebaseUser.email || '',
       isCloudAdmin,
       {
-        onBookmarks: (ids) => {
-          setBookmarks(ids);
-        },
-        onAttendances: (records) => {
-          setAttendances(records);
-        },
         onParticipants: (cloudParticipants) => {
           if (isCloudAdmin) {
             setParticipants(cloudParticipants);
@@ -852,9 +676,10 @@ export default function App() {
         await signOutFirebase();
         showToast(`Akun ${user.email} belum terdaftar sebagai Administrator.`);
       }
-    } catch (err: any) {
-      if (!err?.message?.includes('popup-closed-by-user')) {
-        showToast('Gagal menghubungkan akun Google Admin.');
+    } catch (err: unknown) {
+      const formatted = formatFirebaseAuthError(err);
+      if (formatted) {
+        showToast(formatted);
       }
     }
   };
@@ -952,31 +777,6 @@ export default function App() {
     navigateToTab(tab);
   };
 
-  const handleToggleBookmark = (sessionId: string) => {
-    const exists = bookmarks.includes(sessionId);
-    const shouldBookmark = !exists;
-    setBookmarks(prev =>
-      exists ? prev.filter(id => id !== sessionId) : prev.includes(sessionId) ? prev : [...prev, sessionId]
-    );
-    showToast(exists ? 'Sesi dihapus dari Jadwal Saya' : 'Sesi berhasil disimpan ke Jadwal Saya!');
-    if (firebaseUser) {
-      toggleBookmarkInFirestore(firebaseUser.uid, sessionId, shouldBookmark).catch((err) =>
-        console.error('Firestore bookmark sync failed:', err)
-      );
-    }
-  };
-
-  const handleClearAllBookmarks = () => {
-    const prevIds = [...bookmarks];
-    setBookmarks([]);
-    showToast("Semua simpanan jadwal dibersihkan");
-    if (firebaseUser && prevIds.length > 0) {
-      clearBookmarksInFirestore(firebaseUser.uid, prevIds).catch((err) =>
-        console.error('Firestore bookmark clear failed:', err)
-      );
-    }
-  };
-
   const workshopsCount = sessions.filter(
     s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.toLowerCase().includes('workshop')
   ).length;
@@ -985,8 +785,6 @@ export default function App() {
     s => s.type !== 'Workshop Hands-On' && !s.category.includes('Workshop') && !s.day.toLowerCase().includes('workshop')
   ).length;
 
-  const bookmarkedSessionObjects = sessions.filter(s => bookmarks.includes(s.id));
-
   // Render main body based on tab
   const renderMainContent = () => {
     if (activeTab === 'home') {
@@ -994,15 +792,11 @@ export default function App() {
         <LandingPageView
           onSelectTab={handleSelectTab}
           onOpenAdmin={handleOpenAdmin}
-          onOpenQrScanner={() => setIsQrModalOpen(true)}
-          onOpenProfile={() => setIsProfileModalOpen(true)}
-          onOpenBookmarks={() => navigateToTab('jadwal-saya')}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
           speakerCount={speakers.length}
           workshopCount={workshopsCount}
           symposiumCount={symposiumsCount}
           exhibitorCount={exhibitors.length}
-          bookmarkCount={bookmarks.length}
           currentUser={currentUser}
           isAdminAuthenticated={isAdminAuthenticated}
           eventInfo={eventInfo}
@@ -1053,27 +847,13 @@ export default function App() {
           onSendBroadcast={handleSendBroadcast}
           onClearActiveBroadcast={handleClearActiveBroadcast}
           activeBroadcast={activeBroadcast}
-          attendances={attendances}
-          bookmarks={bookmarks}
+          attendances={[]}
+          bookmarks={[]}
           firebaseUser={firebaseUser}
           isCloudAdmin={isCloudAdmin}
           isCloudSyncing={isCloudSyncing}
           onForceCloudSync={handleForceCloudSync}
           onCloudAdminSignIn={handleCloudAdminSignIn}
-        />
-      );
-    }
-
-    if (activeTab === 'jadwal-saya') {
-      return (
-        <MyScheduleView
-          bookmarkedSessions={bookmarkedSessionObjects}
-          onToggleBookmark={handleToggleBookmark}
-          onSelectSession={(s, tab) => handleOpenSession(s, tab || 'abstract')}
-          onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
-          onClearAllBookmarks={handleClearAllBookmarks}
-          onBackToSchedule={() => navigateToTab('symposium')}
-          onTriggerReminderToast={triggerReminderToast}
         />
       );
     }
@@ -1093,8 +873,6 @@ export default function App() {
           sessions={sessions}
           onSelectSession={(s, tab) => handleOpenSession(s, tab || 'abstract')}
           onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
-          bookmarks={bookmarks}
-          onToggleBookmark={handleToggleBookmark}
           onOpenVenue={() => navigateToTab('venue')}
           eventInfo={eventInfo}
         />
@@ -1126,8 +904,6 @@ export default function App() {
     return (
       <SymposiumScheduleView
         sessions={sessions}
-        bookmarks={bookmarks}
-        onToggleBookmark={handleToggleBookmark}
         onSelectSession={(s, tab) => handleOpenSession(s, tab || 'abstract')}
         onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
         searchQuery={searchQuery}
@@ -1163,13 +939,9 @@ export default function App() {
 
         {/* App Header */}
         <Header
-          bookmarkedCount={bookmarks.length}
-          onOpenBookmarks={() => navigateToTab('jadwal-saya')}
-          onOpenQrScanner={() => setIsQrModalOpen(true)}
-          onOpenProfile={() => setIsProfileModalOpen(true)}
           onOpenAdmin={handleOpenAdmin}
+          onAdminLogout={handleAdminLogout}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
-          totalSkpPoints={totalSkpPoints}
           isMobileFrame={isMobileFrame}
           onToggleFrame={() => setIsMobileFrame(!isMobileFrame)}
           activeTab={activeTab}
@@ -1200,7 +972,6 @@ export default function App() {
                 workshopCount={workshopsCount}
                 symposiumCount={symposiumsCount}
                 exhibitorCount={exhibitors.length}
-                bookmarkCount={bookmarks.length}
                 isAdminAuthenticated={isAdminAuthenticated}
                 eventInfo={eventInfo}
               />
@@ -1237,48 +1008,8 @@ export default function App() {
             <SessionDetailModal
               session={selectedSession}
               onClose={() => setSelectedSession(null)}
-              isBookmarked={bookmarks.includes(selectedSession.id)}
-              onToggleBookmark={handleToggleBookmark}
               onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
-              onOpenQrScanner={() => setIsQrModalOpen(true)}
               initialTab={selectedSessionTab}
-              currentUser={currentUser}
-              eventInfo={eventInfo}
-              firebaseUser={firebaseUser}
-              isCloudAdmin={isCloudAdmin}
-            />
-          )}
-        </AnimatePresence>
-
-        {/* QR Code Presensi Modal */}
-        <AnimatePresence>
-          {isQrModalOpen && eventInfo.enableQrAttendance !== false && (
-            <QRScannerModal
-              isOpen={isQrModalOpen}
-              onClose={() => setIsQrModalOpen(false)}
-              onAttendanceSaved={handleAttendanceSaved}
-              savedAttendances={attendances}
-              onOpenProfile={() => setIsProfileModalOpen(true)}
-              currentUser={currentUser}
-            />
-          )}
-        </AnimatePresence>
-
-        {/* User Profile & Certificate Modal */}
-        <AnimatePresence>
-          {isProfileModalOpen && (
-            <UserProfileModal
-              isOpen={isProfileModalOpen}
-              onClose={() => setIsProfileModalOpen(false)}
-              attendances={attendances}
-              onOpenQrScanner={() => setIsQrModalOpen(true)}
-              onAddDemoAttendance={handleAddDemoAttendance}
-              currentUser={currentUser}
-              onUpdateCurrentUser={handleUpdateCurrentUser}
-              onOpenEmailIdentification={() => {
-                setIsProfileModalOpen(false);
-                setIsEmailModalOpen(true);
-              }}
               eventInfo={eventInfo}
             />
           )}
@@ -1313,28 +1044,12 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* 15-Minute Session Reminder Toast */}
-        <ReminderNotificationToast
-          session={activeReminderSession}
-          onClose={() => setActiveReminderSession(null)}
-          onOpenSession={(s) => {
-            handleOpenSession(s, 'abstract');
-            setActiveReminderSession(null);
-          }}
-        />
-
         {/* Real-time Broadcast Notification Toast for all Participants */}
         <BroadcastNotificationToast
           broadcast={activeBroadcast}
           onClose={() => setActiveBroadcast(null)}
           onNavigateTab={(tabKey) => {
-            if (tabKey === 'presensi') {
-              if (eventInfo.enableQrAttendance !== false) {
-                setIsQrModalOpen(true);
-              }
-            } else if (tabKey === 'profil') {
-              setIsProfileModalOpen(true);
-            } else {
+            if (TAB_ORDER.includes(tabKey as MainTabType)) {
               handleSelectTab(tabKey as MainTabType);
             }
           }}

@@ -13,7 +13,6 @@ export const TAB_HASH_ORDER: MainTabType[] = [
   'symposium',
   'pameran',
   'venue',
-  'jadwal-saya',
   'admin',
 ];
 

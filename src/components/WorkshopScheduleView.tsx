@@ -14,10 +14,8 @@ import { SessionCard } from './SessionCard';
 
 interface WorkshopScheduleViewProps {
   sessions?: Session[];
-  onSelectSession: (session: Session, initialTab?: 'abstract' | 'speakers' | 'livechat') => void;
+  onSelectSession: (session: Session, initialTab?: 'abstract' | 'speakers') => void;
   onSelectSpeaker: (speaker: Speaker) => void;
-  bookmarks: string[];
-  onToggleBookmark: (sessionId: string) => void;
   onOpenVenue: () => void;
   eventInfo?: SymposiumInfo;
 }
@@ -26,8 +24,6 @@ export const WorkshopScheduleView: React.FC<WorkshopScheduleViewProps> = ({
   sessions,
   onSelectSession,
   onSelectSpeaker,
-  bookmarks,
-  onToggleBookmark,
   onOpenVenue,
   eventInfo
 }) => {
@@ -249,8 +245,6 @@ export const WorkshopScheduleView: React.FC<WorkshopScheduleViewProps> = ({
             <SessionCard
               key={session.id}
               session={session}
-              isBookmarked={bookmarks.includes(session.id)}
-              onToggleBookmark={onToggleBookmark}
               onSelectSession={onSelectSession}
               onSelectSpeaker={onSelectSpeaker}
             />

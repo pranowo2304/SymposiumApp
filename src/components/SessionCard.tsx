@@ -1,31 +1,22 @@
 import React from 'react';
-import { Clock, MapPin, User, Bookmark, ChevronRight, FileText, Sparkles, Check, Bell, MessageSquare } from 'lucide-react';
+import { Clock, MapPin, User, ChevronRight, FileText } from 'lucide-react';
 import { Session, Speaker } from '../types';
-import { AddToCalendarButton } from './AddToCalendarButton';
 
 interface SessionCardProps {
   session: Session;
-  isBookmarked: boolean;
-  onToggleBookmark: (sessionId: string) => void;
-  onSelectSession: (session: Session, initialTab?: 'abstract' | 'speakers' | 'livechat') => void;
+  onSelectSession: (session: Session, initialTab?: 'abstract' | 'speakers') => void;
   onSelectSpeaker: (speaker: Speaker) => void;
 }
 
 export const SessionCard: React.FC<SessionCardProps> = ({
   session,
-  isBookmarked,
-  onToggleBookmark,
   onSelectSession,
   onSelectSpeaker
 }) => {
   return (
-    <div className={`bg-white rounded-xl border transition-all duration-200 hover:shadow-md ${
-      isBookmarked 
-        ? 'border-blue-500 shadow-xs ring-1 ring-blue-400/30 bg-blue-50/10' 
-        : 'border-slate-200/90 hover:border-blue-300'
-    }`}>
+    <div className="bg-white rounded-xl border border-slate-200/90 hover:border-blue-300 transition-all duration-200 hover:shadow-md">
       <div className="p-4 sm:p-5">
-        {/* Session Top Bar: Time, Room Badge & Bookmark */}
+        {/* Session Top Bar: Time & Room Badge */}
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
           <div className="flex items-center space-x-2">
             {/* Time Badge */}
@@ -39,14 +30,6 @@ export const SessionCard: React.FC<SessionCardProps> = ({
               <MapPin className="w-3 h-3 mr-1 text-blue-600" />
               {session.room}
             </span>
-
-            {/* 15-Minute Reminder Visual Indicator Badge */}
-            {isBookmarked && (
-              <span className="px-2 py-0.5 bg-amber-50 text-amber-800 text-[10px] font-bold rounded-full border border-amber-200 flex items-center shadow-2xs">
-                <Bell className="w-3 h-3 mr-1 text-amber-600 fill-amber-500 animate-pulse" />
-                Pengingat 15m Aktif
-              </span>
-            )}
           </div>
 
           <div className="flex items-center space-x-2">
@@ -59,25 +42,6 @@ export const SessionCard: React.FC<SessionCardProps> = ({
             }`}>
               {session.type}
             </span>
-
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleBookmark(session.id);
-              }}
-              title={isBookmarked ? "Hapus dari Jadwal Saya" : "Simpan ke Jadwal Saya"}
-              className={`p-1.5 rounded-lg transition-all ${
-                isBookmarked 
-                  ? 'bg-blue-600 text-white font-bold hover:bg-blue-700 shadow-2xs' 
-                  : 'bg-slate-100 text-slate-400 hover:text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              {isBookmarked ? (
-                <Check className="w-4 h-4" />
-              ) : (
-                <Bookmark className="w-4 h-4" />
-              )}
-            </button>
           </div>
         </div>
 
@@ -163,21 +127,6 @@ export const SessionCard: React.FC<SessionCardProps> = ({
           </div>
 
           <div className="flex items-center space-x-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectSession(session, 'livechat');
-              }}
-              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-lg transition-colors"
-              title="Buka forum Live Chat & ajukan pertanyaan ke narasumber"
-            >
-              <MessageSquare className="w-3 h-3 text-emerald-600" />
-              <span>Live Q&A</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            </button>
-
-            <AddToCalendarButton session={session} variant="compact" />
-
             <button
               onClick={() => onSelectSession(session, 'abstract')}
               className="inline-flex items-center font-bold text-blue-600 hover:text-blue-800 text-xs transition-colors py-1 px-1.5"

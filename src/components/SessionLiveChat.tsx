@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { Session, ChatMessage, ChatReply } from '../types';
-import { signInWithGoogle } from '../firebase';
+import { signInWithGoogle, formatFirebaseAuthError } from '../firebase';
 import {
   subscribeSessionChatFirestore,
   createSessionChatMessageFirestore,
@@ -131,9 +131,10 @@ export const SessionLiveChat: React.FC<SessionLiveChatProps> = ({
     try {
       await signInWithGoogle();
       showChatNotice('Berhasil masuk dengan Google! Pertanyaan Anda kini tersinkron live ke Cloud.');
-    } catch (err: any) {
-      if (!err?.message?.includes('popup-closed-by-user')) {
-        showChatNotice('Gagal masuk dengan Google. Silakan coba lagi.');
+    } catch (err: unknown) {
+      const formatted = formatFirebaseAuthError(err);
+      if (formatted) {
+        showChatNotice(formatted);
       }
     } finally {
       setIsSigningInGoogle(false);

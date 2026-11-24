@@ -105,7 +105,7 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
     contactEmail: eventInfo.contactEmail || 'sekretariat@adhphki.org',
     contactPhone: eventInfo.contactPhone || '+62 811-2345-6789',
     websiteUrl: eventInfo.websiteUrl || 'https://kivnahk-munas.adhphki.org',
-    enableQrAttendance: eventInfo.enableQrAttendance !== false
+    enableQrAttendance: false
   }));
 
   const [hasChanges, setHasChanges] = useState<boolean>(false);
@@ -117,20 +117,6 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
       [field]: value
     }));
     setHasChanges(true);
-  };
-
-  const handleToggleQrAttendance = (enabled: boolean) => {
-    const updated = {
-      ...formData,
-      enableQrAttendance: enabled
-    };
-    setFormData(updated);
-    onSaveEventInfo(updated);
-    onShowToast(
-      enabled
-        ? 'Fitur Absensi QR Code diaktifkan (Dipakai). Menu & tombol QR kini tampil di aplikasi.'
-        : 'Fitur Absensi QR Code dinonaktifkan (Tidak Dipakai). Seluruh menu & tombol QR disembunyikan.'
-    );
   };
 
   const handleDateNestedChange = (dayKey: string, value: string) => {
@@ -209,7 +195,7 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
       contactEmail: SYMPOSIUM_INFO.contactEmail || 'sekretariat@adhphki.org',
       contactPhone: SYMPOSIUM_INFO.contactPhone || '+62 811-2345-6789',
       websiteUrl: SYMPOSIUM_INFO.websiteUrl || 'https://kivnahk-munas.adhphki.org',
-      enableQrAttendance: SYMPOSIUM_INFO.enableQrAttendance !== false
+      enableQrAttendance: false
     });
     setHasChanges(true);
     onShowToast('Data event dikembalikan ke setelan awal KIVNAHK IV & MUNAS V ADHPHKI (klik Simpan untuk menerapkan).');
@@ -266,95 +252,27 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
         </div>
       </div>
 
-      {/* PENGATURAN SISTEM: FITUR ABSENSI QR CODE (DIPAKAI / TIDAK DIPAKAI) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+      {/* PENGATURAN SISTEM: STATUS MODUL NONAKTIF */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl border ${
-              formData.enableQrAttendance !== false
-                ? 'bg-teal-500/15 text-teal-400 border-teal-500/30'
-                : 'bg-slate-800 text-slate-400 border-slate-700'
-            }`}>
+            <div className="p-2.5 rounded-xl border bg-slate-800 text-slate-400 border-slate-700">
               <QrCode className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm sm:text-base font-extrabold text-white">
-                  Pengaturan Sistem: Fitur Absensi QR Code
+                  Status Modul Sistem: Absensi QR Code, Jadwal Saya, Live Chat &amp; Profil/Sertifikat
                 </h3>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                  formData.enableQrAttendance !== false
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                }`}>
-                  {formData.enableQrAttendance !== false ? 'Dipakai (Aktif)' : 'Tidak Dipakai (Nonaktif)'}
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                  Dinonaktifkan
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Pilih apakah fitur pemindaian Presensi QR Code dipakai atau tidak dipakai pada penyelenggaraan acara ini. Jika dipilih <strong>Tidak Dipakai</strong>, seluruh menu dan tombol Absensi QR Code tidak akan muncul di aplikasi peserta.
+              <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                Sesuai konfigurasi acara saat ini, menu dan fitur <strong>Absensi QR Code</strong>, <strong>Jadwal Saya (Bookmark)</strong>, <strong>Live Chat &amp; Q&amp;A</strong>, serta <strong>Profil &amp; E-Sertifikat</strong> sedang dinonaktifkan dari antarmuka peserta agar aplikasi tetap fokus pada Jadwal Ilmiah, Pembicara, Pameran, dan Denah Venue.
               </p>
             </div>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          {/* Opsi 1: Dipakai */}
-          <button
-            type="button"
-            onClick={() => handleToggleQrAttendance(true)}
-            className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 cursor-pointer ${
-              formData.enableQrAttendance !== false
-                ? 'bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg'
-                : 'bg-slate-950 border-slate-800 hover:border-slate-700 opacity-75 hover:opacity-100'
-            }`}
-          >
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 border ${
-              formData.enableQrAttendance !== false
-                ? 'bg-emerald-500 border-emerald-400 text-slate-950'
-                : 'bg-slate-900 border-slate-700 text-transparent'
-            }`}>
-              <Check className="w-3.5 h-3.5 stroke-[3]" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-white">
-                  Dipakai (Tampilkan Fitur Absensi QR)
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Tombol & menu <strong>Presensi QR Code</strong> ditampilkan di Header atas, Beranda, Detail Sesi, dan Profil Peserta untuk mencatat kehadiran & poin SKP.
-              </p>
-            </div>
-          </button>
-
-          {/* Opsi 2: Tidak Dipakai */}
-          <button
-            type="button"
-            onClick={() => handleToggleQrAttendance(false)}
-            className={`p-4 rounded-2xl border text-left transition-all flex items-start gap-3.5 cursor-pointer ${
-              formData.enableQrAttendance === false
-                ? 'bg-rose-950/40 border-rose-500 ring-2 ring-rose-500/30 shadow-lg'
-                : 'bg-slate-950 border-slate-800 hover:border-slate-700 opacity-75 hover:opacity-100'
-            }`}
-          >
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 border ${
-              formData.enableQrAttendance === false
-                ? 'bg-rose-500 border-rose-400 text-white'
-                : 'bg-slate-900 border-slate-700 text-transparent'
-            }`}>
-              <Check className="w-3.5 h-3.5 stroke-[3]" />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-black text-white">
-                  Tidak Dipakai (Sembunyikan Fitur Absensi QR)
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Fitur <strong>Presensi QR Code</strong> dinonaktifkan sepenuhnya dan tidak akan muncul di Header, menu Beranda, maupun modal Detail Sesi.
-              </p>
-            </div>
-          </button>
         </div>
       </div>
 

@@ -849,12 +849,14 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
 
             {onLogout && (
               <button
+                id="admin-page-logout-btn"
+                type="button"
                 onClick={onLogout}
-                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-rose-900/40 text-rose-300 hover:text-rose-200 font-bold border border-slate-700 hover:border-rose-500/40 transition-colors flex items-center gap-1.5"
-                title="Keluar dari sesi Administrator"
+                className="px-3.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black border border-rose-400/50 shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Logout dan kunci kembali halaman Admin"
               >
-                <LogOut className="w-3.5 h-3.5 text-rose-400" />
-                <span>Keluar Admin</span>
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Logout</span>
               </button>
             )}
           </div>

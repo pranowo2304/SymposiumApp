@@ -5,16 +5,8 @@ import {
   Calendar, 
   Store, 
   MapPin, 
-  BookmarkCheck, 
-  QrCode, 
-  Award, 
-  Sliders, 
   Lock, 
-  ShieldCheck, 
-  Sparkles, 
-  ChevronRight,
   UserCheck,
-  Building,
   CalendarDays,
   Smartphone,
   Download
@@ -28,15 +20,11 @@ import { usePWAInstall } from '../hooks/usePWAInstall';
 interface LandingPageViewProps {
   onSelectTab: (tab: MainTabType) => void;
   onOpenAdmin: () => void;
-  onOpenQrScanner: () => void;
-  onOpenProfile: () => void;
-  onOpenBookmarks: () => void;
   onOpenInstallModal?: () => void;
   speakerCount: number;
   workshopCount: number;
   symposiumCount: number;
   exhibitorCount: number;
-  bookmarkCount: number;
   currentUser?: Participant;
   isAdminAuthenticated?: boolean;
   eventInfo?: SymposiumInfo;
@@ -45,15 +33,11 @@ interface LandingPageViewProps {
 export const LandingPageView: React.FC<LandingPageViewProps> = ({
   onSelectTab,
   onOpenAdmin,
-  onOpenQrScanner,
-  onOpenProfile,
-  onOpenBookmarks,
   onOpenInstallModal,
   speakerCount,
   workshopCount,
   symposiumCount,
   exhibitorCount,
-  bookmarkCount,
   currentUser,
   isAdminAuthenticated,
   eventInfo
@@ -133,42 +117,6 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       badgeBg: 'bg-rose-100 text-rose-800',
       actionText: 'Lihat Denah Lokasi',
       onClick: () => onSelectTab('venue')
-    },
-    {
-      id: 'jadwal-saya' as MainTabType,
-      title: 'Jadwal Saya',
-      subtitle: bookmarkCount > 0 ? `${bookmarkCount} Agenda Tersimpan` : 'Agenda Pribadi',
-      desc: 'Koleksi sesi dan agenda simposium yang telah Anda pilih serta pengingat notifikasi waktu.',
-      icon: BookmarkCheck,
-      color: 'cyan',
-      gradient: 'from-cyan-600 to-blue-700',
-      badgeBg: bookmarkCount > 0 ? 'bg-blue-600 text-white font-black' : 'bg-slate-100 text-slate-700',
-      actionText: 'Buka Agenda Saya',
-      onClick: onOpenBookmarks
-    },
-    ...(info.enableQrAttendance !== false ? [{
-      id: 'presensi' as any,
-      title: 'Presensi QR Code',
-      subtitle: 'Pindai Kehadiran Sesi',
-      desc: 'Pindai barcode/QR Code sesi di ruangan untuk mencatat absensi dan perolehan poin SKP otomatis.',
-      icon: QrCode,
-      color: 'teal',
-      gradient: 'from-teal-600 to-emerald-700',
-      badgeBg: 'bg-teal-100 text-teal-800',
-      actionText: 'Pindai QR Presensi',
-      onClick: onOpenQrScanner
-    }] : []),
-    {
-      id: 'profil' as any,
-      title: 'Profil & Sertifikat',
-      subtitle: 'Akreditasi & Unduh E-Sertifikat',
-      desc: 'Lihat akumulasi SKP yang diperoleh, detail registrasi peserta, dan cetak sertifikat ber-barcode.',
-      icon: Award,
-      color: 'purple',
-      gradient: 'from-purple-600 to-indigo-800',
-      badgeBg: 'bg-purple-100 text-purple-800',
-      actionText: 'Lihat Sertifikat',
-      onClick: onOpenProfile
     },
     {
       id: 'install-app' as any,

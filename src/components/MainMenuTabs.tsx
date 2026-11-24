@@ -5,7 +5,6 @@ import {
   Calendar, 
   Store, 
   MapPin, 
-  BookmarkCheck,
   Stethoscope,
   Sliders,
   Home,
@@ -15,7 +14,7 @@ import {
 import { SymposiumInfo } from '../types';
 import { getThemePalette } from '../utils/themeColors';
 
-export type MainTabType = 'home' | 'speaker' | 'workshop' | 'symposium' | 'pameran' | 'venue' | 'jadwal-saya' | 'admin';
+export type MainTabType = 'home' | 'speaker' | 'workshop' | 'symposium' | 'pameran' | 'venue' | 'admin';
 
 interface MainMenuTabsProps {
   activeTab: MainTabType;
@@ -24,7 +23,6 @@ interface MainMenuTabsProps {
   workshopCount: number;
   symposiumCount: number;
   exhibitorCount: number;
-  bookmarkCount: number;
   isAdminAuthenticated?: boolean;
   eventInfo?: SymposiumInfo;
 }
@@ -36,7 +34,6 @@ export const MainMenuTabs: React.FC<MainMenuTabsProps> = ({
   workshopCount,
   symposiumCount,
   exhibitorCount,
-  bookmarkCount,
   isAdminAuthenticated,
   eventInfo
 }) => {
@@ -167,37 +164,6 @@ export const MainMenuTabs: React.FC<MainMenuTabsProps> = ({
               </motion.button>
             );
           })}
-
-          {/* Optional bookmark tab shortcut if user has bookmarks */}
-          {bookmarkCount > 0 && (
-            <motion.button
-              id="menu-tab-jadwal-saya"
-              onClick={() => onSelectTab('jadwal-saya')}
-              whileTap={{ scale: 0.96 }}
-              whileHover={{ y: -1 }}
-              className={`relative py-1.5 px-2.5 sm:px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 border whitespace-nowrap shrink-0 cursor-pointer overflow-hidden ${
-                activeTab === 'jadwal-saya'
-                  ? 'text-white border-transparent shadow-xs'
-                  : 'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200'
-              }`}
-            >
-              {activeTab === 'jadwal-saya' && (
-                <motion.div
-                  layoutId="mainMenuActiveTabPill"
-                  style={{ backgroundColor: palette.primaryHex }}
-                  className="absolute inset-0 rounded-lg shadow-xs"
-                  transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.8 }}
-                />
-              )}
-              <BookmarkCheck className={`relative z-10 w-3.5 h-3.5 ${activeTab === 'jadwal-saya' ? 'text-white' : 'text-blue-500'} fill-current`} />
-              <span className="relative z-10">Jadwal Saya</span>
-              <span className={`relative z-10 px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                activeTab === 'jadwal-saya' ? 'bg-white text-slate-900' : 'bg-blue-600 text-white'
-              }`}>
-                {bookmarkCount}
-              </span>
-            </motion.button>
-          )}
         </nav>
       </div>
     </div>

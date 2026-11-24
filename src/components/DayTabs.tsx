@@ -1,13 +1,11 @@
 import React from 'react';
-import { Calendar, User, LayoutGrid, BookmarkCheck, MapPin } from 'lucide-react';
-import { SYMPOSIUM_INFO } from '../data/symposiumData';
+import { Calendar, User, LayoutGrid, MapPin } from 'lucide-react';
 
 interface DayTabsProps {
-  activeTab: string; // 'Hari I' | 'Hari II' | 'pembicara' | 'ruangan' | 'denah' | 'jadwal-saya'
+  activeTab: string; // 'Hari I' | 'Hari II' | 'pembicara' | 'ruangan' | 'denah'
   onSelectTab: (tab: string) => void;
   day1Count: number;
   day2Count: number;
-  bookmarkCount: number;
 }
 
 export const DayTabs: React.FC<DayTabsProps> = ({
@@ -15,7 +13,6 @@ export const DayTabs: React.FC<DayTabsProps> = ({
   onSelectTab,
   day1Count,
   day2Count,
-  bookmarkCount,
 }) => {
   return (
     <div className="bg-white border-b border-slate-100 sticky top-[105px] sm:top-[98px] z-20 shadow-2xs">
@@ -94,23 +91,6 @@ export const DayTabs: React.FC<DayTabsProps> = ({
           >
             <User className="w-3.5 h-3.5" />
             <span>Pembicara</span>
-          </button>
-
-          <button
-            onClick={() => onSelectTab('jadwal-saya')}
-            className={`py-3 px-3 text-xs font-bold transition-all flex items-center space-x-1 whitespace-nowrap border-b-2 ${
-              activeTab === 'jadwal-saya'
-                ? 'text-blue-600 border-blue-600 bg-blue-50/50'
-                : 'text-slate-400 border-transparent hover:text-slate-700'
-            }`}
-          >
-            <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />
-            <span>Tersimpan</span>
-            {bookmarkCount > 0 && (
-              <span className="bg-blue-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
-                {bookmarkCount}
-              </span>
-            )}
           </button>
 
         </div>

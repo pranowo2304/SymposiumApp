@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
-import { Bookmark, MapPin, Search, Smartphone, Monitor, Award, QrCode, User, Sliders, Lock, ShieldCheck, ChevronDown, Download } from 'lucide-react';
+import { Search, Smartphone, Monitor, Sliders, Lock, Download, LogOut } from 'lucide-react';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { Participant, SymposiumInfo } from '../types';
 import { getThemePalette } from '../utils/themeColors';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
 interface HeaderProps {
-  bookmarkedCount: number;
-  onOpenBookmarks: () => void;
-  onOpenQrScanner: () => void;
-  onOpenProfile: () => void;
   onOpenAdmin: () => void;
+  onAdminLogout?: () => void;
   onOpenInstallModal?: () => void;
-  totalSkpPoints: number;
   isMobileFrame: boolean;
   onToggleFrame: () => void;
   activeTab: string;
@@ -26,13 +22,9 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  bookmarkedCount,
-  onOpenBookmarks,
-  onOpenQrScanner,
-  onOpenProfile,
   onOpenAdmin,
+  onAdminLogout,
   onOpenInstallModal,
-  totalSkpPoints,
   isMobileFrame,
   onToggleFrame,
   activeTab,
@@ -145,56 +137,6 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* Presensi QR (Hanya tampil jika diaktifkan di Pengaturan Sistem) */}
-            {info.enableQrAttendance !== false && (
-              <button
-                onClick={onOpenQrScanner}
-                title="Absensi & Pindai QR Code SKP"
-                className="px-2 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 border border-blue-200 shrink-0"
-              >
-                <QrCode className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                <span className="hidden sm:inline">Presensi QR</span>
-              </button>
-            )}
-
-            {/* Jadwal Saya */}
-            <button
-              onClick={onOpenBookmarks}
-              title="Jadwal Saya"
-              className={`relative px-2 py-1.5 rounded-lg flex items-center gap-1 text-xs font-bold transition-all shrink-0 ${
-                bookmarkedCount > 0
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              <Bookmark className="w-3.5 h-3.5 fill-current shrink-0" />
-              <span className="hidden md:inline">Jadwal Saya</span>
-              {bookmarkedCount > 0 && (
-                <span className="px-1.5 py-0.2 text-[10px] bg-white text-blue-700 rounded-full font-black">
-                  {bookmarkedCount}
-                </span>
-              )}
-            </button>
-
-            {/* Profil Peserta / SKP */}
-            <button
-              onClick={onOpenProfile}
-              title={`Profil & Sertifikat (${totalSkpPoints.toFixed(1)} SKP)`}
-              className={`px-2 py-1.5 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 border shrink-0 ${
-                totalSkpPoints >= 5.0
-                  ? 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-              }`}
-            >
-              <User className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span className="hidden lg:inline">Sertifikat</span>
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                totalSkpPoints >= 5.0 ? 'bg-amber-400 text-slate-950' : 'bg-slate-200 text-slate-700'
-              }`}>
-                {totalSkpPoints.toFixed(1)} SKP
-              </span>
-            </button>
-
             {/* Identifikasi Email User Button */}
             <button
               onClick={onOpenEmailIdentification}
@@ -230,6 +172,20 @@ export const Header: React.FC<HeaderProps> = ({
                 </>
               )}
             </button>
+
+            {/* Admin Logout Button (visible when authenticated as Admin) */}
+            {isAdminAuthenticated && onAdminLogout && (
+              <button
+                id="header-btn-admin-logout"
+                type="button"
+                onClick={onAdminLogout}
+                title="Logout dari Admin"
+                className="px-2 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white border border-rose-700 transition-colors text-xs font-black flex items-center gap-1 shadow-2xs shrink-0 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            )}
 
             {/* Frame switcher (desktop only) */}
             <button

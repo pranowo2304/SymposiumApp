@@ -36,7 +36,9 @@ import {
   ListOrdered,
   Cloud,
   RefreshCw,
-  LogIn
+  LogIn,
+  Image as ImageIcon,
+  Link as LinkIcon
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { Speaker, Session, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification, AttendanceRecord, WorkshopRundownItem } from '../types';
@@ -151,6 +153,8 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
   // -------------------------------------------------------------
   const [isSpeakerModalOpen, setIsSpeakerModalOpen] = useState<boolean>(false);
   const [editingSpeakerId, setEditingSpeakerId] = useState<string | null>(null);
+  const [speakerPhotoMode, setSpeakerPhotoMode] = useState<'upload' | 'url' | 'preset'>('upload');
+  const [isProcessingSpeakerPhoto, setIsProcessingSpeakerPhoto] = useState<boolean>(false);
   const [speakerForm, setSpeakerForm] = useState<Omit<Speaker, 'id'>>({
     name: '',
     title: '',
@@ -173,6 +177,13 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         bio: speaker.bio,
         email: speaker.email || ''
       });
+      if (speaker.photoUrl?.startsWith('data:image/')) {
+        setSpeakerPhotoMode('upload');
+      } else if (DOCTOR_AVATAR_PRESETS.some((av) => av.url === speaker.photoUrl)) {
+        setSpeakerPhotoMode('preset');
+      } else {
+        setSpeakerPhotoMode('url');
+      }
     } else {
       setEditingSpeakerId(null);
       setSpeakerForm({
@@ -184,8 +195,86 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         bio: '',
         email: ''
       });
+      setSpeakerPhotoMode('upload');
     }
     setIsSpeakerModalOpen(true);
+  };
+
+  const handleSpeakerPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Format file tidak valid. Pilih file gambar (JPG, PNG, WebP).');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      showToast('Ukuran file terlalu besar (maksimal 10 MB).');
+      return;
+    }
+
+    setIsProcessingSpeakerPhoto(true);
+    const reader = new FileReader();
+    reader.onerror = () => {
+      setIsProcessingSpeakerPhoto(false);
+      showToast('Gagal membaca file foto. Silakan coba file lain.');
+    };
+    reader.onload = () => {
+      const rawDataUrl = reader.result as string;
+      const img = new Image();
+      img.onerror = () => {
+        setIsProcessingSpeakerPhoto(false);
+        showToast('File gambar tidak dapat diproses.');
+      };
+      img.onload = () => {
+        try {
+          const MAX_DIM = 512;
+          let width = img.naturalWidth || MAX_DIM;
+          let height = img.naturalHeight || MAX_DIM;
+          if (width > MAX_DIM || height > MAX_DIM) {
+            const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+            width = Math.max(1, Math.round(width * ratio));
+            height = Math.max(1, Math.round(height * ratio));
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            throw new Error('Canvas not supported');
+          }
+
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+
+          let compressed = canvas.toDataURL('image/jpeg', 0.85);
+          if (compressed.length > 420000) {
+            compressed = canvas.toDataURL('image/jpeg', 0.68);
+          }
+          if (compressed.length > 480000) {
+            compressed = canvas.toDataURL('image/jpeg', 0.5);
+          }
+
+          setSpeakerForm((prev) => ({ ...prev, photoUrl: compressed }));
+          showToast('Foto speaker berhasil diunggah dan dioptimalkan!');
+        } catch {
+          if (rawDataUrl.length <= 480000) {
+            setSpeakerForm((prev) => ({ ...prev, photoUrl: rawDataUrl }));
+            showToast('Foto speaker berhasil diunggah!');
+          } else {
+            showToast('Gagal mengompresi foto. Gunakan gambar yang lebih kecil.');
+          }
+        } finally {
+          setIsProcessingSpeakerPhoto(false);
+        }
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveSpeaker = (e: React.FormEvent) => {
@@ -2141,30 +2230,163 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="font-bold text-slate-300 block">Foto URL (atau pilih avatar cepat di bawah):</label>
-                <input
-                  type="url"
-                  value={speakerForm.photoUrl}
-                  onChange={(e) => setSpeakerForm({ ...speakerForm, photoUrl: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-xs"
-                />
-                
-                {/* Preset Avatar Picker */}
-                <div className="flex items-center gap-2 pt-1 overflow-x-auto no-scrollbar">
-                  {DOCTOR_AVATAR_PRESETS.map((av, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setSpeakerForm({ ...speakerForm, photoUrl: av.url })}
-                      className={`relative p-0.5 rounded-lg border shrink-0 ${
-                        speakerForm.photoUrl === av.url ? 'border-amber-400 ring-2 ring-amber-400/50' : 'border-slate-800'
-                      }`}
-                    >
-                      <img src={av.url} alt={av.label} className="w-8 h-8 rounded-md object-cover" />
-                    </button>
-                  ))}
+              <div className="space-y-2.5 bg-slate-950/70 border border-slate-800 rounded-2xl p-3.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Foto Profil Speaker:</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    Upload file, tempel URL, atau pilih preset
+                  </span>
                 </div>
+
+                {/* Live Preview Row */}
+                <div className="flex items-center gap-3 bg-slate-900/90 border border-slate-800 rounded-xl p-2.5">
+                  <img
+                    src={speakerForm.photoUrl || DOCTOR_AVATAR_PRESETS[0].url}
+                    alt={speakerForm.name || 'Preview Foto Speaker'}
+                    className="w-14 h-14 rounded-xl object-cover border border-slate-700 bg-slate-800 shrink-0"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = DOCTOR_AVATAR_PRESETS[0].url;
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold text-white truncate">
+                      {speakerForm.photoUrl?.startsWith('data:image/')
+                        ? 'Foto Terunggah (Siap Simpan & Sync Cloud)'
+                        : DOCTOR_AVATAR_PRESETS.some((av) => av.url === speakerForm.photoUrl)
+                        ? 'Menggunakan Avatar Preset'
+                        : speakerForm.photoUrl
+                        ? 'Menggunakan URL Foto Kustom'
+                        : 'Belum ada foto dipilih'}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                      {speakerForm.photoUrl?.startsWith('data:image/')
+                        ? `Ukuran optimal (${Math.round((speakerForm.photoUrl.length * 0.75) / 1024)} KB)`
+                        : speakerForm.photoUrl || 'Pilih salah satu metode input foto di bawah'}
+                    </p>
+                  </div>
+                  {speakerForm.photoUrl && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSpeakerForm((prev) => ({ ...prev, photoUrl: DOCTOR_AVATAR_PRESETS[0].url }))
+                      }
+                      className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold border border-slate-700 shrink-0 cursor-pointer"
+                      title="Reset ke avatar bawaan"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+
+                {/* 3-Tab Switcher: Upload | URL | Preset */}
+                <div className="grid grid-cols-3 gap-1 bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setSpeakerPhotoMode('upload')}
+                    className={`py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      speakerPhotoMode === 'upload'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Upload className="w-3 h-3" />
+                    <span>Upload Foto</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSpeakerPhotoMode('url')}
+                    className={`py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      speakerPhotoMode === 'url'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <LinkIcon className="w-3 h-3" />
+                    <span>Link URL</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSpeakerPhotoMode('preset')}
+                    className={`py-1.5 px-2 rounded-lg font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                      speakerPhotoMode === 'preset'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Avatar Preset</span>
+                  </button>
+                </div>
+
+                {/* MODE 1: UPLOAD FILE */}
+                {speakerPhotoMode === 'upload' && (
+                  <div className="bg-slate-900/70 border-2 border-dashed border-slate-700 hover:border-blue-500/70 rounded-xl p-4 text-center transition-colors">
+                    <input
+                      id="speaker-photo-upload-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleSpeakerPhotoUpload}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="speaker-photo-upload-input"
+                      className="cursor-pointer flex flex-col items-center justify-center gap-1.5"
+                    >
+                      <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400 flex items-center justify-center">
+                        <Upload className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs font-bold text-white">
+                        {isProcessingSpeakerPhoto
+                          ? 'Mengoptimalkan foto...'
+                          : 'Klik untuk Pilih / Upload Foto Speaker'}
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        Format JPG, PNG, WebP (Maks. 10 MB • Otomatis dikompresi untuk database cloud)
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                {/* MODE 2: URL INPUT */}
+                {speakerPhotoMode === 'url' && (
+                  <div className="space-y-1">
+                    <input
+                      type="text"
+                      placeholder="https://example.com/foto-dokter.jpg"
+                      value={speakerForm.photoUrl?.startsWith('data:image/') ? '' : speakerForm.photoUrl}
+                      onChange={(e) => setSpeakerForm({ ...speakerForm, photoUrl: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-blue-500 text-xs placeholder:text-slate-500"
+                    />
+                    <p className="text-[10px] text-slate-400">
+                      Masukkan URL gambar langsung (.jpg / .png / .webp) yang dapat diakses publik.
+                    </p>
+                  </div>
+                )}
+
+                {/* MODE 3: PRESET AVATAR PICKER */}
+                {speakerPhotoMode === 'preset' && (
+                  <div className="flex items-center gap-2 pt-1 overflow-x-auto no-scrollbar">
+                    {DOCTOR_AVATAR_PRESETS.map((av, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setSpeakerForm({ ...speakerForm, photoUrl: av.url })}
+                        title={av.label}
+                        className={`relative p-0.5 rounded-lg border shrink-0 cursor-pointer ${
+                          speakerForm.photoUrl === av.url
+                            ? 'border-amber-400 ring-2 ring-amber-400/50'
+                            : 'border-slate-800 hover:border-slate-600'
+                        }`}
+                      >
+                        <img src={av.url} alt={av.label} className="w-10 h-10 rounded-md object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">

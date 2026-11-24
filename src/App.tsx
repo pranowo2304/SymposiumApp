@@ -1,5 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
+import { auth, signInWithGoogle, signOutFirebase } from './firebase';
+import {
+  ensureUserProfileAndCheckAdmin,
+  seedInitialCatalogIfEmpty,
+  subscribePublicCatalog,
+  subscribeUserPrivateData,
+  saveEventInfoToFirestore,
+  syncSessionsToFirestore,
+  syncSpeakersToFirestore,
+  syncExhibitorsToFirestore,
+  syncRoomsToFirestore,
+  saveBroadcastToFirestore,
+  clearBroadcastInFirestore,
+  syncParticipantsToFirestore,
+  saveOwnParticipantToFirestore,
+  toggleBookmarkInFirestore,
+  clearBookmarksInFirestore,
+  saveAttendanceToFirestore,
+} from './services/firestoreSyncService';
 import { Header } from './components/Header';
 import { LandingHeroMenu } from './components/LandingHeroMenu';
 import { MainMenuTabs, MainTabType } from './components/MainMenuTabs';
@@ -71,6 +91,12 @@ export default function App() {
   const [participants, setParticipants] = useState<Participant[]>(() => getStoredParticipants());
   const [currentUser, setCurrentUser] = useState<Participant>(() => getActiveParticipant());
   const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
+
+  // Firebase Auth & Cloud Database Sync State
+  const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
+  const [authReady, setAuthReady] = useState<boolean>(false);
+  const [isCloudAdmin, setIsCloudAdmin] = useState<boolean>(false);
+  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
 
   // Admin Authentication State
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
@@ -168,6 +194,9 @@ export default function App() {
     } catch (e) {
       console.error('Failed to save broadcast to localStorage', e);
     }
+    if (isCloudAdmin) {
+      saveBroadcastToFirestore(broadcast).catch((err) => console.error('Firestore broadcast sync failed:', err));
+    }
   };
 
   const handleClearActiveBroadcast = () => {
@@ -177,6 +206,9 @@ export default function App() {
       window.dispatchEvent(new CustomEvent('simposium_broadcast', { detail: null }));
     } catch (e) {
       console.error('Failed to remove active broadcast', e);
+    }
+    if (isCloudAdmin) {
+      clearBroadcastInFirestore().catch((err) => console.error('Firestore broadcast clear failed:', err));
     }
   };
 
@@ -324,6 +356,11 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
+    if (isCloudAdmin) {
+      saveEventInfoToFirestore(newEventInfo, firebaseUser?.uid).catch((err) =>
+        console.error('Firestore eventInfo sync failed:', err)
+      );
+    }
   };
 
   const handleSaveSpeakers = (newSpeakers: Speaker[]) => {
@@ -332,6 +369,11 @@ export default function App() {
       localStorage.setItem('simposium_speakers_custom', JSON.stringify(newSpeakers));
     } catch (e) {
       console.error(e);
+    }
+    if (isCloudAdmin) {
+      syncSpeakersToFirestore(newSpeakers).catch((err) =>
+        console.error('Firestore speakers sync failed:', err)
+      );
     }
   };
 
@@ -342,6 +384,11 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
+    if (isCloudAdmin) {
+      syncSessionsToFirestore(newSessions).catch((err) =>
+        console.error('Firestore sessions sync failed:', err)
+      );
+    }
   };
 
   const handleSaveExhibitors = (newExhibitors: Exhibitor[]) => {
@@ -350,6 +397,11 @@ export default function App() {
       localStorage.setItem('simposium_exhibitors_custom', JSON.stringify(newExhibitors));
     } catch (e) {
       console.error(e);
+    }
+    if (isCloudAdmin) {
+      syncExhibitorsToFirestore(newExhibitors).catch((err) =>
+        console.error('Firestore exhibitors sync failed:', err)
+      );
     }
   };
 
@@ -360,10 +412,16 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
+    if (isCloudAdmin) {
+      syncRoomsToFirestore(newRooms).catch((err) =>
+        console.error('Firestore rooms sync failed:', err)
+      );
+    }
   };
 
   const handleResetToDefault = () => {
-    setSpeakers(Object.values(SPEAKERS_DATABASE));
+    const defaultSpeakers = Object.values(SPEAKERS_DATABASE);
+    setSpeakers(defaultSpeakers);
     setSessions(SESSIONS_DATA);
     setExhibitors(EXHIBITORS_DATA);
     setRooms(DEFAULT_ROOMS_DATA);
@@ -378,12 +436,29 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
+    if (isCloudAdmin) {
+      setIsCloudSyncing(true);
+      Promise.all([
+        saveEventInfoToFirestore(SYMPOSIUM_INFO, firebaseUser?.uid),
+        syncSpeakersToFirestore(defaultSpeakers),
+        syncSessionsToFirestore(SESSIONS_DATA),
+        syncExhibitorsToFirestore(EXHIBITORS_DATA),
+        syncRoomsToFirestore(DEFAULT_ROOMS_DATA),
+      ])
+        .catch((err) => console.error('Firestore reset sync failed:', err))
+        .finally(() => setIsCloudSyncing(false));
+    }
   };
 
   // Participant Management Handlers
   const handleSaveParticipants = (newParticipants: Participant[]) => {
     setParticipants(newParticipants);
     saveStoredParticipants(newParticipants);
+    if (isCloudAdmin) {
+      syncParticipantsToFirestore(newParticipants).catch((err) =>
+        console.error('Firestore participants sync failed:', err)
+      );
+    }
   };
 
   const handleUpdateCurrentUser = (updatedUser: Participant) => {
@@ -392,6 +467,15 @@ export default function App() {
     const { participants: updatedList } = registerOrUpdateParticipant(updatedUser);
     setParticipants(updatedList);
     showToast(`Profil ${updatedUser.name} berhasil diperbarui!`);
+    if (
+      firebaseUser &&
+      (isCloudAdmin ||
+        updatedUser.email.trim().toLowerCase() === (firebaseUser.email || '').trim().toLowerCase())
+    ) {
+      saveOwnParticipantToFirestore(updatedUser, firebaseUser.uid).catch((err) =>
+        console.error('Firestore profile update failed:', err)
+      );
+    }
   };
 
   const handleSelectParticipant = (p: Participant) => {
@@ -406,6 +490,15 @@ export default function App() {
     setCurrentUser(saved);
     setActiveParticipant(saved);
     showToast(`Registrasi berhasil! Selamat datang, ${saved.name}`);
+    if (
+      firebaseUser &&
+      (isCloudAdmin ||
+        saved.email.trim().toLowerCase() === (firebaseUser.email || '').trim().toLowerCase())
+    ) {
+      saveOwnParticipantToFirestore(saved, firebaseUser.uid).catch((err) =>
+        console.error('Firestore participant registration failed:', err)
+      );
+    }
   };
 
   // QR Code Scanner & User Profile Modals
@@ -433,13 +526,15 @@ export default function App() {
   }, [attendances]);
 
   const handleAttendanceSaved = (record: AttendanceRecord) => {
-    setAttendances(prev => {
-      // Prevent duplicates if same session
-      if (prev.some(r => r.sessionId === record.sessionId)) {
-        return prev;
+    const alreadyExists = attendances.some(r => r.sessionId === record.sessionId);
+    if (!alreadyExists) {
+      setAttendances(prev => [record, ...prev]);
+      if (firebaseUser) {
+        saveAttendanceToFirestore(firebaseUser.uid, record).catch((err) =>
+          console.error('Firestore attendance sync failed:', err)
+        );
       }
-      return [record, ...prev];
-    });
+    }
     showToast(`Presensi Berhasil! (+${record.skpPoints} SKP IDI)`);
   };
 
@@ -451,8 +546,8 @@ export default function App() {
       room: SESSIONS_DATA[0]?.room || 'Grand Ballroom A',
       timestamp: new Date().toLocaleTimeString('id-ID'),
       skpPoints: 2.5,
-      participantName: 'dr. Ahmad Pratama, Sp.PD',
-      badgeId: 'ID-SIMP-8891',
+      participantName: currentUser?.name || 'dr. Ahmad Pratama, Sp.PD',
+      badgeId: currentUser?.badgeId || 'ID-SIMP-8891',
       day: 'Hari I'
     };
     const demo2: AttendanceRecord = {
@@ -462,19 +557,25 @@ export default function App() {
       room: SESSIONS_DATA[1]?.room || 'Hall B (Lt. 2)',
       timestamp: new Date().toLocaleTimeString('id-ID'),
       skpPoints: 2.5,
-      participantName: 'dr. Ahmad Pratama, Sp.PD',
-      badgeId: 'ID-SIMP-8891',
+      participantName: currentUser?.name || 'dr. Ahmad Pratama, Sp.PD',
+      badgeId: currentUser?.badgeId || 'ID-SIMP-8891',
       day: 'Hari I'
     };
 
+    const exists1 = attendances.some(r => r.sessionId === demo1.sessionId);
+    const exists2 = attendances.some(r => r.sessionId === demo2.sessionId);
+
     setAttendances(prev => {
-      const exists1 = prev.some(r => r.sessionId === demo1.sessionId);
-      const exists2 = prev.some(r => r.sessionId === demo2.sessionId);
       const newItems = [...prev];
-      if (!exists1) newItems.unshift(demo1);
-      if (!exists2) newItems.unshift(demo2);
+      if (!exists1 && !newItems.some(r => r.sessionId === demo1.sessionId)) newItems.unshift(demo1);
+      if (!exists2 && !newItems.some(r => r.sessionId === demo2.sessionId)) newItems.unshift(demo2);
       return newItems;
     });
+
+    if (firebaseUser) {
+      if (!exists1) saveAttendanceToFirestore(firebaseUser.uid, demo1).catch(console.error);
+      if (!exists2) saveAttendanceToFirestore(firebaseUser.uid, demo2).catch(console.error);
+    }
 
     showToast('Presensi Demo Berhasil Ditambahkan (+5.0 SKP IDI)');
   };
@@ -563,6 +664,201 @@ export default function App() {
     }, 2500);
   };
 
+  // Ref holding latest catalog & participants for initial Firestore seed without effect churn
+  const latestCatalogRef = useRef({
+    eventInfo,
+    sessions,
+    speakers,
+    exhibitors,
+    rooms,
+    participants,
+  });
+  latestCatalogRef.current = {
+    eventInfo,
+    sessions,
+    speakers,
+    exhibitors,
+    rooms,
+    participants,
+  };
+
+  const lastBroadcastTimestampRef = useRef<number | null>(activeBroadcast?.timestamp ?? null);
+
+  // 1. Firebase Auth Listener + Admin Role Check + Initial Catalog Seeding
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
+      setAuthReady(true);
+
+      if (!user) {
+        setIsCloudAdmin(false);
+        return;
+      }
+
+      try {
+        const { isAdmin } = await ensureUserProfileAndCheckAdmin(user);
+        setIsCloudAdmin(isAdmin);
+        if (isAdmin) {
+          setIsAdminAuthenticated(true);
+          try {
+            sessionStorage.setItem('simposium_admin_auth', 'true');
+            localStorage.setItem('simposium_admin_auth', 'true');
+          } catch {}
+
+          setIsCloudSyncing(true);
+          try {
+            const didSeed = await seedInitialCatalogIfEmpty({
+              ...latestCatalogRef.current,
+              adminUid: user.uid,
+            });
+            if (didSeed) {
+              showToast('Database Cloud Firestore berhasil diinisialisasi!');
+            }
+          } finally {
+            setIsCloudSyncing(false);
+          }
+        }
+      } catch (err) {
+        console.error('Auth profile check error:', err);
+        setIsCloudAdmin(false);
+      }
+    });
+
+    return () => unsubscribeAuth();
+  }, []);
+
+  // 2. Real-Time Public Conference Catalog Subscription (All Users)
+  useEffect(() => {
+    const unsubscribeCatalog = subscribePublicCatalog({
+      onEventInfo: (info) => {
+        setEventInfo(info);
+        try {
+          localStorage.setItem('simposium_event_info_custom', JSON.stringify(info));
+        } catch {}
+      },
+      onSessions: (cloudSessions) => {
+        setSessions(cloudSessions);
+        try {
+          localStorage.setItem('simposium_sessions_custom', JSON.stringify(cloudSessions));
+        } catch {}
+      },
+      onSpeakers: (cloudSpeakers) => {
+        setSpeakers(cloudSpeakers);
+        try {
+          localStorage.setItem('simposium_speakers_custom', JSON.stringify(cloudSpeakers));
+        } catch {}
+      },
+      onExhibitors: (cloudExhibitors) => {
+        setExhibitors(cloudExhibitors);
+        try {
+          localStorage.setItem('simposium_exhibitors_custom', JSON.stringify(cloudExhibitors));
+        } catch {}
+      },
+      onRooms: (cloudRooms) => {
+        setRooms(cloudRooms);
+        try {
+          localStorage.setItem('simposium_rooms_custom', JSON.stringify(cloudRooms));
+        } catch {}
+      },
+      onBroadcast: (cloudBroadcast) => {
+        setActiveBroadcast(cloudBroadcast);
+        try {
+          if (cloudBroadcast) {
+            localStorage.setItem('simposium_broadcast_active', JSON.stringify(cloudBroadcast));
+            if (
+              cloudBroadcast.sound &&
+              cloudBroadcast.timestamp !== lastBroadcastTimestampRef.current
+            ) {
+              playBroadcastChime(cloudBroadcast.type);
+            }
+            lastBroadcastTimestampRef.current = cloudBroadcast.timestamp;
+          } else {
+            localStorage.removeItem('simposium_broadcast_active');
+            lastBroadcastTimestampRef.current = null;
+          }
+        } catch {}
+      },
+    });
+
+    return () => unsubscribeCatalog();
+  }, []);
+
+  // 3. Authenticated User Private Data Subscription (Bookmarks, Attendance, Participants)
+  useEffect(() => {
+    if (!authReady || !firebaseUser) return;
+
+    const unsubscribePrivate = subscribeUserPrivateData(
+      firebaseUser.uid,
+      firebaseUser.email || '',
+      isCloudAdmin,
+      {
+        onBookmarks: (ids) => {
+          setBookmarks(ids);
+        },
+        onAttendances: (records) => {
+          setAttendances(records);
+        },
+        onParticipants: (cloudParticipants) => {
+          if (isCloudAdmin) {
+            setParticipants(cloudParticipants);
+            saveStoredParticipants(cloudParticipants);
+          } else if (cloudParticipants.length > 0) {
+            const ownMatch = cloudParticipants[0];
+            setCurrentUser(ownMatch);
+            setActiveParticipant(ownMatch);
+            const { participants: merged } = registerOrUpdateParticipant(ownMatch);
+            setParticipants(merged);
+          }
+        },
+      }
+    );
+
+    return () => unsubscribePrivate();
+  }, [authReady, firebaseUser?.uid, firebaseUser?.email, isCloudAdmin]);
+
+  const handleForceCloudSync = async () => {
+    if (!isCloudAdmin || !firebaseUser) {
+      showToast('Silakan masuk dengan akun Google Admin terlebih dahulu.');
+      return;
+    }
+    setIsCloudSyncing(true);
+    try {
+      await Promise.all([
+        saveEventInfoToFirestore(eventInfo, firebaseUser.uid),
+        syncSessionsToFirestore(sessions),
+        syncSpeakersToFirestore(speakers),
+        syncExhibitorsToFirestore(exhibitors),
+        syncRoomsToFirestore(rooms),
+        syncParticipantsToFirestore(participants),
+      ]);
+      showToast('Seluruh data berhasil disinkronkan ke Cloud Database!');
+    } catch (err) {
+      console.error('Force cloud sync failed:', err);
+      showToast('Sebagian data gagal disinkronkan ke Cloud.');
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
+
+  const handleCloudAdminSignIn = async () => {
+    try {
+      const user = await signInWithGoogle();
+      const { isAdmin } = await ensureUserProfileAndCheckAdmin(user);
+      if (isAdmin) {
+        setIsCloudAdmin(true);
+        setIsAdminAuthenticated(true);
+        showToast(`Terhubung ke Cloud Database sebagai ${user.email}`);
+      } else {
+        await signOutFirebase();
+        showToast(`Akun ${user.email} belum terdaftar sebagai Administrator.`);
+      }
+    } catch (err: any) {
+      if (!err?.message?.includes('popup-closed-by-user')) {
+        showToast('Gagal menghubungkan akun Google Admin.');
+      }
+    }
+  };
+
   // Directional Tab Navigation Helper for Smooth Framer Motion Slide Transitions
   // Consistently updates URL hash (e.g. #symposium) instead of History API paths for GitHub Pages compatibility
   const navigateToTab = (nextTab: MainTabType) => {
@@ -618,15 +914,26 @@ export default function App() {
     }
   };
 
-  const handleAdminLoginSuccess = () => {
+  const handleAdminLoginSuccess = (cloudAdmin = false) => {
     setIsAdminAuthenticated(true);
+    if (cloudAdmin) {
+      setIsCloudAdmin(true);
+    }
     setIsAdminLoginModalOpen(false);
     navigateToTab('admin');
-    showToast("Login Admin Berhasil! Selamat datang di Panel Pengaturan.");
+    showToast(
+      cloudAdmin
+        ? 'Login Admin Google Cloud Sync Berhasil!'
+        : 'Login Admin Mode Lokal Berhasil!'
+    );
   };
 
   const handleAdminLogout = () => {
     setIsAdminAuthenticated(false);
+    if (isCloudAdmin) {
+      setIsCloudAdmin(false);
+      signOutFirebase().catch(() => {});
+    }
     try {
       sessionStorage.removeItem('simposium_admin_auth');
       localStorage.removeItem('simposium_admin_auth');
@@ -646,21 +953,28 @@ export default function App() {
   };
 
   const handleToggleBookmark = (sessionId: string) => {
-    setBookmarks(prev => {
-      const exists = prev.includes(sessionId);
-      if (exists) {
-        showToast("Sesi dihapus dari Jadwal Saya");
-        return prev.filter(id => id !== sessionId);
-      } else {
-        showToast("Sesi berhasil disimpan ke Jadwal Saya!");
-        return [...prev, sessionId];
-      }
-    });
+    const exists = bookmarks.includes(sessionId);
+    const shouldBookmark = !exists;
+    setBookmarks(prev =>
+      exists ? prev.filter(id => id !== sessionId) : prev.includes(sessionId) ? prev : [...prev, sessionId]
+    );
+    showToast(exists ? 'Sesi dihapus dari Jadwal Saya' : 'Sesi berhasil disimpan ke Jadwal Saya!');
+    if (firebaseUser) {
+      toggleBookmarkInFirestore(firebaseUser.uid, sessionId, shouldBookmark).catch((err) =>
+        console.error('Firestore bookmark sync failed:', err)
+      );
+    }
   };
 
   const handleClearAllBookmarks = () => {
+    const prevIds = [...bookmarks];
     setBookmarks([]);
     showToast("Semua simpanan jadwal dibersihkan");
+    if (firebaseUser && prevIds.length > 0) {
+      clearBookmarksInFirestore(firebaseUser.uid, prevIds).catch((err) =>
+        console.error('Firestore bookmark clear failed:', err)
+      );
+    }
   };
 
   const workshopsCount = sessions.filter(
@@ -741,6 +1055,11 @@ export default function App() {
           activeBroadcast={activeBroadcast}
           attendances={attendances}
           bookmarks={bookmarks}
+          firebaseUser={firebaseUser}
+          isCloudAdmin={isCloudAdmin}
+          isCloudSyncing={isCloudSyncing}
+          onForceCloudSync={handleForceCloudSync}
+          onCloudAdminSignIn={handleCloudAdminSignIn}
         />
       );
     }
@@ -925,6 +1244,8 @@ export default function App() {
               initialTab={selectedSessionTab}
               currentUser={currentUser}
               eventInfo={eventInfo}
+              firebaseUser={firebaseUser}
+              isCloudAdmin={isCloudAdmin}
             />
           )}
         </AnimatePresence>
@@ -975,6 +1296,7 @@ export default function App() {
               allParticipants={participants}
               currentUser={currentUser}
               currentParticipant={currentUser}
+              firebaseUser={firebaseUser}
             />
           )}
         </AnimatePresence>

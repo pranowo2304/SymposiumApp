@@ -15,9 +15,20 @@ import {
   Flame, 
   MessageCircle,
   ShieldCheck,
-  AlertCircle
+  AlertCircle,
+  Cloud,
+  LogIn
 } from 'lucide-react';
+import type { User as FirebaseUser } from 'firebase/auth';
 import { Session, ChatMessage, ChatReply } from '../types';
+import { signInWithGoogle } from '../firebase';
+import {
+  subscribeSessionChatFirestore,
+  createSessionChatMessageFirestore,
+  toggleChatUpvoteFirestore,
+  replyToChatMessageFirestore,
+  answerChatQuestionFirestore,
+} from '../services/firestoreSyncService';
 import { 
   getSessionChatMessages, 
   saveSessionChatMessages, 
@@ -30,16 +41,23 @@ interface SessionLiveChatProps {
   session: Session;
   currentUserName?: string;
   currentUserRole?: string;
+  firebaseUser?: FirebaseUser | null;
+  isCloudAdmin?: boolean;
 }
 
 export const SessionLiveChat: React.FC<SessionLiveChatProps> = ({
   session,
   currentUserName = 'dr. Ahmad Pratama, Sp.PD',
-  currentUserRole = 'Peserta'
+  currentUserRole = 'Peserta',
+  firebaseUser = null,
+  isCloudAdmin = false,
 }) => {
-  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+  const [localMessages, setLocalMessages] = useState<ChatMessage[]>(() => {
     return getSessionChatMessages(session.id, session.title, session.moderator);
   });
+  const [cloudMessages, setCloudMessages] = useState<ChatMessage[]>([]);
+  const [isSigningInGoogle, setIsSigningInGoogle] = useState(false);
+  const [chatNotice, setChatNotice] = useState<string | null>(null);
 
   const [filterType, setFilterType] = useState<'all' | 'questions' | 'popular' | 'unanswered'>('all');
   const [inputText, setInputText] = useState('');
@@ -70,12 +88,32 @@ export const SessionLiveChat: React.FC<SessionLiveChatProps> = ({
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Sync when session changes
+  // Sync local seed messages when session changes
   useEffect(() => {
-    setMessages(getSessionChatMessages(session.id, session.title, session.moderator));
+    setLocalMessages(getSessionChatMessages(session.id, session.title, session.moderator));
     setTargetSpeaker(session.speakers[0]?.name || session.moderator || 'Moderator');
     setAnsweringAs(session.speakers[0]?.name || session.moderator);
   }, [session.id]);
+
+  // Subscribe to Firestore real-time chat messages for this session
+  useEffect(() => {
+    setCloudMessages([]);
+    const unsub = subscribeSessionChatFirestore(
+      session.id,
+      firebaseUser?.uid || null,
+      (msgs) => {
+        setCloudMessages(msgs);
+      }
+    );
+    return () => unsub();
+  }, [session.id, firebaseUser?.uid]);
+
+  // Merge cloud messages with local baseline (cloud messages take precedence)
+  const cloudIdSet = new Set(cloudMessages.map((m) => m.id));
+  const messages: ChatMessage[] = [
+    ...localMessages.filter((m) => !cloudIdSet.has(m.id)),
+    ...cloudMessages,
+  ];
 
   // Sync when currentUser changes
   useEffect(() => {
@@ -83,16 +121,35 @@ export const SessionLiveChat: React.FC<SessionLiveChatProps> = ({
     if (currentUserRole) setSenderRole(currentUserRole as any);
   }, [currentUserName, currentUserRole]);
 
-  const handleSendMessage = (e?: React.FormEvent) => {
+  const showChatNotice = (msg: string) => {
+    setChatNotice(msg);
+    setTimeout(() => setChatNotice(null), 4000);
+  };
+
+  const handleGoogleConnect = async () => {
+    setIsSigningInGoogle(true);
+    try {
+      await signInWithGoogle();
+      showChatNotice('Berhasil masuk dengan Google! Pertanyaan Anda kini tersinkron live ke Cloud.');
+    } catch (err: any) {
+      if (!err?.message?.includes('popup-closed-by-user')) {
+        showChatNotice('Gagal masuk dengan Google. Silakan coba lagi.');
+      }
+    } finally {
+      setIsSigningInGoogle(false);
+    }
+  };
+
+  const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputText.trim()) return;
 
     const currentTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
 
     const newMessage: ChatMessage = {
-      id: `chat-${session.id}-${Date.now()}`,
+      id: `chat_${session.id.replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}`,
       sessionId: session.id,
-      senderName: senderName.trim() || 'Peserta Simposium',
+      senderName: senderName.trim() || firebaseUser?.displayName || 'Peserta Simposium',
       senderRole: senderRole,
       senderInstitution: 'Peserta Simposium 2026',
       message: inputText.trim(),
@@ -104,8 +161,22 @@ export const SessionLiveChat: React.FC<SessionLiveChatProps> = ({
       tag: isQuestionMode ? 'Pertanyaan Sesi' : 'Diskusi Terbuka'
     };
 
-    const updated = [...messages, newMessage];
-    setMessages(updated);
+    if (firebaseUser) {
+      setInputText('');
+      try {
+        await createSessionChatMessageFirestore(session.id, firebaseUser.uid, newMessage);
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 120);
+        return;
+      } catch (err) {
+        console.warn('Firestore chat fallback to local:', err);
+        showChatNotice('Sesi belum dipublikasikan ke cloud oleh Admin; pesan disimpan lokal sementara.');
+      }
+    }
+
+    const updated = [...localMessages, newMessage];
+    setLocalMessages(updated);
     saveSessionChatMessages(session.id, updated);
     setInputText('');
 
@@ -114,11 +185,10 @@ export const SessionLiveChat: React.FC<SessionLiveChatProps> = ({
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
 
-    // If it's a question, simulate acknowledgment from Moderator after 3 seconds
-    if (isQuestionMode) {
+    // If it's a local preview question, simulate acknowledgment from Moderator after 3 seconds
+    if (isQuestionMode && !firebaseUser) {
       setTimeout(() => {
-        setMessages(prev => {
-          // Check if question still exists
+        setLocalMessages(prev => {
           const targetQ = prev.find(m => m.id === newMessage.id);
           if (!targetQ) return prev;
 
@@ -128,7 +198,7 @@ export const SessionLiveChat: React.FC<SessionLiveChatProps> = ({
                 id: `reply-ack-${Date.now()}`,
                 senderName: session.moderator,
                 senderRole: 'Moderator Sesi',
-                message: `Pertanyaan telah dicatat dan akan dibahas pada sesi tanya-jawab dengan ${targetSpeaker}.`,
+                message: `Pertanyaan telah dicatat secara lokal. Masuk dengan Google untuk sinkronisasi live ke layar moderator.`,
                 timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
                 isOfficial: true
               };
@@ -142,27 +212,55 @@ export const SessionLiveChat: React.FC<SessionLiveChatProps> = ({
           saveSessionChatMessages(session.id, updatedWithAck);
           return updatedWithAck;
         });
-      }, 3500);
+      }, 3000);
     }
   };
 
-  const handleToggleUpvote = (messageId: string) => {
+  const handleToggleUpvote = async (messageId: string) => {
+    if (cloudIdSet.has(messageId)) {
+      if (!firebaseUser) {
+        showChatNotice('Silakan masuk dengan Google terlebih dahulu untuk memberi upvote live.');
+        return;
+      }
+      await toggleChatUpvoteFirestore(session.id, messageId, firebaseUser.uid);
+      return;
+    }
     const updated = toggleMessageUpvote(session.id, messageId);
-    setMessages(updated);
+    setLocalMessages(updated);
   };
 
-  const handleSubmitAnswer = (messageId: string) => {
+  const handleSubmitAnswer = async (messageId: string) => {
     if (!answerInputText.trim()) return;
+    if (cloudIdSet.has(messageId)) {
+      if (!isCloudAdmin) {
+        showChatNotice('Hanya Admin/Panitia terverifikasi yang dapat menerbitkan jawaban resmi di Cloud.');
+        return;
+      }
+      await answerChatQuestionFirestore(session.id, messageId, answerInputText.trim(), answeringAs);
+      setAnsweringQuestionId(null);
+      setAnswerInputText('');
+      return;
+    }
     const updated = answerSessionQuestion(session.id, messageId, answerInputText.trim(), answeringAs);
-    setMessages(updated);
+    setLocalMessages(updated);
     setAnsweringQuestionId(null);
     setAnswerInputText('');
   };
 
-  const handleSubmitReply = (messageId: string) => {
+  const handleSubmitReply = async (messageId: string) => {
     if (!replyText.trim()) return;
+    if (cloudIdSet.has(messageId)) {
+      if (!firebaseUser) {
+        showChatNotice('Silakan masuk dengan Google untuk membalas pertanyaan live.');
+        return;
+      }
+      await replyToChatMessageFirestore(session.id, messageId, replyText.trim(), senderName, senderRole);
+      setReplyingToId(null);
+      setReplyText('');
+      return;
+    }
     const updated = replyToChatMessage(session.id, messageId, replyText.trim(), senderName, senderRole);
-    setMessages(updated);
+    setLocalMessages(updated);
     setReplyingToId(null);
     setReplyText('');
   };
@@ -213,11 +311,35 @@ export const SessionLiveChat: React.FC<SessionLiveChatProps> = ({
             </div>
           </div>
 
-          <div className="text-[11px] bg-white/10 px-2.5 py-1 rounded-lg text-slate-200 border border-white/10 flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Moderasi Aktif</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {firebaseUser ? (
+              <div className="text-[11px] bg-emerald-500/20 px-2.5 py-1 rounded-lg text-emerald-200 border border-emerald-400/30 flex items-center gap-1.5 font-bold">
+                <Cloud className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Cloud Sync Live</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleGoogleConnect}
+                disabled={isSigningInGoogle}
+                className="text-[11px] bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-2.5 py-1 rounded-lg font-black flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>{isSigningInGoogle ? 'Menghubungkan...' : 'Masuk Google (Live Cloud)'}</span>
+              </button>
+            )}
+            <div className="text-[11px] bg-white/10 px-2.5 py-1 rounded-lg text-slate-200 border border-white/10 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Moderasi Aktif</span>
+            </div>
           </div>
         </div>
+
+        {chatNotice && (
+          <div className="mt-2.5 px-3 py-1.5 rounded-lg bg-amber-400/20 border border-amber-300/40 text-amber-100 text-[11px] font-medium">
+            {chatNotice}
+          </div>
+        )}
 
         {/* Filter Chips Bar */}
         <div className="mt-3 pt-3 border-t border-slate-700/80 flex flex-wrap items-center gap-1.5 text-xs">
@@ -439,7 +561,7 @@ export const SessionLiveChat: React.FC<SessionLiveChatProps> = ({
                       <span>{replyingToId === msg.id ? 'Batal Balas' : 'Balas Komentar'}</span>
                     </button>
 
-                    {msg.isQuestion && !msg.isAnswered && (
+                    {msg.isQuestion && !msg.isAnswered && (isCloudAdmin || !cloudIdSet.has(msg.id)) && (
                       <button
                         onClick={() => {
                           setAnsweringQuestionId(answeringQuestionId === msg.id ? null : msg.id);

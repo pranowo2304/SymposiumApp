@@ -33,8 +33,12 @@ import {
   Megaphone,
   Radio,
   BarChart3,
-  ListOrdered
+  ListOrdered,
+  Cloud,
+  RefreshCw,
+  LogIn
 } from 'lucide-react';
+import type { User as FirebaseUser } from 'firebase/auth';
 import { Speaker, Session, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification, AttendanceRecord, WorkshopRundownItem } from '../types';
 import { AdminParticipantsManager } from './admin/AdminParticipantsManager';
 import { SessionImportExportModal } from './admin/SessionImportExportModal';
@@ -74,6 +78,11 @@ interface AdminPageViewProps {
   activeBroadcast: BroadcastNotification | null;
   attendances?: AttendanceRecord[];
   bookmarks?: string[];
+  firebaseUser?: FirebaseUser | null;
+  isCloudAdmin?: boolean;
+  isCloudSyncing?: boolean;
+  onForceCloudSync?: () => void;
+  onCloudAdminSignIn?: () => void;
 }
 
 // Sample doctor avatar presets for quick input convenience
@@ -108,7 +117,12 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
   onClearActiveBroadcast,
   activeBroadcast,
   attendances = [],
-  bookmarks = []
+  bookmarks = [],
+  firebaseUser = null,
+  isCloudAdmin = false,
+  isCloudSyncing = false,
+  onForceCloudSync,
+  onCloudAdminSignIn
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>('analytics');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -845,6 +859,71 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
             )}
           </div>
 
+        </div>
+
+        {/* Cloud Database (Firestore) Sync Status Banner */}
+        <div className="max-w-7xl mx-auto px-4 pt-2.5">
+          {isCloudAdmin && firebaseUser ? (
+            <div className="bg-emerald-950/70 border border-emerald-500/40 rounded-2xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
+                  <Cloud className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-black text-emerald-300">
+                      Terhubung ke Cloud Database: {firebaseUser.email}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
+                      {isCloudSyncing ? 'Menyinkronkan...' : 'Realtime Sync Aktif'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 truncate">
+                    Setiap perubahan jadwal, pembicara, ruangan, exhibitor, dan broadcast otomatis tersimpan ke Firebase Firestore untuk semua peserta.
+                  </p>
+                </div>
+              </div>
+
+              {onForceCloudSync && (
+                <button
+                  type="button"
+                  onClick={onForceCloudSync}
+                  disabled={isCloudSyncing}
+                  className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60 shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isCloudSyncing ? 'Menyinkronkan...' : 'Sinkronkan Ulang ke Cloud'}</span>
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="bg-amber-950/50 border border-amber-500/40 rounded-2xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 shrink-0">
+                  <AlertCircle className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="font-black text-amber-200 block">
+                    Mode Lokal Perangkat (Belum Tersinkron ke Cloud Database)
+                  </span>
+                  <p className="text-[11px] text-slate-300 truncate">
+                    Hubungkan akun Google Admin (<strong className="text-white">pranowo.tfc@gmail.com</strong>) agar perubahan tampil di semua perangkat peserta.
+                  </p>
+                </div>
+              </div>
+
+              {onCloudAdminSignIn && (
+                <button
+                  type="button"
+                  onClick={onCloudAdminSignIn}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Hubungkan Akun Google Admin</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* PDF Import Notification Banner */}

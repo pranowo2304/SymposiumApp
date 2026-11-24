@@ -1,0 +1,320 @@
+{
+  "entities": {
+    "EventInfo": {
+      "title": "EventInfo",
+      "description": "Global configuration and branding metadata for the symposium event.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "subtitle": { "type": "string", "maxLength": 400 },
+        "theme": { "type": "string", "maxLength": 500 },
+        "location": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "venueAddress": { "type": "string", "maxLength": 300 },
+        "city": { "type": "string", "maxLength": 120 },
+        "dateString": { "type": "string", "maxLength": 120 },
+        "dates": { "type": "object" },
+        "organizer": { "type": "string", "maxLength": 250 },
+        "accreditation": { "type": "string", "maxLength": 200 },
+        "logoUrl": { "type": "string", "maxLength": 100000 },
+        "themeColor": {
+          "type": "string",
+          "enum": ["medical-navy", "gold-amber", "cyan-teal", "emerald-green", "crimson-ruby", "royal-indigo"]
+        },
+        "contactEmail": { "type": "string", "maxLength": 160 },
+        "contactPhone": { "type": "string", "maxLength": 60 },
+        "websiteUrl": { "type": "string", "maxLength": 300 },
+        "enableQrAttendance": { "type": "boolean" },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["title", "location", "organizer", "isPublished", "updatedAt"]
+    },
+    "Session": {
+      "title": "Session",
+      "description": "Symposium or pre-congress workshop schedule entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "day": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "date": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "startTime": { "type": "string", "minLength": 4, "maxLength": 10 },
+        "endTime": { "type": "string", "minLength": 4, "maxLength": 10 },
+        "timeString": { "type": "string", "minLength": 1, "maxLength": 50 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "type": {
+          "type": "string",
+          "enum": ["Plenary Session", "Simposium Paralel", "Workshop Hands-On", "Keynote Lecture", "Panel Discussion"]
+        },
+        "room": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "floor": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "roomColor": { "type": "string", "maxLength": 80 },
+        "moderator": { "type": "string", "maxLength": 200 },
+        "speakers": { "type": "array" },
+        "abstract": { "type": "object" },
+        "keyTakeaways": { "type": "array" },
+        "capacity": { "type": "number" },
+        "rundown": { "type": "array" },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "day", "date", "startTime", "endTime", "timeString", "title", "category", "type", "room", "floor", "isPublished", "updatedAt"]
+    },
+    "Speaker": {
+      "title": "Speaker",
+      "description": "Public directory profile of a conference speaker or instructor.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "title": { "type": "string", "maxLength": 200 },
+        "institution": { "type": "string", "maxLength": 250 },
+        "photoUrl": { "type": "string", "maxLength": 100000 },
+        "bio": { "type": "string", "maxLength": 3000 },
+        "specialty": { "type": "string", "maxLength": 200 },
+        "talkTitle": { "type": "string", "maxLength": 300 },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "institution", "specialty", "isPublished", "updatedAt"]
+    },
+    "Exhibitor": {
+      "title": "Exhibitor",
+      "description": "Exhibition booth and sponsor directory entry.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "boothNumber": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "category": {
+          "type": "string",
+          "enum": ["Farmasi", "Alat Medis & Diagnostik", "Teknologi & AI", "Rumah Sakit & Lab"]
+        },
+        "zone": { "type": "string", "maxLength": 120 },
+        "tagline": { "type": "string", "maxLength": 250 },
+        "description": { "type": "string", "maxLength": 2000 },
+        "featuredProducts": { "type": "array" },
+        "contactEmail": { "type": "string", "maxLength": 160 },
+        "website": { "type": "string", "maxLength": 300 },
+        "phone": { "type": "string", "maxLength": 60 },
+        "demoSchedule": { "type": "string", "maxLength": 200 },
+        "highlight": { "type": "string", "maxLength": 200 },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "boothNumber", "category", "zone", "isPublished", "updatedAt"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "Venue room definition and interactive floor map coordinates.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\- ]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "shortName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "floor": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "capacity": { "type": "number" },
+        "description": { "type": "string", "maxLength": 1500 },
+        "facilities": { "type": "array" },
+        "type": {
+          "type": "string",
+          "enum": ["ballroom", "hall", "auditorium", "workshop", "facility"]
+        },
+        "color": { "type": "string", "maxLength": 80 },
+        "badgeBg": { "type": "string", "maxLength": 80 },
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "shortName", "floor", "capacity", "type", "isPublished", "updatedAt"]
+    },
+    "BroadcastNotification": {
+      "title": "BroadcastNotification",
+      "description": "Real-time announcement pushed by conference administrators to all attendees.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "type": { "type": "string", "enum": ["info", "warning", "urgent", "success"] },
+        "category": { "type": "string", "maxLength": 100 },
+        "actionTab": { "type": "string", "maxLength": 50 },
+        "actionLabel": { "type": "string", "maxLength": 80 },
+        "durationSeconds": { "type": "number" },
+        "sound": { "type": "boolean" },
+        "timestamp": { "type": "number" },
+        "sentBy": { "type": "string", "maxLength": 160 },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "message", "type", "category", "durationSeconds", "sound", "timestamp", "isPublished", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Real-time Q&A question or discussion comment in a session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "senderRole": {
+          "type": "string",
+          "enum": ["Peserta", "Dokter Spesialis", "Dokter Umum", "Residen", "Moderator", "Pembicara", "Panitia"]
+        },
+        "senderInstitution": { "type": "string", "maxLength": 200 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "timestamp": { "type": "string", "maxLength": 60 },
+        "isQuestion": { "type": "boolean" },
+        "targetSpeaker": { "type": "string", "maxLength": 200 },
+        "upvotes": { "type": "number" },
+        "upvotedBy": { "type": "array" },
+        "isAnswered": { "type": "boolean" },
+        "answer": { "type": "object" },
+        "replies": { "type": "array" },
+        "tag": { "type": "string", "maxLength": 80 },
+        "isVisible": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "sessionId", "authorUid", "senderName", "senderRole", "message", "timestamp", "isQuestion", "upvotes", "upvotedBy", "isVisible", "createdAt", "updatedAt"]
+    },
+    "Participant": {
+      "title": "Participant",
+      "description": "Registered symposium participant record containing PII (restricted to owner or admin).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 180 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "title": { "type": "string", "maxLength": 60 },
+        "npaIdi": { "type": "string", "maxLength": 80 },
+        "institution": { "type": "string", "maxLength": 200 },
+        "role": {
+          "type": "string",
+          "enum": ["Dokter Spesialis", "Dokter Umum", "Residen", "Mahasiswa Kedokteran", "Panitia", "Peserta"]
+        },
+        "phone": { "type": "string", "maxLength": 50 },
+        "ticketType": {
+          "type": "string",
+          "enum": ["Simposium Full Pass", "Workshop Only", "All-Access (Simposium + Workshop)", "VIP / Speaker"]
+        },
+        "badgeId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "registeredAt": { "type": "string", "maxLength": 40 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "email", "name", "institution", "role", "badgeId", "createdAt", "updatedAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Authenticated user account metadata (restricted to owner or admin).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 180 },
+        "displayName": { "type": "string", "maxLength": 180 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "role": { "type": "string", "enum": ["attendee", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "createdAt", "updatedAt"]
+    },
+    "Bookmark": {
+      "title": "Bookmark",
+      "description": "User-saved session in Jadwal Saya.",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "userId", "createdAt"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "QR attendance scan and SKP credit record for a user.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sessionTitle": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "room": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "timestamp": { "type": "string", "maxLength": 60 },
+        "skpPoints": { "type": "number" },
+        "participantName": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "badgeId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "day": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "userId", "sessionId", "sessionTitle", "room", "timestamp", "skpPoints", "participantName", "badgeId", "day", "createdAt"]
+    },
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized administrator allowlist record.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 180 },
+        "name": { "type": "string", "maxLength": 180 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/event_info/{docId}": {
+      "schema": { "$ref": "#/entities/EventInfo" },
+      "description": "Public symposium configuration document (e.g. /event_info/main)."
+    },
+    "/sessions/{sessionId}": {
+      "schema": { "$ref": "#/entities/Session" },
+      "description": "Public conference and workshop session documents."
+    },
+    "/speakers/{speakerId}": {
+      "schema": { "$ref": "#/entities/Speaker" },
+      "description": "Public conference speaker directory documents."
+    },
+    "/exhibitors/{exhibitorId}": {
+      "schema": { "$ref": "#/entities/Exhibitor" },
+      "description": "Public exhibition booth directory documents."
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Public venue room and interactive map coordinate documents."
+    },
+    "/broadcasts/{broadcastId}": {
+      "schema": { "$ref": "#/entities/BroadcastNotification" },
+      "description": "Real-time announcements pushed by conference admins."
+    },
+    "/sessions/{sessionId}/chat_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Live Q&A and discussion messages scoped to a session."
+    },
+    "/participants/{participantId}": {
+      "schema": { "$ref": "#/entities/Participant" },
+      "description": "Participant registration database containing PII."
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Authenticated user profile containing PII."
+    },
+    "/users/{userId}/bookmarks/{sessionId}": {
+      "schema": { "$ref": "#/entities/Bookmark" },
+      "description": "User personal bookmarked sessions (Jadwal Saya)."
+    },
+    "/users/{userId}/attendances/{attendanceId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "User QR attendance records and SKP credits."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Authorized conference administrators."
+    }
+  }
+}

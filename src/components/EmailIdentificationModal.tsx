@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { Participant } from '../types';
 import { findParticipantByEmail, registerOrUpdateParticipant, getActiveParticipant } from '../data/participantData';
+import { signInWithGoogle, signOutFirebase } from '../firebase';
+import type { User as FirebaseUser } from 'firebase/auth';
 
 interface EmailIdentificationModalProps {
   isOpen: boolean;
@@ -29,6 +31,7 @@ interface EmailIdentificationModalProps {
   onSelectParticipant?: (user: Participant) => void;
   onParticipantCreated?: (user: Participant) => void;
   onRegisterNew?: (user: Participant) => void;
+  firebaseUser?: FirebaseUser | null;
 }
 
 export const EmailIdentificationModal: React.FC<EmailIdentificationModalProps> = ({
@@ -40,11 +43,13 @@ export const EmailIdentificationModal: React.FC<EmailIdentificationModalProps> =
   onSelectUser,
   onSelectParticipant,
   onParticipantCreated,
-  onRegisterNew
+  onRegisterNew,
+  firebaseUser
 }) => {
   const activeUser = propCurrentUser || currentParticipant || getActiveParticipant();
   const [emailInput, setEmailInput] = useState('');
   const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
   // New participant registration form state
   const [newName, setNewName] = useState('');
@@ -70,6 +75,37 @@ export const EmailIdentificationModal: React.FC<EmailIdentificationModalProps> =
   }, [emailInput, allParticipants]);
 
   if (!isOpen) return null;
+
+  const handleGoogleSignIn = async () => {
+    setGoogleBusy(true);
+    try {
+      const user = await signInWithGoogle();
+      if (user?.email) {
+        const matched = findParticipantByEmail(user.email, allParticipants);
+        if (matched) {
+          handleSelectExact(matched);
+        } else {
+          const newParticipant: Participant = {
+            id: `part-${user.uid.slice(0, 12)}`,
+            email: user.email.toLowerCase(),
+            name: user.displayName || user.email.split('@')[0],
+            institution: 'Peserta Simposium',
+            role: 'Peserta',
+            ticketType: 'Simposium Full Pass',
+            badgeId: `ID-SIMP-2026-${Math.floor(1000 + Math.random() * 9000)}`,
+            registeredAt: new Date().toISOString().split('T')[0],
+          };
+          if (onRegisterNew) onRegisterNew(newParticipant);
+          if (onSelectParticipant) onSelectParticipant(newParticipant);
+          onClose();
+        }
+      }
+    } catch (err) {
+      console.error('Google Sign-In error:', err);
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
 
   const handleSelectExact = (user: Participant) => {
     if (onSelectParticipant) onSelectParticipant(user);
@@ -151,7 +187,7 @@ export const EmailIdentificationModal: React.FC<EmailIdentificationModalProps> =
             </div>
           </div>
           <p className="text-xs text-slate-300 mt-1 leading-relaxed">
-            Masukkan alamat email yang Anda gunakan saat registrasi untuk menyinkronkan nama, gelar, institusi, dan riwayat presensi SKP IDI Anda.
+            Masukkan alamat email yang Anda gunakan saat registrasi untuk menyinkronkan nama, gelar, institusi, dan riwayat presensi SKP Anda.
           </p>
 
           {/* Current Active Badge */}
@@ -166,6 +202,41 @@ export const EmailIdentificationModal: React.FC<EmailIdentificationModalProps> =
 
         {/* Modal Body */}
         <div className="p-5 sm:p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+          {/* Cloud Sync via Google Sign-In */}
+          <div className="bg-emerald-50/90 border border-emerald-200 rounded-2xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{firebaseUser ? 'Akun Google Tersinkron (Cloud Active)' : 'Sinkronisasi Cloud Antar Perangkat'}</span>
+              </div>
+              <p className="text-[11px] text-emerald-800 mt-0.5 truncate">
+                {firebaseUser
+                  ? `Terhubung sebagai ${firebaseUser.email}`
+                  : 'Masuk dengan Google agar Bookmark, Presensi QR & Q&A tersimpan di cloud.'}
+              </p>
+            </div>
+            {firebaseUser ? (
+              <button
+                type="button"
+                onClick={() => signOutFirebase()}
+                className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Keluar Google</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={googleBusy}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 shrink-0 disabled:opacity-60 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{googleBusy ? 'Menghubungkan...' : 'Masuk dengan Google'}</span>
+              </button>
+            )}
+          </div>
+
           {/* Email Search Box */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">

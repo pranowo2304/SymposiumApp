@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Clock, MapPin, User, Bookmark, FileText, Check, Share2, Copy, Sparkles, Building, BookOpen, AlertCircle, Award, QrCode, MessageSquare, Send } from 'lucide-react';
 import { motion } from 'motion/react';
+import type { User as FirebaseUser } from 'firebase/auth';
 import { Session, Speaker, Participant, SymposiumInfo } from '../types';
 import { AddToCalendarButton } from './AddToCalendarButton';
 import { SessionLiveChat } from './SessionLiveChat';
@@ -16,6 +17,8 @@ interface SessionDetailModalProps {
   initialTab?: 'abstract' | 'speakers' | 'livechat';
   currentUser?: Participant;
   eventInfo?: SymposiumInfo;
+  firebaseUser?: FirebaseUser | null;
+  isCloudAdmin?: boolean;
 }
 
 export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
@@ -27,7 +30,9 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
   onOpenQrScanner,
   initialTab = 'abstract',
   currentUser,
-  eventInfo
+  eventInfo,
+  firebaseUser = null,
+  isCloudAdmin = false,
 }) => {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<'abstract' | 'speakers' | 'livechat'>(initialTab);
@@ -190,6 +195,8 @@ ${takeawaysList}
               session={session} 
               currentUserName={currentUser?.name}
               currentUserRole={currentUser?.role}
+              firebaseUser={firebaseUser}
+              isCloudAdmin={isCloudAdmin}
             />
           )}
 

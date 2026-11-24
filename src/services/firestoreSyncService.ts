@@ -1,0 +1,1037 @@
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  writeBatch,
+  where,
+  serverTimestamp,
+  type Unsubscribe,
+  type Timestamp,
+} from 'firebase/firestore';
+import type { User } from 'firebase/auth';
+import { db, OperationType, handleFirestoreError, toFirestoreDocId } from '../firebase';
+import type {
+  SymposiumInfo,
+  Session,
+  Speaker,
+  Exhibitor,
+  Room,
+  Participant,
+  BroadcastNotification,
+  AttendanceRecord,
+  ChatMessage,
+} from '../types';
+
+const BOOTSTRAP_ADMIN_EMAIL = 'pranowo.tfc@gmail.com';
+
+const VALID_THEME_COLORS = [
+  'medical-navy',
+  'gold-amber',
+  'cyan-teal',
+  'emerald-green',
+  'crimson-ruby',
+  'royal-indigo',
+] as const;
+
+const VALID_SESSION_TYPES = [
+  'Plenary Session',
+  'Simposium Paralel',
+  'Workshop Hands-On',
+  'Keynote Lecture',
+  'Panel Discussion',
+] as const;
+
+const VALID_EXHIBITOR_CATEGORIES = [
+  'Farmasi',
+  'Alat Medis & Diagnostik',
+  'Teknologi & AI',
+  'Rumah Sakit & Lab',
+] as const;
+
+const VALID_ROOM_TYPES = [
+  'ballroom',
+  'hall',
+  'auditorium',
+  'workshop',
+  'facility',
+] as const;
+
+const VALID_PARTICIPANT_ROLES = [
+  'Dokter Spesialis',
+  'Dokter Umum',
+  'Residen',
+  'Mahasiswa Kedokteran',
+  'Panitia',
+  'Peserta',
+] as const;
+
+const VALID_TICKET_TYPES = [
+  'Simposium Full Pass',
+  'Workshop Only',
+  'All-Access (Simposium + Workshop)',
+  'VIP / Speaker',
+] as const;
+
+const VALID_CHAT_ROLES = [
+  'Peserta',
+  'Dokter Spesialis',
+  'Dokter Umum',
+  'Residen',
+  'Moderator',
+  'Pembicara',
+  'Panitia',
+] as const;
+
+const VALID_BROADCAST_TYPES = ['info', 'warning', 'urgent', 'success'] as const;
+
+function clampStr(val: unknown, maxLen: number, fallback = ''): string {
+  const str = typeof val === 'string' ? val.trim() : fallback;
+  return str.slice(0, maxLen);
+}
+
+function clampStringArray(val: unknown, maxItems: number, maxItemLen = 500): string[] {
+  if (!Array.isArray(val)) return [];
+  return val
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    .slice(0, maxItems)
+    .map((item) => item.trim().slice(0, maxItemLen));
+}
+
+// ============================================================================
+// Payload Sanitizers matching firebase-blueprint.json & firestore.rules
+// ============================================================================
+
+function sanitizeEventInfoPayload(info: SymposiumInfo, updatedBy?: string) {
+  const themeColor = VALID_THEME_COLORS.includes(info.themeColor as any)
+    ? info.themeColor
+    : 'emerald-green';
+
+  const payload: Record<string, any> = {
+    title: clampStr(info.title, 200, 'Simposium Nasional 2026'),
+    subtitle: clampStr(info.subtitle, 400),
+    theme: clampStr(info.theme, 500),
+    location: clampStr(info.location, 250, 'Grand Ballroom & Convention Hall'),
+    venueAddress: clampStr(info.venueAddress, 300),
+    city: clampStr(info.city, 120),
+    dateString: clampStr(info.dateString, 120),
+    dates: info.dates || { day1: '', day2: '' },
+    organizer: clampStr(info.organizer, 250, 'Panitia Simposium'),
+    accreditation: clampStr(info.accreditation, 200),
+    logoUrl: clampStr(info.logoUrl, 500000),
+    themeColor,
+    contactEmail: clampStr(info.contactEmail, 160),
+    contactPhone: clampStr(info.contactPhone, 60),
+    websiteUrl: clampStr(info.websiteUrl, 300),
+    enableQrAttendance: info.enableQrAttendance !== false,
+    isPublished: true,
+    updatedAt: serverTimestamp(),
+  };
+
+  if (updatedBy) {
+    payload.updatedBy = clampStr(updatedBy, 128);
+  }
+  return payload;
+}
+
+function sanitizeSessionPayload(session: Session) {
+  const docId = toFirestoreDocId(session.id, 'session');
+  const sessionType = VALID_SESSION_TYPES.includes(session.type as any)
+    ? session.type
+    : 'Plenary Session';
+
+  const speakers = Array.isArray(session.speakers)
+    ? session.speakers.slice(0, 20).map((sp) => ({
+        id: clampStr(sp.id, 128, `sp_${Date.now()}`),
+        name: clampStr(sp.name, 200),
+        title: clampStr(sp.title, 200),
+        institution: clampStr(sp.institution, 250),
+        photoUrl: clampStr(sp.photoUrl, 500000),
+        bio: clampStr(sp.bio, 3000),
+        specialty: clampStr(sp.specialty, 200),
+        talkTitle: clampStr(sp.talkTitle, 300),
+      }))
+    : [];
+
+  const rundown = Array.isArray(session.rundown)
+    ? session.rundown.slice(0, 50).map((item) => ({
+        id: clampStr(item.id, 128, `rd_${Date.now()}`),
+        startTime: clampStr(item.startTime, 10),
+        endTime: clampStr(item.endTime, 10),
+        activity: clampStr(item.activity, 300),
+        pic: clampStr(item.pic, 150),
+        notes: clampStr(item.notes, 300),
+      }))
+    : [];
+
+  return {
+    docId,
+    data: {
+      id: clampStr(session.id || docId, 128),
+      day: clampStr(session.day, 80, 'Hari I'),
+      date: clampStr(session.date, 100, '-'),
+      startTime: clampStr(session.startTime, 10, '08:00'),
+      endTime: clampStr(session.endTime, 10, '09:00'),
+      timeString: clampStr(session.timeString, 50, '08:00 - 09:00 WIB'),
+      title: clampStr(session.title, 300, 'Sesi Simposium'),
+      category: clampStr(session.category, 120, 'Umum'),
+      type: sessionType,
+      room: clampStr(session.room, 120, 'Main Hall'),
+      floor: clampStr(session.floor, 80, 'Lantai 1'),
+      roomColor: clampStr(session.roomColor, 80, 'bg-indigo-600'),
+      moderator: clampStr(session.moderator, 200),
+      speakers,
+      abstract: {
+        background: clampStr(session.abstract?.background, 5000),
+        clinicalUpdates: clampStringArray(session.abstract?.clinicalUpdates, 30, 500),
+        conclusion: clampStr(session.abstract?.conclusion, 3000),
+      },
+      keyTakeaways: clampStringArray(session.keyTakeaways, 20, 500),
+      capacity:
+        typeof session.capacity === 'number' && Number.isFinite(session.capacity)
+          ? Math.max(0, Math.min(10000, Math.round(session.capacity)))
+          : 100,
+      rundown,
+      isPublished: true,
+      updatedAt: serverTimestamp(),
+    },
+  };
+}
+
+function sanitizeSpeakerPayload(speaker: Speaker) {
+  const docId = toFirestoreDocId(speaker.id, 'sp');
+  return {
+    docId,
+    data: {
+      id: clampStr(speaker.id || docId, 128),
+      name: clampStr(speaker.name, 200, 'Pembicara'),
+      title: clampStr(speaker.title, 200),
+      institution: clampStr(speaker.institution, 250),
+      photoUrl: clampStr(speaker.photoUrl, 500000),
+      bio: clampStr(speaker.bio, 3000),
+      specialty: clampStr(speaker.specialty, 200),
+      talkTitle: clampStr(speaker.talkTitle, 300),
+      isPublished: true,
+      updatedAt: serverTimestamp(),
+    },
+  };
+}
+
+function sanitizeExhibitorPayload(exhibitor: Exhibitor) {
+  const docId = toFirestoreDocId(exhibitor.id, 'exh');
+  const category = VALID_EXHIBITOR_CATEGORIES.includes(exhibitor.category as any)
+    ? exhibitor.category
+    : 'Farmasi';
+  return {
+    docId,
+    data: {
+      id: clampStr(exhibitor.id || docId, 128),
+      name: clampStr(exhibitor.name, 200, 'Exhibitor'),
+      boothNumber: clampStr(exhibitor.boothNumber, 40, 'A1'),
+      category,
+      zone: clampStr(exhibitor.zone, 120, 'Exhibition Hall'),
+      tagline: clampStr(exhibitor.tagline, 250),
+      description: clampStr(exhibitor.description, 2000),
+      featuredProducts: clampStringArray(exhibitor.featuredProducts, 20, 200),
+      contactEmail: clampStr(exhibitor.contactEmail, 160),
+      website: clampStr(exhibitor.website, 300),
+      phone: clampStr(exhibitor.phone, 60),
+      demoSchedule: clampStr(exhibitor.demoSchedule, 200),
+      highlight: clampStr(exhibitor.highlight, 200),
+      isPublished: true,
+      updatedAt: serverTimestamp(),
+    },
+  };
+}
+
+function sanitizeRoomPayload(room: Room) {
+  const docId = toFirestoreDocId(room.id || room.name, 'room');
+  const type = VALID_ROOM_TYPES.includes(room.type as any) ? room.type : 'hall';
+  return {
+    docId,
+    data: {
+      id: clampStr(room.id || docId, 128),
+      name: clampStr(room.name, 150, 'Ruangan'),
+      shortName: clampStr(room.shortName || room.name, 80),
+      floor: clampStr(room.floor, 80, 'Lantai 1'),
+      capacity:
+        typeof room.capacity === 'number' && Number.isFinite(room.capacity)
+          ? Math.max(0, Math.min(10000, Math.round(room.capacity)))
+          : 100,
+      description: clampStr(room.description, 1500),
+      facilities: clampStringArray(room.facilities, 30, 150),
+      type,
+      color: clampStr(room.color, 80),
+      badgeBg: clampStr(room.badgeBg, 80),
+      x: typeof room.x === 'number' && Number.isFinite(room.x) ? Math.max(0, Math.min(100, room.x)) : 50,
+      y: typeof room.y === 'number' && Number.isFinite(room.y) ? Math.max(0, Math.min(100, room.y)) : 50,
+      isPublished: true,
+      updatedAt: serverTimestamp(),
+    },
+  };
+}
+
+function sanitizeBroadcastPayload(broadcast: BroadcastNotification) {
+  const docId = toFirestoreDocId(broadcast.id, 'bc');
+  const type = VALID_BROADCAST_TYPES.includes(broadcast.type as any) ? broadcast.type : 'info';
+  return {
+    docId,
+    data: {
+      id: clampStr(broadcast.id || docId, 128),
+      title: clampStr(broadcast.title, 200, 'Pengumuman Panitia'),
+      message: clampStr(broadcast.message, 1000, '-'),
+      type,
+      category: clampStr(broadcast.category, 100, 'Informasi'),
+      actionTab: clampStr(broadcast.actionTab, 50),
+      actionLabel: clampStr(broadcast.actionLabel, 80),
+      durationSeconds:
+        typeof broadcast.durationSeconds === 'number' && Number.isFinite(broadcast.durationSeconds)
+          ? Math.max(0, Math.min(3600, Math.round(broadcast.durationSeconds)))
+          : 0,
+      sound: Boolean(broadcast.sound),
+      timestamp: typeof broadcast.timestamp === 'number' ? broadcast.timestamp : Date.now(),
+      sentBy: clampStr(broadcast.sentBy, 160, 'Panitia'),
+      isPublished: true,
+      updatedAt: serverTimestamp(),
+    },
+  };
+}
+
+function sanitizeParticipantPayload(
+  participant: Participant,
+  existingCreatedAt?: Timestamp | null,
+  ownerUid?: string
+) {
+  const docId = toFirestoreDocId(participant.id || participant.email, 'part');
+  const role = VALID_PARTICIPANT_ROLES.includes(participant.role as any)
+    ? participant.role
+    : 'Peserta';
+  const ticketType = VALID_TICKET_TYPES.includes(participant.ticketType as any)
+    ? participant.ticketType
+    : 'Simposium Full Pass';
+
+  const data: Record<string, any> = {
+    id: clampStr(participant.id || docId, 128),
+    email: clampStr(participant.email, 180).toLowerCase(),
+    name: clampStr(participant.name, 180, 'Peserta'),
+    title: clampStr(participant.title, 60),
+    npaIdi: clampStr(participant.npaIdi, 80),
+    institution: clampStr(participant.institution, 200),
+    role,
+    phone: clampStr(participant.phone, 50),
+    ticketType,
+    badgeId: clampStr(participant.badgeId, 80, `ID-SIMP-2026`),
+    registeredAt: clampStr(participant.registeredAt, 40, new Date().toISOString().split('T')[0]),
+    createdAt: existingCreatedAt || serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+
+  if (ownerUid) {
+    data.userId = clampStr(ownerUid, 128);
+  }
+
+  return { docId, data };
+}
+
+// ============================================================================
+// Auth Profile & Admin Role Check
+// ============================================================================
+
+export async function ensureUserProfileAndCheckAdmin(user: User): Promise<{ isAdmin: boolean }> {
+  const uid = toFirestoreDocId(user.uid, 'user');
+  const userPath = `users/${uid}`;
+  const email = (user.email || '').trim().toLowerCase();
+  const isBootstrappedAdmin =
+    Boolean(user.emailVerified) && email === BOOTSTRAP_ADMIN_EMAIL.toLowerCase();
+
+  let isAdminInDb = false;
+  try {
+    const adminSnap = await getDoc(doc(db, 'admins', uid));
+    isAdminInDb = adminSnap.exists();
+  } catch {
+    isAdminInDb = false;
+  }
+
+  const isAdmin = isBootstrappedAdmin || isAdminInDb;
+
+  try {
+    const userRef = doc(db, 'users', uid);
+    const userSnap = await getDoc(userRef);
+
+    if (!userSnap.exists()) {
+      await setDoc(userRef, {
+        uid,
+        email: clampStr(email || `${uid}@firebase.local`, 180),
+        displayName: clampStr(user.displayName || email.split('@')[0] || 'Peserta', 180),
+        photoURL: clampStr(user.photoURL, 500),
+        role: isAdmin ? 'admin' : 'attendee',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await updateDoc(userRef, {
+        displayName: clampStr(user.displayName || email.split('@')[0] || 'Peserta', 180),
+        photoURL: clampStr(user.photoURL, 500),
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, userPath);
+  }
+
+  return { isAdmin };
+}
+
+// ============================================================================
+// Initial Catalog Seed (Idempotent for first-time Firestore setup by Admin)
+// ============================================================================
+
+async function commitBatchOps(
+  ops: Array<{ type: 'set' | 'delete'; ref: ReturnType<typeof doc>; data?: any }>,
+  pathLabel: string
+) {
+  const CHUNK_SIZE = 400;
+  for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+    const batch = writeBatch(db);
+    const slice = ops.slice(i, i + CHUNK_SIZE);
+    for (const op of slice) {
+      if (op.type === 'set') {
+        batch.set(op.ref, op.data);
+      } else {
+        batch.delete(op.ref);
+      }
+    }
+    try {
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, pathLabel);
+    }
+  }
+}
+
+export async function seedInitialCatalogIfEmpty(defaults: {
+  eventInfo: SymposiumInfo;
+  sessions: Session[];
+  speakers: Speaker[];
+  exhibitors: Exhibitor[];
+  rooms: Room[];
+  participants: Participant[];
+  adminUid: string;
+}): Promise<boolean> {
+  try {
+    const eventSnap = await getDoc(doc(db, 'event_info', 'main'));
+    if (eventSnap.exists()) {
+      return false; // Already seeded
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, 'event_info/main');
+  }
+
+  const ops: Array<{ type: 'set'; ref: ReturnType<typeof doc>; data: any }> = [];
+
+  ops.push({
+    type: 'set',
+    ref: doc(db, 'event_info', 'main'),
+    data: sanitizeEventInfoPayload(defaults.eventInfo, defaults.adminUid),
+  });
+
+  for (const s of defaults.sessions) {
+    const { docId, data } = sanitizeSessionPayload(s);
+    ops.push({ type: 'set', ref: doc(db, 'sessions', docId), data });
+  }
+  for (const sp of defaults.speakers) {
+    const { docId, data } = sanitizeSpeakerPayload(sp);
+    ops.push({ type: 'set', ref: doc(db, 'speakers', docId), data });
+  }
+  for (const ex of defaults.exhibitors) {
+    const { docId, data } = sanitizeExhibitorPayload(ex);
+    ops.push({ type: 'set', ref: doc(db, 'exhibitors', docId), data });
+  }
+  for (const r of defaults.rooms) {
+    const { docId, data } = sanitizeRoomPayload(r);
+    ops.push({ type: 'set', ref: doc(db, 'rooms', docId), data });
+  }
+  for (const p of defaults.participants) {
+    const { docId, data } = sanitizeParticipantPayload(p);
+    ops.push({ type: 'set', ref: doc(db, 'participants', docId), data });
+  }
+
+  await commitBatchOps(ops, 'catalog_seed');
+  return true;
+}
+
+// ============================================================================
+// Public Real-Time Subscriptions (All Attendees)
+// ============================================================================
+
+export function subscribePublicCatalog(callbacks: {
+  onEventInfo: (info: SymposiumInfo) => void;
+  onSessions: (sessions: Session[]) => void;
+  onSpeakers: (speakers: Speaker[]) => void;
+  onExhibitors: (exhibitors: Exhibitor[]) => void;
+  onRooms: (rooms: Room[]) => void;
+  onBroadcast: (broadcast: BroadcastNotification | null) => void;
+}): () => void {
+  const unsubscribers: Unsubscribe[] = [];
+
+  unsubscribers.push(
+    onSnapshot(
+      query(collection(db, 'event_info'), where('isPublished', '==', true)),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const docData = snapshot.docs[0].data() as any;
+          const { isPublished, updatedAt, updatedBy, ...rest } = docData;
+          callbacks.onEventInfo(rest as SymposiumInfo);
+        }
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'event_info')
+    )
+  );
+
+  unsubscribers.push(
+    onSnapshot(
+      query(collection(db, 'sessions'), where('isPublished', '==', true)),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const list = snapshot.docs.map((d) => {
+            const { isPublished, updatedAt, ...rest } = d.data() as any;
+            return rest as Session;
+          });
+          callbacks.onSessions(list);
+        }
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'sessions')
+    )
+  );
+
+  unsubscribers.push(
+    onSnapshot(
+      query(collection(db, 'speakers'), where('isPublished', '==', true)),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const list = snapshot.docs.map((d) => {
+            const { isPublished, updatedAt, ...rest } = d.data() as any;
+            return rest as Speaker;
+          });
+          callbacks.onSpeakers(list);
+        }
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'speakers')
+    )
+  );
+
+  unsubscribers.push(
+    onSnapshot(
+      query(collection(db, 'exhibitors'), where('isPublished', '==', true)),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const list = snapshot.docs.map((d) => {
+            const { isPublished, updatedAt, ...rest } = d.data() as any;
+            return rest as Exhibitor;
+          });
+          callbacks.onExhibitors(list);
+        }
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'exhibitors')
+    )
+  );
+
+  unsubscribers.push(
+    onSnapshot(
+      query(collection(db, 'rooms'), where('isPublished', '==', true)),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const list = snapshot.docs.map((d) => {
+            const { isPublished, updatedAt, ...rest } = d.data() as any;
+            return rest as Room;
+          });
+          callbacks.onRooms(list);
+        }
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'rooms')
+    )
+  );
+
+  unsubscribers.push(
+    onSnapshot(
+      query(collection(db, 'broadcasts'), where('isPublished', '==', true)),
+      (snapshot) => {
+        if (snapshot.empty) {
+          callbacks.onBroadcast(null);
+          return;
+        }
+        const activeDocs = snapshot.docs
+          .map((d) => {
+            const { isPublished, updatedAt, ...rest } = d.data() as any;
+            return rest as BroadcastNotification;
+          })
+          .filter((b) => Date.now() - (b.timestamp || 0) < 2 * 3600 * 1000)
+          .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+        callbacks.onBroadcast(activeDocs[0] || null);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, 'broadcasts')
+    )
+  );
+
+  return () => {
+    unsubscribers.forEach((unsub) => unsub());
+  };
+}
+
+// ============================================================================
+// Authenticated User Private Data Subscriptions
+// ============================================================================
+
+export function subscribeUserPrivateData(
+  uid: string,
+  email: string,
+  isAdmin: boolean,
+  callbacks: {
+    onBookmarks: (sessionIds: string[]) => void;
+    onAttendances: (records: AttendanceRecord[]) => void;
+    onParticipants: (participants: Participant[]) => void;
+  }
+): () => void {
+  const safeUid = toFirestoreDocId(uid, 'user');
+  const cleanEmail = email.trim().toLowerCase();
+  const unsubscribers: Unsubscribe[] = [];
+
+  unsubscribers.push(
+    onSnapshot(
+      query(collection(db, 'users', safeUid, 'bookmarks'), where('userId', '==', safeUid)),
+      (snapshot) => {
+        const ids = snapshot.docs.map((d) => (d.data().sessionId as string) || d.id);
+        callbacks.onBookmarks(ids);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, `users/${safeUid}/bookmarks`)
+    )
+  );
+
+  unsubscribers.push(
+    onSnapshot(
+      query(collection(db, 'users', safeUid, 'attendances'), where('userId', '==', safeUid)),
+      (snapshot) => {
+        const records = snapshot.docs.map((d) => {
+          const { userId, createdAt, ...rest } = d.data() as any;
+          return rest as AttendanceRecord;
+        });
+        callbacks.onAttendances(records);
+      },
+      (error) => handleFirestoreError(error, OperationType.LIST, `users/${safeUid}/attendances`)
+    )
+  );
+
+  if (isAdmin) {
+    unsubscribers.push(
+      onSnapshot(
+        collection(db, 'participants'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list = snapshot.docs.map((d) => {
+              const { createdAt, updatedAt, userId, ...rest } = d.data() as any;
+              return rest as Participant;
+            });
+            callbacks.onParticipants(list);
+          }
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, 'participants')
+      )
+    );
+  } else if (cleanEmail) {
+    unsubscribers.push(
+      onSnapshot(
+        query(collection(db, 'participants'), where('email', '==', cleanEmail)),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list = snapshot.docs.map((d) => {
+              const { createdAt, updatedAt, userId, ...rest } = d.data() as any;
+              return rest as Participant;
+            });
+            callbacks.onParticipants(list);
+          }
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, 'participants')
+      )
+    );
+  }
+
+  return () => {
+    unsubscribers.forEach((unsub) => unsub());
+  };
+}
+
+// ============================================================================
+// Admin Catalog Mutations
+// ============================================================================
+
+export async function saveEventInfoToFirestore(info: SymposiumInfo, adminUid?: string): Promise<void> {
+  try {
+    await setDoc(doc(db, 'event_info', 'main'), sanitizeEventInfoPayload(info, adminUid));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'event_info/main');
+  }
+}
+
+async function syncCollectionDocs<T>(
+  collectionName: string,
+  items: T[],
+  serializer: (item: T) => { docId: string; data: Record<string, any> }
+): Promise<void> {
+  let existingIds: string[] = [];
+  try {
+    const snap = await getDocs(collection(db, collectionName));
+    existingIds = snap.docs.map((d) => d.id);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, collectionName);
+  }
+
+  const targetIds = new Set<string>();
+  const ops: Array<{ type: 'set' | 'delete'; ref: ReturnType<typeof doc>; data?: any }> = [];
+
+  for (const item of items) {
+    const { docId, data } = serializer(item);
+    targetIds.add(docId);
+    ops.push({ type: 'set', ref: doc(db, collectionName, docId), data });
+  }
+
+  for (const oldId of existingIds) {
+    if (!targetIds.has(oldId)) {
+      ops.push({ type: 'delete', ref: doc(db, collectionName, oldId) });
+    }
+  }
+
+  await commitBatchOps(ops, collectionName);
+}
+
+export async function syncSessionsToFirestore(sessions: Session[]): Promise<void> {
+  return syncCollectionDocs('sessions', sessions, sanitizeSessionPayload);
+}
+
+export async function syncSpeakersToFirestore(speakers: Speaker[]): Promise<void> {
+  return syncCollectionDocs('speakers', speakers, sanitizeSpeakerPayload);
+}
+
+export async function syncExhibitorsToFirestore(exhibitors: Exhibitor[]): Promise<void> {
+  return syncCollectionDocs('exhibitors', exhibitors, sanitizeExhibitorPayload);
+}
+
+export async function syncRoomsToFirestore(rooms: Room[]): Promise<void> {
+  return syncCollectionDocs('rooms', rooms, sanitizeRoomPayload);
+}
+
+export async function saveBroadcastToFirestore(broadcast: BroadcastNotification): Promise<void> {
+  try {
+    await setDoc(doc(db, 'broadcasts', 'active'), sanitizeBroadcastPayload(broadcast).data);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'broadcasts/active');
+  }
+}
+
+export async function clearBroadcastInFirestore(): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'broadcasts', 'active'));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, 'broadcasts/active');
+  }
+}
+
+export async function syncParticipantsToFirestore(participants: Participant[]): Promise<void> {
+  let existingDocsMap = new Map<string, Timestamp>();
+  let existingIds: string[] = [];
+  try {
+    const snap = await getDocs(collection(db, 'participants'));
+    existingIds = snap.docs.map((d) => {
+      const createdAt = d.data()?.createdAt as Timestamp | undefined;
+      if (createdAt) existingDocsMap.set(d.id, createdAt);
+      return d.id;
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'participants');
+  }
+
+  const targetIds = new Set<string>();
+  const ops: Array<{ type: 'set' | 'delete'; ref: ReturnType<typeof doc>; data?: any }> = [];
+
+  for (const p of participants) {
+    const docId = toFirestoreDocId(p.id || p.email, 'part');
+    targetIds.add(docId);
+    const { data } = sanitizeParticipantPayload(p, existingDocsMap.get(docId) || null);
+    ops.push({ type: 'set', ref: doc(db, 'participants', docId), data });
+  }
+
+  for (const oldId of existingIds) {
+    if (!targetIds.has(oldId)) {
+      ops.push({ type: 'delete', ref: doc(db, 'participants', oldId) });
+    }
+  }
+
+  await commitBatchOps(ops, 'participants');
+}
+
+export async function saveOwnParticipantToFirestore(
+  participant: Participant,
+  uid: string
+): Promise<void> {
+  const safeUid = toFirestoreDocId(uid, 'user');
+  const docId = toFirestoreDocId(participant.id || participant.email, 'part');
+  const docRef = doc(db, 'participants', docId);
+  try {
+    const existingSnap = await getDoc(docRef);
+    const existingCreatedAt = existingSnap.exists()
+      ? (existingSnap.data()?.createdAt as Timestamp | undefined)
+      : undefined;
+    const { data } = sanitizeParticipantPayload(participant, existingCreatedAt || null, safeUid);
+    await setDoc(docRef, data);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `participants/${docId}`);
+  }
+}
+
+// ============================================================================
+// User Bookmarks & Attendance Mutations
+// ============================================================================
+
+export async function toggleBookmarkInFirestore(
+  uid: string,
+  sessionId: string,
+  shouldBookmark: boolean
+): Promise<void> {
+  const safeUid = toFirestoreDocId(uid, 'user');
+  const safeSessionId = toFirestoreDocId(sessionId, 'session');
+  const path = `users/${safeUid}/bookmarks/${safeSessionId}`;
+  const ref = doc(db, 'users', safeUid, 'bookmarks', safeSessionId);
+  try {
+    if (shouldBookmark) {
+      await setDoc(ref, {
+        sessionId: safeSessionId,
+        userId: safeUid,
+        createdAt: serverTimestamp(),
+      });
+    } else {
+      await deleteDoc(ref);
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function clearBookmarksInFirestore(uid: string, sessionIds: string[]): Promise<void> {
+  const safeUid = toFirestoreDocId(uid, 'user');
+  const ops = sessionIds.map((id) => ({
+    type: 'delete' as const,
+    ref: doc(db, 'users', safeUid, 'bookmarks', toFirestoreDocId(id, 'session')),
+  }));
+  await commitBatchOps(ops, `users/${safeUid}/bookmarks`);
+}
+
+export async function saveAttendanceToFirestore(
+  uid: string,
+  record: AttendanceRecord
+): Promise<void> {
+  const safeUid = toFirestoreDocId(uid, 'user');
+  const safeAttId = toFirestoreDocId(record.id || record.sessionId, 'att');
+  const safeSessionId = toFirestoreDocId(record.sessionId, 'session');
+  const path = `users/${safeUid}/attendances/${safeAttId}`;
+  try {
+    await setDoc(doc(db, 'users', safeUid, 'attendances', safeAttId), {
+      id: safeAttId,
+      userId: safeUid,
+      sessionId: safeSessionId,
+      sessionTitle: clampStr(record.sessionTitle, 300, 'Sesi Simposium'),
+      room: clampStr(record.room, 120, 'Main Hall'),
+      timestamp: clampStr(record.timestamp, 60, new Date().toLocaleTimeString('id-ID')),
+      skpPoints:
+        typeof record.skpPoints === 'number' && Number.isFinite(record.skpPoints)
+          ? Math.max(0, Math.min(50, record.skpPoints))
+          : 1,
+      participantName: clampStr(record.participantName, 180, 'Peserta'),
+      badgeId: clampStr(record.badgeId, 80, 'ID-SIMP-2026'),
+      day: clampStr(record.day, 80, 'Hari I'),
+      createdAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+// ============================================================================
+// Live Session Chat & Q&A Real-Time Sync
+// ============================================================================
+
+export function subscribeSessionChatFirestore(
+  sessionId: string,
+  currentUid: string | null,
+  onMessages: (messages: ChatMessage[]) => void
+): Unsubscribe {
+  const safeSessionId = toFirestoreDocId(sessionId, 'session');
+  const chatPath = `sessions/${safeSessionId}/chat_messages`;
+  return onSnapshot(
+    query(collection(db, 'sessions', safeSessionId, 'chat_messages'), where('isVisible', '==', true)),
+    (snapshot) => {
+      const msgs = snapshot.docs.map((d) => {
+        const raw = d.data() as any;
+        const upvotedBy: string[] = Array.isArray(raw.upvotedBy) ? raw.upvotedBy : [];
+        return {
+          id: raw.id || d.id,
+          sessionId: raw.sessionId || safeSessionId,
+          senderName: raw.senderName || 'Peserta',
+          senderRole: raw.senderRole || 'Peserta',
+          senderInstitution: raw.senderInstitution || '',
+          message: raw.message || '',
+          timestamp: raw.timestamp || '',
+          isQuestion: Boolean(raw.isQuestion),
+          targetSpeaker: raw.targetSpeaker,
+          upvotes: typeof raw.upvotes === 'number' ? raw.upvotes : upvotedBy.length,
+          hasUpvoted: currentUid ? upvotedBy.includes(currentUid) : false,
+          isAnswered: Boolean(raw.isAnswered),
+          answer: raw.answer,
+          replies: Array.isArray(raw.replies) ? raw.replies : [],
+          tag: raw.tag,
+        } as ChatMessage;
+      });
+      onMessages(msgs);
+    },
+    (error) => handleFirestoreError(error, OperationType.LIST, chatPath)
+  );
+}
+
+export async function createSessionChatMessageFirestore(
+  sessionId: string,
+  authorUid: string,
+  message: ChatMessage
+): Promise<void> {
+  const safeSessionId = toFirestoreDocId(sessionId, 'session');
+  const safeMsgId = toFirestoreDocId(message.id, 'chat');
+  const safeUid = toFirestoreDocId(authorUid, 'user');
+  const path = `sessions/${safeSessionId}/chat_messages/${safeMsgId}`;
+  const senderRole = VALID_CHAT_ROLES.includes(message.senderRole as any)
+    ? message.senderRole
+    : 'Peserta';
+
+  try {
+    await setDoc(doc(db, 'sessions', safeSessionId, 'chat_messages', safeMsgId), {
+      id: safeMsgId,
+      sessionId: safeSessionId,
+      authorUid: safeUid,
+      senderName: clampStr(message.senderName, 150, 'Peserta'),
+      senderRole,
+      senderInstitution: clampStr(message.senderInstitution, 200),
+      message: clampStr(message.message, 2000),
+      timestamp: clampStr(message.timestamp, 60, 'Baru saja'),
+      isQuestion: Boolean(message.isQuestion),
+      targetSpeaker: clampStr(message.targetSpeaker, 200),
+      upvotes: 1,
+      upvotedBy: [safeUid],
+      isAnswered: false,
+      replies: [],
+      tag: clampStr(message.tag, 80),
+      isVisible: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+  }
+}
+
+export async function toggleChatUpvoteFirestore(
+  sessionId: string,
+  messageId: string,
+  uid: string
+): Promise<void> {
+  const safeSessionId = toFirestoreDocId(sessionId, 'session');
+  const safeMsgId = toFirestoreDocId(messageId, 'chat');
+  const safeUid = toFirestoreDocId(uid, 'user');
+  const path = `sessions/${safeSessionId}/chat_messages/${safeMsgId}`;
+  const ref = doc(db, 'sessions', safeSessionId, 'chat_messages', safeMsgId);
+
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+    const raw = snap.data() as any;
+    const existingUpvotedBy: string[] = Array.isArray(raw.upvotedBy) ? raw.upvotedBy : [];
+    const alreadyUpvoted = existingUpvotedBy.includes(safeUid);
+    const nextUpvotedBy = alreadyUpvoted
+      ? existingUpvotedBy.filter((id) => id !== safeUid)
+      : [...existingUpvotedBy, safeUid].slice(0, 500);
+    const nextUpvotes = alreadyUpvoted
+      ? Math.max(0, (raw.upvotes || 1) - 1)
+      : (raw.upvotes || 0) + 1;
+
+    await updateDoc(ref, {
+      upvotes: nextUpvotes,
+      upvotedBy: nextUpvotedBy,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function replyToChatMessageFirestore(
+  sessionId: string,
+  messageId: string,
+  replyText: string,
+  senderName: string,
+  senderRole: string
+): Promise<void> {
+  const safeSessionId = toFirestoreDocId(sessionId, 'session');
+  const safeMsgId = toFirestoreDocId(messageId, 'chat');
+  const path = `sessions/${safeSessionId}/chat_messages/${safeMsgId}`;
+  const ref = doc(db, 'sessions', safeSessionId, 'chat_messages', safeMsgId);
+
+  try {
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return;
+    const raw = snap.data() as any;
+    const existingReplies = Array.isArray(raw.replies) ? raw.replies : [];
+    const newReply = {
+      id: `reply_${Date.now()}`,
+      senderName: clampStr(senderName, 150, 'Peserta'),
+      senderRole: clampStr(senderRole, 80, 'Peserta'),
+      message: clampStr(replyText, 1000),
+      timestamp:
+        new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+    };
+    const nextReplies = [...existingReplies, newReply].slice(0, 50);
+
+    await updateDoc(ref, {
+      replies: nextReplies,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function answerChatQuestionFirestore(
+  sessionId: string,
+  messageId: string,
+  answerText: string,
+  answeredBy: string
+): Promise<void> {
+  const safeSessionId = toFirestoreDocId(sessionId, 'session');
+  const safeMsgId = toFirestoreDocId(messageId, 'chat');
+  const path = `sessions/${safeSessionId}/chat_messages/${safeMsgId}`;
+
+  try {
+    await updateDoc(doc(db, 'sessions', safeSessionId, 'chat_messages', safeMsgId), {
+      isAnswered: true,
+      answer: {
+        answeredBy: clampStr(answeredBy, 180, 'Narasumber'),
+        answerText: clampStr(answerText, 2000),
+        timestamp:
+          new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB',
+      },
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}

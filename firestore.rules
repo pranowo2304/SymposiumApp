@@ -1,0 +1,522 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // PILLAR 0: GLOBAL DEFAULT DENY SAFETY NET
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // PILLAR 3: GLOBAL PRIMITIVES & IDENTITY HELPERS
+    // =========================================================================
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidOptionalString(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isValidStringArray(data, field, maxItems) {
+      return !(field in data) || (
+        data[field] is list &&
+        data[field].size() <= maxItems &&
+        (data[field].size() == 0 || data[field][0] is string)
+      );
+    }
+
+    // Bootstrapped Admin + Database-backed Admin allowlist (never client claims)
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'pranowo.tfc@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // =========================================================================
+    // PILLAR 2: VALIDATION BLUEPRINTS (isValid[Entity])
+    // =========================================================================
+    function isValidAdminUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'name', 'createdAt']) &&
+        isValidId(data.uid) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 180 &&
+        isValidOptionalString(data, 'name', 180) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidEventInfo(data) {
+      return data.keys().hasAll(['title', 'location', 'organizer', 'isPublished', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'title', 'subtitle', 'theme', 'location', 'venueAddress', 'city',
+          'dateString', 'dates', 'organizer', 'accreditation', 'logoUrl',
+          'themeColor', 'contactEmail', 'contactPhone', 'websiteUrl',
+          'enableQrAttendance', 'isPublished', 'updatedAt', 'updatedBy'
+        ]) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.location is string && data.location.size() >= 1 && data.location.size() <= 250 &&
+        data.organizer is string && data.organizer.size() >= 1 && data.organizer.size() <= 250 &&
+        data.isPublished is bool &&
+        data.updatedAt is timestamp && data.updatedAt == request.time &&
+        isValidOptionalString(data, 'subtitle', 400) &&
+        isValidOptionalString(data, 'theme', 500) &&
+        isValidOptionalString(data, 'venueAddress', 300) &&
+        isValidOptionalString(data, 'city', 120) &&
+        isValidOptionalString(data, 'dateString', 120) &&
+        (!( 'dates' in data ) || data.dates is map) &&
+        isValidOptionalString(data, 'accreditation', 200) &&
+        isValidOptionalString(data, 'logoUrl', 500000) &&
+        (!( 'themeColor' in data ) || data.themeColor in [
+          'medical-navy', 'gold-amber', 'cyan-teal', 'emerald-green', 'crimson-ruby', 'royal-indigo'
+        ]) &&
+        isValidOptionalString(data, 'contactEmail', 160) &&
+        isValidOptionalString(data, 'contactPhone', 60) &&
+        isValidOptionalString(data, 'websiteUrl', 300) &&
+        (!( 'enableQrAttendance' in data ) || data.enableQrAttendance is bool) &&
+        isValidOptionalString(data, 'updatedBy', 128);
+    }
+
+    function isValidSession(data) {
+      return data.keys().hasAll([
+          'id', 'day', 'date', 'startTime', 'endTime', 'timeString',
+          'title', 'category', 'type', 'room', 'floor', 'isPublished', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'day', 'date', 'startTime', 'endTime', 'timeString',
+          'title', 'category', 'type', 'room', 'floor', 'roomColor',
+          'moderator', 'speakers', 'abstract', 'keyTakeaways', 'capacity',
+          'rundown', 'isPublished', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        data.day is string && data.day.size() >= 1 && data.day.size() <= 80 &&
+        data.date is string && data.date.size() >= 1 && data.date.size() <= 100 &&
+        data.startTime is string && data.startTime.size() >= 4 && data.startTime.size() <= 10 &&
+        data.endTime is string && data.endTime.size() >= 4 && data.endTime.size() <= 10 &&
+        data.timeString is string && data.timeString.size() >= 1 && data.timeString.size() <= 50 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 120 &&
+        data.type in ['Plenary Session', 'Simposium Paralel', 'Workshop Hands-On', 'Keynote Lecture', 'Panel Discussion'] &&
+        data.room is string && data.room.size() >= 1 && data.room.size() <= 120 &&
+        data.floor is string && data.floor.size() >= 1 && data.floor.size() <= 80 &&
+        isValidOptionalString(data, 'roomColor', 80) &&
+        isValidOptionalString(data, 'moderator', 200) &&
+        (!( 'speakers' in data ) || (
+          data.speakers is list &&
+          data.speakers.size() <= 20 &&
+          (data.speakers.size() == 0 || data.speakers[0] is map)
+        )) &&
+        (!( 'abstract' in data ) || data.abstract is map) &&
+        isValidStringArray(data, 'keyTakeaways', 20) &&
+        (!( 'capacity' in data ) || (data.capacity is number && data.capacity >= 0 && data.capacity <= 10000)) &&
+        (!( 'rundown' in data ) || (
+          data.rundown is list &&
+          data.rundown.size() <= 50 &&
+          (data.rundown.size() == 0 || data.rundown[0] is map)
+        )) &&
+        data.isPublished is bool &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidSpeaker(data) {
+      return data.keys().hasAll(['id', 'name', 'institution', 'specialty', 'isPublished', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'name', 'title', 'institution', 'photoUrl', 'bio',
+          'specialty', 'talkTitle', 'isPublished', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
+        isValidOptionalString(data, 'title', 200) &&
+        data.institution is string && data.institution.size() <= 250 &&
+        isValidOptionalString(data, 'photoUrl', 500000) &&
+        isValidOptionalString(data, 'bio', 3000) &&
+        data.specialty is string && data.specialty.size() <= 200 &&
+        isValidOptionalString(data, 'talkTitle', 300) &&
+        data.isPublished is bool &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidExhibitor(data) {
+      return data.keys().hasAll(['id', 'name', 'boothNumber', 'category', 'zone', 'isPublished', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'name', 'boothNumber', 'category', 'zone', 'tagline', 'description',
+          'featuredProducts', 'contactEmail', 'website', 'phone', 'demoSchedule',
+          'highlight', 'isPublished', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
+        data.boothNumber is string && data.boothNumber.size() >= 1 && data.boothNumber.size() <= 40 &&
+        data.category in ['Farmasi', 'Alat Medis & Diagnostik', 'Teknologi & AI', 'Rumah Sakit & Lab'] &&
+        data.zone is string && data.zone.size() >= 1 && data.zone.size() <= 120 &&
+        isValidOptionalString(data, 'tagline', 250) &&
+        isValidOptionalString(data, 'description', 2000) &&
+        isValidStringArray(data, 'featuredProducts', 20) &&
+        isValidOptionalString(data, 'contactEmail', 160) &&
+        isValidOptionalString(data, 'website', 300) &&
+        isValidOptionalString(data, 'phone', 60) &&
+        isValidOptionalString(data, 'demoSchedule', 200) &&
+        isValidOptionalString(data, 'highlight', 200) &&
+        data.isPublished is bool &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidRoom(data) {
+      return data.keys().hasAll(['id', 'name', 'shortName', 'floor', 'capacity', 'type', 'isPublished', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'name', 'shortName', 'floor', 'capacity', 'description',
+          'facilities', 'type', 'color', 'badgeBg', 'x', 'y', 'isPublished', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 150 &&
+        data.shortName is string && data.shortName.size() >= 1 && data.shortName.size() <= 80 &&
+        data.floor is string && data.floor.size() >= 1 && data.floor.size() <= 80 &&
+        data.capacity is number && data.capacity >= 0 && data.capacity <= 10000 &&
+        isValidOptionalString(data, 'description', 1500) &&
+        isValidStringArray(data, 'facilities', 30) &&
+        data.type in ['ballroom', 'hall', 'auditorium', 'workshop', 'facility'] &&
+        isValidOptionalString(data, 'color', 80) &&
+        isValidOptionalString(data, 'badgeBg', 80) &&
+        (!( 'x' in data ) || (data.x is number && data.x >= 0 && data.x <= 100)) &&
+        (!( 'y' in data ) || (data.y is number && data.y >= 0 && data.y <= 100)) &&
+        data.isPublished is bool &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidBroadcast(data) {
+      return data.keys().hasAll([
+          'id', 'title', 'message', 'type', 'category', 'durationSeconds',
+          'sound', 'timestamp', 'isPublished', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'title', 'message', 'type', 'category', 'actionTab', 'actionLabel',
+          'durationSeconds', 'sound', 'timestamp', 'sentBy', 'isPublished', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 1000 &&
+        data.type in ['info', 'warning', 'urgent', 'success'] &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
+        isValidOptionalString(data, 'actionTab', 50) &&
+        isValidOptionalString(data, 'actionLabel', 80) &&
+        data.durationSeconds is number && data.durationSeconds >= 0 && data.durationSeconds <= 3600 &&
+        data.sound is bool &&
+        data.timestamp is number && data.timestamp > 0 &&
+        isValidOptionalString(data, 'sentBy', 160) &&
+        data.isPublished is bool &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidChatMessage(data) {
+      return data.keys().hasAll([
+          'id', 'sessionId', 'authorUid', 'senderName', 'senderRole',
+          'message', 'timestamp', 'isQuestion', 'upvotes', 'upvotedBy',
+          'isVisible', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'sessionId', 'authorUid', 'senderName', 'senderRole',
+          'senderInstitution', 'message', 'timestamp', 'isQuestion',
+          'targetSpeaker', 'upvotes', 'upvotedBy', 'isAnswered', 'answer',
+          'replies', 'tag', 'isVisible', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.sessionId) &&
+        data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 &&
+        data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 150 &&
+        data.senderRole in ['Peserta', 'Dokter Spesialis', 'Dokter Umum', 'Residen', 'Moderator', 'Pembicara', 'Panitia'] &&
+        isValidOptionalString(data, 'senderInstitution', 200) &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 2000 &&
+        data.timestamp is string && data.timestamp.size() >= 1 && data.timestamp.size() <= 60 &&
+        data.isQuestion is bool &&
+        isValidOptionalString(data, 'targetSpeaker', 200) &&
+        data.upvotes is number && data.upvotes >= 0 && data.upvotes <= 100000 &&
+        data.upvotedBy is list && data.upvotedBy.size() <= 500 &&
+        (data.upvotedBy.size() == 0 || data.upvotedBy[0] is string) &&
+        (!( 'isAnswered' in data ) || data.isAnswered is bool) &&
+        (!( 'answer' in data ) || data.answer is map) &&
+        (!( 'replies' in data ) || (
+          data.replies is list &&
+          data.replies.size() <= 50 &&
+          (data.replies.size() == 0 || data.replies[0] is map)
+        )) &&
+        isValidOptionalString(data, 'tag', 80) &&
+        data.isVisible is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'role', 'createdAt', 'updatedAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 180 &&
+        isValidOptionalString(data, 'displayName', 180) &&
+        isValidOptionalString(data, 'photoURL', 500) &&
+        data.role in ['attendee', 'admin'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidParticipant(data) {
+      return data.keys().hasAll(['id', 'email', 'name', 'institution', 'role', 'badgeId', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'email', 'name', 'title', 'npaIdi', 'institution',
+          'role', 'phone', 'ticketType', 'badgeId', 'registeredAt', 'createdAt', 'updatedAt'
+        ]) &&
+        data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        isValidOptionalString(data, 'userId', 128) &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 180 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 180 &&
+        isValidOptionalString(data, 'title', 60) &&
+        isValidOptionalString(data, 'npaIdi', 80) &&
+        data.institution is string && data.institution.size() <= 200 &&
+        data.role in ['Dokter Spesialis', 'Dokter Umum', 'Residen', 'Mahasiswa Kedokteran', 'Panitia', 'Peserta'] &&
+        isValidOptionalString(data, 'phone', 50) &&
+        (!( 'ticketType' in data ) || data.ticketType in [
+          'Simposium Full Pass', 'Workshop Only', 'All-Access (Simposium + Workshop)', 'VIP / Speaker'
+        ]) &&
+        data.badgeId is string && data.badgeId.size() >= 1 && data.badgeId.size() <= 80 &&
+        isValidOptionalString(data, 'registeredAt', 40) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidBookmark(data) {
+      return data.keys().hasAll(['sessionId', 'userId', 'createdAt']) &&
+        data.keys().hasOnly(['sessionId', 'userId', 'createdAt']) &&
+        isValidId(data.sessionId) &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.createdAt is timestamp && data.createdAt == request.time;
+    }
+
+    function isValidAttendance(data) {
+      return data.keys().hasAll([
+          'id', 'userId', 'sessionId', 'sessionTitle', 'room',
+          'timestamp', 'skpPoints', 'participantName', 'badgeId', 'day', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'sessionId', 'sessionTitle', 'room',
+          'timestamp', 'skpPoints', 'participantName', 'badgeId', 'day', 'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        isValidId(data.sessionId) &&
+        data.sessionTitle is string && data.sessionTitle.size() >= 1 && data.sessionTitle.size() <= 300 &&
+        data.room is string && data.room.size() >= 1 && data.room.size() <= 120 &&
+        data.timestamp is string && data.timestamp.size() >= 1 && data.timestamp.size() <= 60 &&
+        data.skpPoints is number && data.skpPoints >= 0 && data.skpPoints <= 50 &&
+        data.participantName is string && data.participantName.size() >= 1 && data.participantName.size() <= 180 &&
+        data.badgeId is string && data.badgeId.size() >= 1 && data.badgeId.size() <= 80 &&
+        data.day is string && data.day.size() >= 1 && data.day.size() <= 80 &&
+        data.createdAt is timestamp && data.createdAt == request.time;
+    }
+
+    // =========================================================================
+    // CONNECTIVITY HEALTH CHECK DOC (/test/connection)
+    // =========================================================================
+    match /test/connection {
+      allow get: if request.time != null;
+    }
+
+    // =========================================================================
+    // ADMIN ALLOWLIST (/admins/{uid})
+    // =========================================================================
+    match /admins/{uid} {
+      allow get: if isValidId(uid) && (isOwner(uid) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isAdmin() && isValidId(uid) && isValidAdminUser(incoming()) && incoming().uid == uid && incoming().createdAt == request.time;
+      allow update: if isAdmin() && isValidId(uid) && isValidAdminUser(incoming()) && incoming().uid == existing().uid && incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(uid);
+    }
+
+    // =========================================================================
+    // PUBLIC CONFERENCE CATALOG COLLECTIONS (Non-PII, Admin-Managed)
+    // =========================================================================
+    match /event_info/{docId} {
+      allow get: if isValidId(docId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isAdmin();
+      allow create, update: if isAdmin() && isValidId(docId) && isValidEventInfo(incoming());
+      allow delete: if isAdmin() && isValidId(docId);
+    }
+
+    match /sessions/{sessionId} {
+      allow get: if isValidId(sessionId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isAdmin();
+      allow create, update: if isAdmin() && isValidId(sessionId) && isValidSession(incoming());
+      allow delete: if isAdmin() && isValidId(sessionId);
+
+      // Subcollection: Live Q&A & Discussion Chat per Session (Master Gate on parent session)
+      match /chat_messages/{messageId} {
+        allow get: if isValidId(sessionId) && isValidId(messageId) && (
+          (existing().isVisible == true && get(/databases/$(database)/documents/sessions/$(sessionId)).data.isPublished == true) ||
+          isAdmin()
+        );
+        allow list: if existing().isVisible == true || isAdmin();
+        allow create: if isVerifiedUser() &&
+          isValidId(sessionId) &&
+          isValidId(messageId) &&
+          isValidChatMessage(incoming()) &&
+          incoming().authorUid == request.auth.uid &&
+          incoming().sessionId == sessionId &&
+          incoming().id == messageId &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/sessions/$(sessionId));
+        allow update: if isVerifiedUser() &&
+          isValidId(sessionId) &&
+          isValidId(messageId) &&
+          isValidChatMessage(incoming()) &&
+          incoming().id == existing().id &&
+          incoming().sessionId == existing().sessionId &&
+          incoming().authorUid == existing().authorUid &&
+          incoming().createdAt == existing().createdAt && (
+            isAdmin() ||
+            (existing().authorUid == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['message', 'tag', 'updatedAt'])) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['upvotes', 'upvotedBy', 'updatedAt'])) ||
+            (incoming().diff(existing()).affectedKeys().hasOnly(['replies', 'updatedAt']))
+          );
+        allow delete: if isValidId(sessionId) && isValidId(messageId) && (
+          isAdmin() ||
+          (isVerifiedUser() && existing().authorUid == request.auth.uid)
+        );
+      }
+    }
+
+    match /speakers/{speakerId} {
+      allow get: if isValidId(speakerId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isAdmin();
+      allow create, update: if isAdmin() && isValidId(speakerId) && isValidSpeaker(incoming());
+      allow delete: if isAdmin() && isValidId(speakerId);
+    }
+
+    match /exhibitors/{exhibitorId} {
+      allow get: if isValidId(exhibitorId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isAdmin();
+      allow create, update: if isAdmin() && isValidId(exhibitorId) && isValidExhibitor(incoming());
+      allow delete: if isAdmin() && isValidId(exhibitorId);
+    }
+
+    match /rooms/{roomId} {
+      allow get: if isValidId(roomId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isAdmin();
+      allow create, update: if isAdmin() && isValidId(roomId) && isValidRoom(incoming());
+      allow delete: if isAdmin() && isValidId(roomId);
+    }
+
+    match /broadcasts/{broadcastId} {
+      allow get: if isValidId(broadcastId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isAdmin();
+      allow create, update: if isAdmin() && isValidId(broadcastId) && isValidBroadcast(incoming());
+      allow delete: if isAdmin() && isValidId(broadcastId);
+    }
+
+    // =========================================================================
+    // PII-ISOLATED USER & PARTICIPANT COLLECTIONS
+    // =========================================================================
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin() || (isSignedIn() && existing().uid == request.auth.uid);
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        isOwner(userId) &&
+        incoming().uid == userId &&
+        incoming().createdAt == request.time &&
+        (incoming().role == 'attendee' || isAdmin());
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(userId);
+
+      // Subcollection: Personal Bookmarks (Jadwal Saya)
+      match /bookmarks/{sessionId} {
+        allow get: if isValidId(userId) && isValidId(sessionId) && (isOwner(userId) || isAdmin());
+        allow list: if isAdmin() || (isSignedIn() && request.auth.uid == userId && existing().userId == request.auth.uid);
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(sessionId) &&
+          isOwner(userId) &&
+          isValidBookmark(incoming()) &&
+          incoming().userId == userId &&
+          incoming().sessionId == sessionId &&
+          exists(/databases/$(database)/documents/users/$(userId));
+        allow delete: if isValidId(userId) && isValidId(sessionId) && (isOwner(userId) || isAdmin());
+      }
+
+      // Subcollection: QR Attendance & SKP Credits
+      match /attendances/{attendanceId} {
+        allow get: if isValidId(userId) && isValidId(attendanceId) && (isOwner(userId) || isAdmin());
+        allow list: if isAdmin() || (isSignedIn() && request.auth.uid == userId && existing().userId == request.auth.uid);
+        allow create: if isVerifiedUser() &&
+          isValidId(userId) &&
+          isValidId(attendanceId) &&
+          isOwner(userId) &&
+          isValidAttendance(incoming()) &&
+          incoming().userId == userId &&
+          incoming().id == attendanceId &&
+          exists(/databases/$(database)/documents/users/$(userId));
+        allow delete: if isValidId(userId) && isValidId(attendanceId) && (isOwner(userId) || isAdmin());
+      }
+    }
+
+    match /participants/{participantId} {
+      allow get: if isValidId(participantId) && (
+        isAdmin() ||
+        (isVerifiedUser() && (existing().userId == request.auth.uid || existing().email == request.auth.token.email))
+      );
+      allow list: if isAdmin() || (
+        isVerifiedUser() &&
+        (existing().userId == request.auth.uid || existing().email == request.auth.token.email)
+      );
+      allow create: if isVerifiedUser() &&
+        isValidId(participantId) &&
+        isValidParticipant(incoming()) &&
+        incoming().createdAt == request.time && (
+          isAdmin() ||
+          (incoming().email == request.auth.token.email && (!('userId' in incoming()) || incoming().userId == request.auth.uid))
+        );
+      allow update: if isVerifiedUser() &&
+        isValidId(participantId) &&
+        isValidParticipant(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt && (
+          isAdmin() ||
+          (
+            (existing().userId == request.auth.uid || existing().email == request.auth.token.email) &&
+            incoming().email == existing().email &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'title', 'npaIdi', 'institution', 'role', 'phone', 'userId', 'updatedAt'])
+          )
+        );
+      allow delete: if isAdmin() && isValidId(participantId);
+    }
+  }
+}

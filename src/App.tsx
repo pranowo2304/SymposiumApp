@@ -358,9 +358,30 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
+
+    // Automatically propagate speaker photo/details update to sessions
+    const updatedSessions = sessions.map(session => ({
+      ...session,
+      speakers: (session.speakers || []).map(sessSp => {
+        const masterSp = newSpeakers.find(
+          m => m.id === sessSp.id || m.name.toLowerCase().trim() === sessSp.name.toLowerCase().trim()
+        );
+        return masterSp ? { ...sessSp, ...masterSp, photoUrl: masterSp.photoUrl || sessSp.photoUrl } : sessSp;
+      })
+    }));
+    setSessions(updatedSessions);
+    try {
+      localStorage.setItem('simposium_sessions_custom', JSON.stringify(updatedSessions));
+    } catch (e) {
+      console.error(e);
+    }
+
     if (isCloudAdmin) {
       syncSpeakersToFirestore(newSpeakers).catch((err) =>
         console.error('Firestore speakers sync failed:', err)
+      );
+      syncSessionsToFirestore(updatedSessions).catch((err) =>
+        console.error('Firestore sessions sync failed:', err)
       );
     }
   };
@@ -757,11 +778,21 @@ export default function App() {
     navigateToTab(tab);
   };
 
-  const workshopsCount = sessions.filter(
+  const displaySessions = sessions.map(session => ({
+    ...session,
+    speakers: (session.speakers || []).map(sessSp => {
+      const masterSp = speakers.find(
+        m => m.id === sessSp.id || m.name.toLowerCase().trim() === sessSp.name.toLowerCase().trim()
+      );
+      return masterSp ? { ...sessSp, ...masterSp, photoUrl: masterSp.photoUrl || sessSp.photoUrl } : sessSp;
+    })
+  }));
+
+  const workshopsCount = displaySessions.filter(
     s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.toLowerCase().includes('workshop')
   ).length;
 
-  const symposiumsCount = sessions.filter(
+  const symposiumsCount = displaySessions.filter(
     s => s.type !== 'Workshop Hands-On' && !s.category.includes('Workshop') && !s.day.toLowerCase().includes('workshop')
   ).length;
 
@@ -849,7 +880,7 @@ export default function App() {
     if (activeTab === 'workshop') {
       return (
         <WorkshopScheduleView
-          sessions={sessions}
+          sessions={displaySessions}
           onSelectSession={(s, tab) => handleOpenSession(s, tab || 'abstract')}
           onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
           onOpenVenue={() => navigateToTab('venue')}
@@ -871,7 +902,7 @@ export default function App() {
       return (
         <InteractiveVenueMap
           rooms={rooms}
-          sessions={sessions}
+          sessions={displaySessions}
           onSelectSession={(s) => handleOpenSession(s, 'abstract')}
           onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
           eventInfo={eventInfo}
@@ -882,7 +913,7 @@ export default function App() {
     // Default: 'symposium'
     return (
       <SymposiumScheduleView
-        sessions={sessions}
+        sessions={displaySessions}
         onSelectSession={(s, tab) => handleOpenSession(s, tab || 'abstract')}
         onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
         searchQuery={searchQuery}
@@ -983,7 +1014,7 @@ export default function App() {
         <AnimatePresence>
           {selectedSession && (
             <SessionDetailModal
-              session={selectedSession}
+              session={displaySessions.find(s => s.id === selectedSession.id) || selectedSession}
               onClose={() => setSelectedSession(null)}
               onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
               initialTab={selectedSessionTab}
@@ -997,7 +1028,7 @@ export default function App() {
           {selectedSpeaker && (
             <SpeakerModal
               speaker={selectedSpeaker}
-              allSessions={sessions}
+              allSessions={displaySessions}
               onClose={() => setSelectedSpeaker(null)}
               onSelectSession={(s, tab) => handleOpenSession(s, tab || 'abstract')}
             />

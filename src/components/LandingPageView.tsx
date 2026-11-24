@@ -8,7 +8,8 @@ import {
   Lock, 
   CalendarDays,
   Smartphone,
-  Download
+  Download,
+  QrCode
 } from 'lucide-react';
 import { MainTabType } from './MainMenuTabs';
 import { SymposiumInfo } from '../types';
@@ -20,6 +21,7 @@ interface LandingPageViewProps {
   onSelectTab: (tab: MainTabType) => void;
   onOpenAdmin: () => void;
   onOpenInstallModal?: () => void;
+  onOpenQRCodeModal?: () => void;
   speakerCount: number;
   workshopCount: number;
   symposiumCount: number;
@@ -32,6 +34,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   onSelectTab,
   onOpenAdmin,
   onOpenInstallModal,
+  onOpenQRCodeModal,
   speakerCount,
   workshopCount,
   symposiumCount,
@@ -126,6 +129,18 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       badgeBg: isInstalled ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-400 text-slate-950 font-black',
       actionText: 'Install ke HP',
       onClick: () => onOpenInstallModal && onOpenInstallModal()
+    },
+    {
+      id: 'app-qrcode' as any,
+      title: 'QR Code Aplikasi',
+      subtitle: 'Scan & Unduh Poster',
+      desc: 'Tampilkan, bagikan, atau unduh QR Code resmi untuk membuka aplikasi langsung dari kamera HP.',
+      icon: QrCode,
+      color: 'indigo',
+      gradient: 'from-sky-600 to-indigo-700',
+      badgeBg: 'bg-sky-100 text-sky-800',
+      actionText: 'Buka QR Aplikasi',
+      onClick: () => onOpenQRCodeModal && onOpenQRCodeModal()
     },
     {
       id: 'admin' as MainTabType,

@@ -38,7 +38,8 @@ import {
   RefreshCw,
   LogIn,
   Image as ImageIcon,
-  Link as LinkIcon
+  Link as LinkIcon,
+  QrCode
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { Speaker, Session, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification, AttendanceRecord, WorkshopRundownItem } from '../types';
@@ -85,6 +86,7 @@ interface AdminPageViewProps {
   isCloudSyncing?: boolean;
   onForceCloudSync?: () => void;
   onCloudAdminSignIn?: () => void;
+  onOpenQRCodeModal?: () => void;
 }
 
 // Sample doctor avatar presets for quick input convenience
@@ -124,7 +126,8 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
   isCloudAdmin = false,
   isCloudSyncing = false,
   onForceCloudSync,
-  onCloudAdminSignIn
+  onCloudAdminSignIn,
+  onOpenQRCodeModal
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>('analytics');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -896,6 +899,18 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
               )}
             </button>
+
+            {onOpenQRCodeModal && (
+              <button
+                type="button"
+                onClick={onOpenQRCodeModal}
+                className="px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                title="Buat, bagikan, dan unduh Poster QR Code aplikasi"
+              >
+                <QrCode className="w-3.5 h-3.5 text-sky-300" />
+                <span>QR Aplikasi</span>
+              </button>
+            )}
 
             <button
               onClick={() => handleOpenSessionImportExport('import', 'all')}

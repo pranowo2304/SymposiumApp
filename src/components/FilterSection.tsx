@@ -1,12 +1,10 @@
 import React from 'react';
-import { Filter, DoorOpen, Stethoscope, RotateCcw } from 'lucide-react';
-import { ROOMS_LIST, CATEGORIES_LIST } from '../data/symposiumData';
+import { Filter, DoorOpen, RotateCcw } from 'lucide-react';
+import { ROOMS_LIST } from '../data/symposiumData';
 
 interface FilterSectionProps {
   selectedRoom: string;
   onSelectRoom: (room: string) => void;
-  selectedCategory: string;
-  onSelectCategory: (cat: string) => void;
   onResetFilters: () => void;
   totalResults: number;
 }
@@ -14,12 +12,10 @@ interface FilterSectionProps {
 export const FilterSection: React.FC<FilterSectionProps> = ({
   selectedRoom,
   onSelectRoom,
-  selectedCategory,
-  onSelectCategory,
   onResetFilters,
   totalResults
 }) => {
-  const hasActiveFilter = selectedRoom !== 'all' || selectedCategory !== 'Semua Kategori';
+  const hasActiveFilter = selectedRoom !== 'all';
 
   return (
     <div className="bg-white/90 backdrop-blur border-b border-slate-200 py-2.5 px-3 sm:px-4 sticky top-[108px] z-20 shadow-xs">
@@ -46,23 +42,6 @@ export const FilterSection: React.FC<FilterSectionProps> = ({
               ))}
             </select>
             <DoorOpen className="w-3.5 h-3.5 absolute left-2.5 top-2 text-sky-600 pointer-events-none" />
-            <div className="absolute right-2 top-2.5 pointer-events-none text-slate-400 text-[10px]">▼</div>
-          </div>
-
-          {/* Specialty Category Filter Dropdown */}
-          <div className="relative flex-1 sm:flex-initial">
-            <select
-              value={selectedCategory}
-              onChange={(e) => onSelectCategory(e.target.value)}
-              className="w-full sm:w-auto appearance-none bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg py-1.5 pl-8 pr-7 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 transition-colors"
-            >
-              {CATEGORIES_LIST.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <Stethoscope className="w-3.5 h-3.5 absolute left-2.5 top-2 text-indigo-600 pointer-events-none" />
             <div className="absolute right-2 top-2.5 pointer-events-none text-slate-400 text-[10px]">▼</div>
           </div>
 

@@ -31,6 +31,7 @@ import { AdminPageView } from './components/AdminPageView';
 import { LandingPageView } from './components/LandingPageView';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { PWAInstallModal, OfflineIndicator } from './components/PWAInstallModal';
+import { AppQRCodeModal } from './components/AppQRCodeModal';
 import { playBroadcastChime } from './utils/broadcastSound';
 import { syncAppIconWithEventLogo } from './utils/appIconSync';
 import { SESSIONS_DATA, SPEAKERS_DATABASE, SYMPOSIUM_INFO } from './data/symposiumData';
@@ -82,8 +83,9 @@ export default function App() {
   // Mobile Frame Simulation Mode Toggle
   const [isMobileFrame, setIsMobileFrame] = useState(false);
 
-  // Mobile App PWA Installer Modal State
+  // Mobile App PWA Installer & App QR Code Modal State
   const [isInstallModalOpen, setIsInstallModalOpen] = useState<boolean>(false);
+  const [isQRCodeModalOpen, setIsQRCodeModalOpen] = useState<boolean>(false);
 
   // Participants Database (managed in Admin)
   const [participants, setParticipants] = useState<Participant[]>(() => getStoredParticipants());
@@ -812,6 +814,7 @@ export default function App() {
           onSelectTab={handleSelectTab}
           onOpenAdmin={handleOpenAdmin}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
+          onOpenQRCodeModal={() => setIsQRCodeModalOpen(true)}
           speakerCount={speakers.length}
           workshopCount={workshopsCount}
           symposiumCount={symposiumsCount}
@@ -872,6 +875,7 @@ export default function App() {
           isCloudSyncing={isCloudSyncing}
           onForceCloudSync={handleForceCloudSync}
           onCloudAdminSignIn={handleCloudAdminSignIn}
+          onOpenQRCodeModal={() => setIsQRCodeModalOpen(true)}
         />
       );
     }
@@ -960,6 +964,7 @@ export default function App() {
           onOpenAdmin={handleOpenAdmin}
           onAdminLogout={handleAdminLogout}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
+          onOpenQRCodeModal={() => setIsQRCodeModalOpen(true)}
           isMobileFrame={isMobileFrame}
           onToggleFrame={() => setIsMobileFrame(!isMobileFrame)}
           activeTab={activeTab}
@@ -1066,6 +1071,17 @@ export default function App() {
           eventTitle={eventInfo.title}
           eventInfo={eventInfo}
         />
+
+        {/* Application QR Code Generator Modal */}
+        <AnimatePresence>
+          {isQRCodeModalOpen && (
+            <AppQRCodeModal
+              isOpen={isQRCodeModalOpen}
+              onClose={() => setIsQRCodeModalOpen(false)}
+              eventInfo={eventInfo}
+            />
+          )}
+        </AnimatePresence>
 
         {/* Toast Notification */}
         {toastMessage && (

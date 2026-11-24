@@ -66,7 +66,6 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
   });
 
   const [selectedRoom, setSelectedRoom] = useState<string>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string>('Semua Kategori');
 
   const daySessions = activeDay === 'all' 
     ? sourceSessions 
@@ -75,11 +74,6 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
   const filteredSessions = daySessions.filter(session => {
     // Room Filter
     if (selectedRoom !== 'all' && session.room !== selectedRoom) {
-      return false;
-    }
-
-    // Category Filter
-    if (selectedCategory !== 'Semua Kategori' && !session.category.includes(selectedCategory)) {
       return false;
     }
 
@@ -177,11 +171,8 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
       <FilterSection
         selectedRoom={selectedRoom}
         onSelectRoom={setSelectedRoom}
-        selectedCategory={selectedCategory}
-        onSelectCategory={setSelectedCategory}
         onResetFilters={() => {
           setSelectedRoom('all');
-          setSelectedCategory('Semua Kategori');
           onSearchChange('');
         }}
         totalResults={filteredSessions.length}
@@ -195,12 +186,11 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
             Tidak Ada Sesi Ditemukan
           </h3>
           <p className="text-xs text-slate-500 max-w-xs mx-auto">
-            Cobalah merubah pencarian kata kunci atau menyetel ulang filter ruangan dan kategori.
+            Cobalah merubah pencarian kata kunci atau menyetel ulang filter ruangan.
           </p>
           <button
             onClick={() => {
               setSelectedRoom('all');
-              setSelectedCategory('Semua Kategori');
               onSearchChange('');
             }}
             className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition-colors"

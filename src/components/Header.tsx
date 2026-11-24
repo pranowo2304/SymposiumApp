@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Smartphone, Monitor, Sliders, Lock, Download, LogOut } from 'lucide-react';
+import { Search, Smartphone, Monitor, Sliders, Lock, Download, LogOut, QrCode } from 'lucide-react';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { SymposiumInfo } from '../types';
 import { getThemePalette } from '../utils/themeColors';
@@ -9,6 +9,7 @@ interface HeaderProps {
   onOpenAdmin: () => void;
   onAdminLogout?: () => void;
   onOpenInstallModal?: () => void;
+  onOpenQRCodeModal?: () => void;
   isMobileFrame: boolean;
   onToggleFrame: () => void;
   activeTab: string;
@@ -23,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdmin,
   onAdminLogout,
   onOpenInstallModal,
+  onOpenQRCodeModal,
   isMobileFrame,
   onToggleFrame,
   activeTab,
@@ -120,6 +122,20 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Search className="w-4 h-4" />
             </button>
+
+            {/* App QR Code Button */}
+            {onOpenQRCodeModal && (
+              <button
+                id="header-btn-qrcode"
+                type="button"
+                onClick={onOpenQRCodeModal}
+                title="QR Code Aplikasi (Bagikan / Download Poster QR)"
+                className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 shadow-2xs shrink-0 cursor-pointer"
+              >
+                <QrCode className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+                <span className="hidden lg:inline">QR App</span>
+              </button>
+            )}
 
             {/* Install Aplikasi Mobile (PWA) Button */}
             {!isInstalled && (

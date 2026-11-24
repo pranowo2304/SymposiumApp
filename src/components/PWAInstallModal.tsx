@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Zap
 } from 'lucide-react';
+import QRCode from 'qrcode';
 import { usePWAInstall, useOnlineStatus } from '../hooks/usePWAInstall';
 import { SymposiumInfo } from '../types';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
@@ -56,7 +57,27 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [installStatus, setInstallStatus] = useState<'idle' | 'installing' | 'installed'>('idle');
 
+  const [qrImageUrl, setQrImageUrl] = useState<string>('');
+
   const appUrl = typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '';
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    QRCode.toDataURL(appUrl || 'https://aistudio.google.com', {
+      width: 360,
+      margin: 2,
+      errorCorrectionLevel: 'H',
+      color: { dark: '#0f172a', light: '#ffffff' },
+    })
+      .then((url) => {
+        if (active) setQrImageUrl(url);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isOpen, appUrl]);
 
   useEffect(() => {
     if (platform === 'ios') {
@@ -84,10 +105,6 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
-
-  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=12&data=${encodeURIComponent(
-    appUrl || 'https://aistudio.google.com'
-  )}`;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -414,11 +431,17 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
           {activeTab === 'qr' && (
             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 flex flex-col sm:flex-row items-center gap-5">
               <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm shrink-0">
-                <img
-                  src={qrImageUrl}
-                  alt="QR Code Install Aplikasi Mobile"
-                  className="w-36 h-36 sm:w-40 sm:h-40 object-contain rounded-lg"
-                />
+                {qrImageUrl ? (
+                  <img
+                    src={qrImageUrl}
+                    alt="QR Code Install Aplikasi Mobile"
+                    className="w-36 h-36 sm:w-40 sm:h-40 object-contain rounded-lg"
+                  />
+                ) : (
+                  <div className="w-36 h-36 sm:w-40 sm:h-40 flex items-center justify-center bg-slate-100 rounded-lg text-[11px] text-slate-400">
+                    Memuat QR...
+                  </div>
+                )}
               </div>
               <div className="space-y-2.5 text-center sm:text-left">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-emerald-100 text-emerald-900 text-[11px] font-bold">

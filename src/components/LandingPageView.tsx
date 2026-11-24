@@ -188,17 +188,15 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           </div>
 
           {/* Dates, Venue & Current Identified Participant */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-t border-white/10 pt-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/40 flex items-center gap-1.5 shadow-2xs">
-                <CalendarDays className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>{info.dateString || `${info.dates.day1} - ${info.dates.day2.split(', ')[1] || info.dates.day2}`}</span>
-              </span>
+          <div className="flex flex-wrap items-center justify-center gap-2 border-t border-white/10 pt-2">
+            <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 text-xs font-bold border border-amber-500/40 flex items-center gap-1.5 shadow-2xs">
+              <CalendarDays className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span>{info.dateString || `${info.dates.day1} - ${info.dates.day2.split(', ')[1] || info.dates.day2}`}</span>
+            </span>
 
-              <div className="flex items-center gap-1.5 text-xs text-slate-200 font-medium bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
-                <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                <span>{info.location}</span>
-              </div>
+            <div className="flex items-center gap-1.5 text-xs text-slate-200 font-medium bg-white/5 px-2.5 py-1 rounded-lg border border-white/10">
+              <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+              <span>{info.location}</span>
             </div>
           </div>
         </div>

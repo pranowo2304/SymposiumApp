@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { motion } from 'motion/react';
+import { motion, LayoutGroup } from 'motion/react';
 import { 
   Users, 
   Calendar, 
@@ -103,69 +103,84 @@ export const MainMenuTabs: React.FC<MainMenuTabsProps> = ({
   ];
 
   return (
-    <div className="bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
+    <motion.div
+      initial={{ opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      className="bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs"
+    >
       <div className="max-w-6xl mx-auto px-2 sm:px-4">
-        <nav 
-          ref={navRef}
-          id="main-navigation-menu"
-          aria-label="Menu Utama Simposium"
-          className="flex items-center overflow-x-auto no-scrollbar space-x-1 sm:space-x-1.5 py-1.5"
-        >
-          {menuItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = activeTab === item.id;
+        <LayoutGroup id="main-menu-tabs">
+          <nav 
+            ref={navRef}
+            id="main-navigation-menu"
+            aria-label="Menu Utama Simposium"
+            className="flex items-center overflow-x-auto no-scrollbar space-x-1 sm:space-x-1.5 py-1.5"
+          >
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
 
-            return (
-              <motion.button
-                key={item.id}
-                id={`menu-tab-${item.id}`}
-                onClick={() => onSelectTab(item.id)}
-                whileTap={{ scale: 0.96 }}
-                whileHover={{ y: -1 }}
-                className={`relative py-1.5 px-2.5 sm:px-3 rounded-lg text-xs font-bold transition-colors flex items-center justify-center gap-1.5 border shrink-0 cursor-pointer overflow-hidden ${
-                  isActive
-                    ? 'text-white border-transparent shadow-xs'
-                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                {isActive && (
-                  <motion.div
-                    layoutId="mainMenuActiveTabPill"
-                    style={{ backgroundColor: palette.primaryHex }}
-                    className="absolute inset-0 rounded-lg shadow-xs"
-                    transition={{ type: 'spring', stiffness: 380, damping: 32, mass: 0.8 }}
-                  />
-                )}
+              return (
+                <motion.button
+                  key={item.id}
+                  id={`menu-tab-${item.id}`}
+                  onClick={() => onSelectTab(item.id)}
+                  whileTap={{ scale: 0.97 }}
+                  whileHover={{ y: -0.5 }}
+                  transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                  className={`relative py-1.5 px-2.5 sm:px-3 rounded-lg text-xs font-bold transition-all duration-500 ease-out flex items-center justify-center gap-1.5 border shrink-0 cursor-pointer overflow-hidden ${
+                    isActive
+                      ? 'text-white border-transparent shadow-sm'
+                      : 'bg-slate-50/90 hover:bg-slate-100 text-slate-700 border-slate-200 hover:border-slate-300'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="mainMenuActiveTabPill"
+                      initial={{ opacity: 0.5 }}
+                      animate={{ opacity: 1 }}
+                      style={{ backgroundColor: palette.primaryHex }}
+                      className="absolute inset-0 rounded-lg shadow-xs"
+                      transition={{
+                        layout: { type: 'spring', stiffness: 220, damping: 28, mass: 1 },
+                        opacity: { duration: 0.38, ease: [0.16, 1, 0.3, 1] }
+                      }}
+                    />
+                  )}
 
-                <Icon className={`relative z-10 w-3.5 h-3.5 shrink-0 transition-colors ${
-                  isActive 
-                    ? 'text-amber-200' 
-                    : item.id === 'workshop' 
-                      ? 'text-emerald-600' 
-                      : item.id === 'symposium' 
-                        ? 'text-blue-600' 
-                        : item.id === 'pameran' 
-                          ? 'text-amber-600' 
-                          : item.id === 'venue' 
-                            ? 'text-rose-600' 
-                            : 'text-indigo-600'
-                }`} />
-                <span className="relative z-10 whitespace-nowrap tracking-tight">{item.label}</span>
+                  <Icon className={`relative z-10 w-3.5 h-3.5 shrink-0 transition-all duration-500 ease-out ${
+                    isActive 
+                      ? 'text-amber-200 scale-105' 
+                      : item.id === 'workshop' 
+                        ? 'text-emerald-600' 
+                        : item.id === 'symposium' 
+                          ? 'text-blue-600' 
+                          : item.id === 'pameran' 
+                            ? 'text-amber-600' 
+                            : item.id === 'venue' 
+                              ? 'text-rose-600' 
+                              : 'text-indigo-600'
+                  }`} />
+                  <span className="relative z-10 whitespace-nowrap tracking-tight transition-colors duration-500 ease-out">
+                    {item.label}
+                  </span>
 
-                <span className={`relative z-10 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold whitespace-nowrap leading-none transition-colors ${
-                  isActive
-                    ? 'bg-white/20 text-white'
-                    : item.badgeHighlight 
-                      ? 'bg-emerald-100 text-emerald-800' 
-                      : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {item.badge}
-                </span>
-              </motion.button>
-            );
-          })}
-        </nav>
+                  <span className={`relative z-10 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold whitespace-nowrap leading-none transition-all duration-500 ease-out ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : item.badgeHighlight 
+                        ? 'bg-emerald-100 text-emerald-800' 
+                        : 'bg-slate-200 text-slate-700'
+                  }`}>
+                    {item.badge}
+                  </span>
+                </motion.button>
+              );
+            })}
+          </nav>
+        </LayoutGroup>
       </div>
-    </div>
+    </motion.div>
   );
 };

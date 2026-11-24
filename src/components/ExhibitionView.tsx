@@ -53,7 +53,7 @@ export const ExhibitionView: React.FC<ExhibitionViewProps> = ({
   });
 
   return (
-    <div className="max-w-5xl mx-auto p-3 sm:p-5 space-y-5 animate-in fade-in duration-200">
+    <div className="max-w-5xl mx-auto p-3 sm:p-5 space-y-5">
       
       {/* Top Hero Banner */}
       <div className="bg-gradient-to-r from-amber-950 via-slate-900 to-amber-900 text-white rounded-2xl p-4 sm:p-6 border border-amber-800/60 shadow-md">

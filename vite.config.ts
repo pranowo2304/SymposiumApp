@@ -34,8 +34,8 @@ export default defineConfig(() => {
         ],
         manifest: {
           id: basePath,
-          name: 'KIVNAHK IV & MUNAS V ADHPHKI 2026',
-          short_name: 'KIVNAHK IV',
+          name: 'MUNAS 5 ADHPHKI 2026',
+          short_name: 'MUNAS 5 ADHPHKI 2026',
           description:
             'Aplikasi Mobile Resmi Konferensi Ilmiah Veteriner Nasional Hewan Kecil IV & Musyawarah Nasional V ADHPHKI 2026',
           theme_color: '#065f46',

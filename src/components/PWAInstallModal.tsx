@@ -48,7 +48,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
 }) => {
   const info = eventInfo || SYMPOSIUM_INFO;
   const displayTitle = info.title || eventTitle || SYMPOSIUM_INFO.title;
-  const shortAppName = displayTitle.length > 14 ? displayTitle.split('&')[0].trim().slice(0, 14) : displayTitle;
+  const shortAppName = 'MUNAS 5 ADHPHKI 2026';
   const appLogoUrl = info.logoUrl || SYMPOSIUM_INFO.logoUrl || './pwa-192x192.png';
 
   const { isInstallable, isInstalled, isIframe, platform, installApp } = usePWAInstall();
@@ -154,7 +154,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
                   Aplikasi Sudah Terinstall di Perangkat Ini!
                 </h3>
                 <p className="text-xs text-emerald-800 mt-0.5 leading-relaxed">
-                  Anda dapat membuka aplikasi <strong>KIVNAHK IV</strong> langsung dari ikon di layar utama (Home Screen) HP atau menu aplikasi perangkat Anda.
+                  Anda dapat membuka aplikasi <strong>MUNAS 5 ADHPHKI 2026</strong> langsung dari ikon di layar utama (Home Screen) HP atau menu aplikasi perangkat Anda.
                 </p>
               </div>
             </div>
@@ -223,7 +223,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <span className="text-[10px] font-bold text-slate-700 mt-1 max-w-[72px] truncate">
+                <span className="text-[10px] font-bold text-slate-700 mt-1 max-w-[110px] text-center leading-tight">
                   {shortAppName}
                 </span>
               </div>
@@ -338,7 +338,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
                       Pilih &ldquo;Install Aplikasi&rdquo; atau &ldquo;Tambahkan ke Layar Utama&rdquo;
                     </p>
                     <p className="text-slate-600 mt-0.5">
-                      Konfirmasi dengan mengetuk <strong>Install</strong>. Ikon aplikasi <strong>KIVNAHK IV</strong> akan langsung terpasang di HP Anda seperti aplikasi native!
+                      Konfirmasi dengan mengetuk <strong>Install</strong>. Ikon aplikasi <strong>MUNAS 5 ADHPHKI 2026</strong> akan langsung terpasang di HP Anda seperti aplikasi native!
                     </p>
                   </div>
                 </li>
@@ -402,7 +402,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
                       Ketuk &ldquo;Tambah&rdquo; (Add) di Pojok Kanan Atas
                     </p>
                     <p className="text-slate-600 mt-0.5">
-                      Aplikasi <strong>KIVNAHK IV</strong> akan muncul di Home Screen iPhone Anda dan berjalan layar penuh tanpa bar browser.
+                      Aplikasi <strong>MUNAS 5 ADHPHKI 2026</strong> akan muncul di Home Screen iPhone Anda dan berjalan layar penuh tanpa bar browser.
                     </p>
                   </div>
                 </li>
@@ -429,7 +429,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
                   Buka & Install Langsung di Smartphone Anda
                 </h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Arahkan kamera HP Android atau iPhone Anda ke QR Code di samping untuk membuka aplikasi mobile <strong>KIVNAHK IV</strong> dan memasangnya ke layar utama HP.
+                  Arahkan kamera HP Android atau iPhone Anda ke QR Code di samping untuk membuka aplikasi mobile <strong>MUNAS 5 ADHPHKI 2026</strong> dan memasangnya ke layar utama HP.
                 </p>
                 <div className="pt-1 flex flex-wrap items-center justify-center sm:justify-start gap-2">
                   <button

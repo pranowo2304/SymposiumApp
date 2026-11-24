@@ -24,7 +24,7 @@ export const SpeakerDirectory: React.FC<SpeakerDirectoryProps> = ({
   );
 
   return (
-    <div className="max-w-5xl mx-auto p-3 sm:p-5 space-y-5 animate-in fade-in duration-200">
+    <div className="max-w-5xl mx-auto p-3 sm:p-5 space-y-5">
       
       {/* Search & Header */}
       <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">

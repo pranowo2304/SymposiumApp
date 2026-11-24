@@ -80,7 +80,7 @@ export const WorkshopScheduleView: React.FC<WorkshopScheduleViewProps> = ({
   });
 
   return (
-    <div className="max-w-6xl mx-auto p-2.5 sm:p-4 space-y-3 animate-in fade-in duration-200">
+    <div className="max-w-6xl mx-auto p-2.5 sm:p-4 space-y-3">
       
       {/* Top Banner - Like Symposium Schedule */}
       <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-950 text-white rounded-xl p-3 sm:p-4 border border-emerald-800/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">

@@ -51,22 +51,30 @@ const TAB_ORDER: MainTabType[] = TAB_HASH_ORDER;
 
 const tabSlideVariants = {
   enter: (direction: number) => ({
-    x: direction > 0 ? 56 : -56,
+    x: direction > 0 ? 8 : -8,
+    y: 4,
     opacity: 0,
-    scale: 0.985,
-    filter: 'blur(4px)',
+    scale: 0.997,
   }),
   center: {
     x: 0,
+    y: 0,
     opacity: 1,
     scale: 1,
-    filter: 'blur(0px)',
+    transition: {
+      duration: 0.42,
+      ease: [0.16, 1, 0.3, 1] as const,
+    },
   },
   exit: (direction: number) => ({
-    x: direction > 0 ? -56 : 56,
+    x: direction > 0 ? -8 : 8,
+    y: -3,
     opacity: 0,
-    scale: 0.985,
-    filter: 'blur(4px)',
+    scale: 0.998,
+    transition: {
+      duration: 0.2,
+      ease: [0.4, 0, 0.2, 1] as const,
+    },
   }),
 };
 
@@ -967,10 +975,10 @@ export default function App() {
           {activeTab !== 'home' && activeTab !== 'admin' && (
             <motion.div
               key="main-menu-tabs-bar"
-              initial={{ opacity: 0, y: -10 }}
+              initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
               className="sticky top-[48px] sm:top-[52px] z-20"
             >
               <MainMenuTabs
@@ -987,7 +995,7 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* Main Content Area with Directional Framer Motion Slide Transitions */}
+        {/* Main Content Area with Ultra-Soft Fade-In Transition */}
         <main className="flex-1 pb-24 sm:pb-28 overflow-x-hidden">
           <AnimatePresence mode="wait" custom={tabDirection} initial={false}>
             <motion.div
@@ -997,12 +1005,6 @@ export default function App() {
               initial="enter"
               animate="center"
               exit="exit"
-              transition={{
-                x: { type: 'spring', stiffness: 340, damping: 32, mass: 0.85 },
-                opacity: { duration: 0.2, ease: 'easeOut' },
-                scale: { duration: 0.24, ease: [0.22, 1, 0.36, 1] },
-                filter: { duration: 0.2, ease: 'easeOut' },
-              }}
               className="will-change-transform"
             >
               {renderMainContent()}

@@ -114,7 +114,7 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
       : activeDay;
 
   return (
-    <div className="max-w-6xl mx-auto p-2.5 sm:p-4 space-y-3 animate-in fade-in duration-200">
+    <div className="max-w-6xl mx-auto p-2.5 sm:p-4 space-y-3">
       
       {/* Day Selector Banner - Compact */}
       <div className={`bg-gradient-to-r ${palette.headerFrom} to-slate-950 text-white rounded-xl p-3 sm:p-4 shadow-xs border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-3`}>

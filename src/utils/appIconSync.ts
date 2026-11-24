@@ -156,8 +156,8 @@ export function syncAppIconWithEventLogo(eventInfo?: SymposiumInfo): void {
   const palette = getThemePalette(info);
   const rawLogoUrl = info.logoUrl || SYMPOSIUM_INFO.logoUrl || './pwa-512x512.png';
   const resolvedLogoUrl = resolveAbsoluteUrl(rawLogoUrl);
-  const appTitle = 'MUNAS 5 PBDHI';
-  const shortName = 'MUNAS 5 PBDHI';
+  const appTitle = 'MUNAS 5 ADHPHKI 2026';
+  const shortName = 'MUNAS 5 ADHPHKI 2026';
   const themeHex = palette.primaryHex || '#065f46';
 
   // 1. Update theme-color and apple-mobile-web-app-title meta tags

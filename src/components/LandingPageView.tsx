@@ -142,7 +142,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   ];
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-4 py-3 sm:py-4 space-y-4 animate-in fade-in duration-200">
+    <div className="max-w-6xl mx-auto px-3 sm:px-4 py-3 sm:py-4 space-y-4">
       
       {/* Event Header Showcase Banner with dynamic palette matching event logo */}
       <section className={`bg-gradient-to-br ${palette.headerFrom} to-slate-950 text-white rounded-2xl p-4 sm:p-5 shadow-lg border border-white/10 relative overflow-hidden`}>

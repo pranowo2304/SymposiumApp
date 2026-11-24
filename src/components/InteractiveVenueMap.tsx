@@ -375,6 +375,20 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     return list.length > 0 ? [...list, 'Semua'] : ['Ground Floor', 'Lantai 1', 'Semua'];
   }, [currentRooms]);
 
+  const availableVenueDays = useMemo(() => {
+    const orderPriority = ['Pre-Congress', 'Hari I', 'Hari II', 'Hari III'];
+    const uniqueDays = Array.from(new Set<string>(currentSessions.map(s => s.day).filter(Boolean)));
+    const sortedDays = uniqueDays.sort((a: string, b: string) => {
+      const idxA = orderPriority.indexOf(a);
+      const idxB = orderPriority.indexOf(b);
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      if (idxA !== -1) return -1;
+      if (idxB !== -1) return 1;
+      return a.localeCompare(b);
+    });
+    return sortedDays;
+  }, [currentSessions]);
+
   const savedUIState = useMemo(() => loadVenueMapUIState(), []);
 
   // Floor Selection & Smooth Transition Animation States
@@ -686,10 +700,11 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
   // Determine which rooms currently have an ongoing session
   const roomOngoingSessionsMap = useMemo(() => {
     const map = new Map<string, Session>();
+    const effectiveDay = selectedDayFilter === 'Semua' ? 'Hari I' : selectedDayFilter;
 
     currentSessions.forEach(session => {
       // Check day filter
-      if (selectedDayFilter !== 'Semua' && session.day !== selectedDayFilter) {
+      if (session.day !== effectiveDay) {
         return;
       }
 
@@ -979,8 +994,16 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
             </h4>
 
             {/* Day Filter inside info box */}
-            <div className="flex items-center space-x-1 text-[10px] font-bold">
-              {(['Semua', 'Hari I', 'Hari II'] as const).map(d => (
+            <div className="flex items-center flex-wrap gap-1 text-[10px] font-bold">
+              <button
+                onClick={() => setSelectedDayFilter('Semua')}
+                className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
+                  selectedDayFilter === 'Semua' ? 'bg-sky-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Semua
+              </button>
+              {availableVenueDays.map(d => (
                 <button
                   key={d}
                   onClick={() => setSelectedDayFilter(d)}

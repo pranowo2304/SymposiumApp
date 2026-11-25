@@ -92,7 +92,11 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
     venueAddress: eventInfo.venueAddress || '',
     city: eventInfo.city || 'Jakarta Pusat, DKI Jakarta',
     dates: {
-      workshop: eventInfo.dates?.workshop || 'Sabtu, 28 November 2026',
+      workshop:
+        !eventInfo.dates?.workshop || eventInfo.dates.workshop === 'Sabtu, 28 November 2026'
+          ? '28 November 2026'
+          : eventInfo.dates.workshop,
+      munasSymposium: eventInfo.dates?.munasSymposium || '29 November 2026 - 1 Desember 2026',
       day1: eventInfo.dates?.day1 || 'Minggu, 29 November 2026',
       day2: eventInfo.dates?.day2 || 'Senin, 30 November 2026',
       day3: eventInfo.dates?.day3 || 'Selasa, 1 Desember 2026',
@@ -182,7 +186,8 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
       venueAddress: SYMPOSIUM_INFO.venueAddress,
       city: SYMPOSIUM_INFO.city || 'D.I. Yogyakarta',
       dates: {
-        workshop: SYMPOSIUM_INFO.dates?.workshop || 'Sabtu, 28 November 2026',
+        workshop: SYMPOSIUM_INFO.dates?.workshop || '28 November 2026',
+        munasSymposium: SYMPOSIUM_INFO.dates?.munasSymposium || '29 November 2026 - 1 Desember 2026',
         day1: SYMPOSIUM_INFO.dates.day1,
         day2: SYMPOSIUM_INFO.dates.day2,
         day3: SYMPOSIUM_INFO.dates?.day3 || 'Selasa, 1 Desember 2026',
@@ -345,15 +350,21 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
 
             {/* Event Details Badges (Date & Venue) */}
             <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0 border-t md:border-t-0 md:border-l border-slate-800 pt-3 md:pt-0 md:pl-5">
-              <div className="flex items-center gap-2 text-xs text-slate-300">
-                <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <div className="flex items-start gap-2 text-xs text-slate-300">
+                <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0 mt-0.5">
                   <Calendar className="w-4 h-4" />
                 </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 block">Tanggal Acara:</span>
-                  <span className="font-bold text-amber-300">
+                <div className="space-y-0.5">
+                  <span className="text-[10px] text-slate-400 block">Tanggal Pelaksanaan:</span>
+                  <div className="font-bold text-amber-300">
                     {formData.dateString || `${formData.dates.day1} - ${formData.dates.day2}`}
-                  </span>
+                  </div>
+                  <div className="text-[11px] text-emerald-300 font-semibold">
+                    Workshop: {formData.dates.workshop || '28 November 2026'}
+                  </div>
+                  <div className="text-[11px] text-sky-300 font-semibold">
+                    Munas &amp; Symposium: {formData.dates.munasSymposium || '29 November 2026 - 1 Desember 2026'}
+                  </div>
                 </div>
               </div>
 
@@ -471,98 +482,124 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
             </div>
             <div>
               <h3 className="text-sm font-extrabold text-white">2. Tanggal Pelaksanaan Event</h3>
-              <p className="text-[11px] text-slate-400">Jadwal hari pertama, hari kedua, dan rentang tanggal acara.</p>
+              <p className="text-[11px] text-slate-400">Jadwal pelaksanaan Workshop, Munas &amp; Symposium, serta rincian harian.</p>
             </div>
           </div>
 
           <div className="space-y-3.5 text-xs">
-            {/* Rentang Tanggal Acara */}
+            {/* Tanggal Workshop */}
+            <div>
+              <label className="block font-bold text-emerald-300 mb-1">
+                Workshop <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.dates.workshop || ''}
+                onChange={(e) => handleDateNestedChange('workshop', e.target.value)}
+                placeholder="28 November 2026"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-bold placeholder:text-slate-500 focus:outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            {/* Tanggal Munas & Symposium */}
+            <div>
+              <label className="block font-bold text-sky-300 mb-1">
+                Munas &amp; Symposium <span className="text-rose-400">*</span>
+              </label>
+              <input
+                type="text"
+                required
+                value={formData.dates.munasSymposium || ''}
+                onChange={(e) => handleDateNestedChange('munasSymposium', e.target.value)}
+                placeholder="29 November 2026 - 1 Desember 2026"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-bold placeholder:text-slate-500 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+
+            {/* Rentang Tanggal Ringkas */}
             <div>
               <label className="block font-bold text-slate-300 mb-1">
-                Rentang Tanggal Ringkas (Tampil di Banner & Header) <span className="text-rose-400">*</span>
+                Rentang Tanggal Ringkas (Banner &amp; Header) <span className="text-rose-400">*</span>
               </label>
               <input
                 type="text"
                 required
                 value={formData.dateString}
                 onChange={(e) => handleChange('dateString', e.target.value)}
-                placeholder="Contoh: 15 - 16 Agustus 2026"
+                placeholder="28 November - 1 Desember 2026"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-white font-bold placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
               />
             </div>
 
-            {/* Tanggal Hari I */}
-            <div>
-              <label className="block font-bold text-slate-300 mb-1">
-                Tanggal Hari I (Simposium & Workshop) <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.dates.day1}
-                onChange={(e) => handleDateNestedChange('day1', e.target.value)}
-                placeholder="Contoh: Sabtu, 15 Agustus 2026"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            {/* Tanggal Hari II */}
-            <div>
-              <label className="block font-bold text-slate-300 mb-1">
-                Tanggal Hari II (Simposium & Plenary Closing) <span className="text-rose-400">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                value={formData.dates.day2}
-                onChange={(e) => handleDateNestedChange('day2', e.target.value)}
-                placeholder="Contoh: Minggu, 16 Agustus 2026"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
-              />
-            </div>
-
-            {/* Preset Tanggal Cepat */}
-            <div className="pt-2">
-              <span className="block text-[11px] font-bold text-slate-400 mb-1.5">
-                Pilihan Cepat Format Tanggal:
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      dateString: '15 - 16 Agustus 2026',
-                      dates: {
-                        day1: 'Sabtu, 15 Agustus 2026',
-                        day2: 'Minggu, 16 Agustus 2026'
-                      }
-                    }));
-                    setHasChanges(true);
-                  }}
-                  className="p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-[11px] font-semibold text-left transition-colors"
-                >
-                  Sabtu-Minggu, 15-16 Ags 2026
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      dateString: '24 - 25 Oktober 2026',
-                      dates: {
-                        day1: 'Sabtu, 24 Oktober 2026',
-                        day2: 'Minggu, 25 Oktober 2026'
-                      }
-                    }));
-                    setHasChanges(true);
-                  }}
-                  className="p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-[11px] font-semibold text-left transition-colors"
-                >
-                  Sabtu-Minggu, 24-25 Okt 2026
-                </button>
+            {/* Rincian Hari I, II, III */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              <div>
+                <label className="block font-bold text-slate-400 mb-1 text-[11px]">
+                  Hari I
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.dates.day1}
+                  onChange={(e) => handleDateNestedChange('day1', e.target.value)}
+                  placeholder="Minggu, 29 November 2026"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 text-[11px]"
+                />
               </div>
+
+              <div>
+                <label className="block font-bold text-slate-400 mb-1 text-[11px]">
+                  Hari II
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.dates.day2}
+                  onChange={(e) => handleDateNestedChange('day2', e.target.value)}
+                  placeholder="Senin, 30 November 2026"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-400 mb-1 text-[11px]">
+                  Hari III
+                </label>
+                <input
+                  type="text"
+                  value={formData.dates.day3 || ''}
+                  onChange={(e) => handleDateNestedChange('day3', e.target.value)}
+                  placeholder="Selasa, 1 Desember 2026"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 text-[11px]"
+                />
+              </div>
+            </div>
+
+            {/* Preset Tanggal Resmi Event */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setFormData(prev => ({
+                    ...prev,
+                    dateString: '28 November - 1 Desember 2026',
+                    dates: {
+                      workshop: '28 November 2026',
+                      munasSymposium: '29 November 2026 - 1 Desember 2026',
+                      day1: 'Minggu, 29 November 2026',
+                      day2: 'Senin, 30 November 2026',
+                      day3: 'Selasa, 1 Desember 2026'
+                    }
+                  }));
+                  setHasChanges(true);
+                  onShowToast('Tanggal standar KIVNAHK IV & MUNAS V ADHPHKI diterapkan.');
+                }}
+                className="w-full p-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-[11px] font-semibold text-left transition-colors flex items-center justify-between gap-2 cursor-pointer"
+              >
+                <span>Gunakan Jadwal Resmi: Workshop (28 Nov 2026) &amp; Munas/Symposium (29 Nov - 1 Des 2026)</span>
+                <span className="text-emerald-400 font-bold shrink-0">Terapkan</span>
+              </button>
             </div>
 
           </div>

@@ -123,8 +123,8 @@ export const Header: React.FC<HeaderProps> = ({
               <Search className="w-4 h-4" />
             </button>
 
-            {/* App QR Code Button */}
-            {onOpenQRCodeModal && (
+            {/* App QR Code Button (Admin Only) */}
+            {isAdminAuthenticated && onOpenQRCodeModal && (
               <button
                 id="header-btn-qrcode"
                 type="button"

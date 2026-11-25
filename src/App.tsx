@@ -328,7 +328,20 @@ export default function App() {
         if (parsed.title?.includes('SIMPOSIUM NASIONAL KEDOKTERAN')) {
           return SYMPOSIUM_INFO;
         }
-        return { ...SYMPOSIUM_INFO, ...parsed };
+        return {
+          ...SYMPOSIUM_INFO,
+          ...parsed,
+          dates: {
+            ...SYMPOSIUM_INFO.dates,
+            ...(parsed.dates || {}),
+            workshop:
+              !parsed.dates?.workshop || parsed.dates.workshop === 'Sabtu, 28 November 2026'
+                ? '28 November 2026'
+                : parsed.dates.workshop,
+            munasSymposium:
+              parsed.dates?.munasSymposium || '29 November 2026 - 1 Desember 2026',
+          },
+        };
       }
       return SYMPOSIUM_INFO;
     } catch (e) {
@@ -572,9 +585,23 @@ export default function App() {
   useEffect(() => {
     const unsubscribeCatalog = subscribePublicCatalog({
       onEventInfo: (info) => {
-        setEventInfo(info);
+        const mergedInfo: SymposiumInfo = {
+          ...SYMPOSIUM_INFO,
+          ...info,
+          dates: {
+            ...SYMPOSIUM_INFO.dates,
+            ...(info.dates || {}),
+            workshop:
+              !info.dates?.workshop || info.dates.workshop === 'Sabtu, 28 November 2026'
+                ? '28 November 2026'
+                : info.dates.workshop,
+            munasSymposium:
+              info.dates?.munasSymposium || '29 November 2026 - 1 Desember 2026',
+          },
+        };
+        setEventInfo(mergedInfo);
         try {
-          localStorage.setItem('simposium_event_info_custom', JSON.stringify(info));
+          localStorage.setItem('simposium_event_info_custom', JSON.stringify(mergedInfo));
         } catch {}
       },
       onSessions: (cloudSessions) => {
@@ -766,6 +793,7 @@ export default function App() {
 
   const handleAdminLogout = () => {
     setIsAdminAuthenticated(false);
+    setIsQRCodeModalOpen(false);
     if (isCloudAdmin) {
       setIsCloudAdmin(false);
       signOutFirebase().catch(() => {});
@@ -814,7 +842,7 @@ export default function App() {
           onSelectTab={handleSelectTab}
           onOpenAdmin={handleOpenAdmin}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
-          onOpenQRCodeModal={() => setIsQRCodeModalOpen(true)}
+          onOpenQRCodeModal={isAdminAuthenticated ? () => setIsQRCodeModalOpen(true) : undefined}
           speakerCount={speakers.length}
           workshopCount={workshopsCount}
           symposiumCount={symposiumsCount}
@@ -964,7 +992,7 @@ export default function App() {
           onOpenAdmin={handleOpenAdmin}
           onAdminLogout={handleAdminLogout}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
-          onOpenQRCodeModal={() => setIsQRCodeModalOpen(true)}
+          onOpenQRCodeModal={isAdminAuthenticated ? () => setIsQRCodeModalOpen(true) : undefined}
           isMobileFrame={isMobileFrame}
           onToggleFrame={() => setIsMobileFrame(!isMobileFrame)}
           activeTab={activeTab}
@@ -1072,9 +1100,9 @@ export default function App() {
           eventInfo={eventInfo}
         />
 
-        {/* Application QR Code Generator Modal */}
+        {/* Application QR Code Generator Modal (Admin Only) */}
         <AnimatePresence>
-          {isQRCodeModalOpen && (
+          {isQRCodeModalOpen && isAdminAuthenticated && (
             <AppQRCodeModal
               isOpen={isQRCodeModalOpen}
               onClose={() => setIsQRCodeModalOpen(false)}

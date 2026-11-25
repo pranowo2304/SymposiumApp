@@ -53,6 +53,7 @@ export interface SymposiumInfo {
   city?: string;
   dates: {
     workshop?: string;
+    munasSymposium?: string;
     day1: string;
     day2: string;
     day3?: string;

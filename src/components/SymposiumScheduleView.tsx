@@ -102,7 +102,7 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
 
   const currentDayInfo = availableDays.find(d => d.key === activeDay);
   const bannerTitle = activeDay === 'all'
-    ? `Seluruh Jadwal Acara (${info.dateString || '28 November - 1 Desember 2026'})`
+    ? `Seluruh Jadwal Munas & Symposium (${info.dates?.munasSymposium || '29 November 2026 - 1 Desember 2026'})`
     : currentDayInfo?.dateString
       ? `${activeDay}: ${currentDayInfo.dateString}`
       : activeDay;

@@ -9,7 +9,8 @@ export const MUNAS_ADHPHKI_EVENT_INFO: SymposiumInfo = {
   city: "D.I. Yogyakarta",
   dateString: "28 November - 1 Desember 2026",
   dates: {
-    workshop: "Sabtu, 28 November 2026",
+    workshop: "28 November 2026",
+    munasSymposium: "29 November 2026 - 1 Desember 2026",
     day1: "Minggu, 29 November 2026",
     day2: "Senin, 30 November 2026",
     day3: "Selasa, 1 Desember 2026"

@@ -130,18 +130,22 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       actionText: 'Install ke HP',
       onClick: () => onOpenInstallModal && onOpenInstallModal()
     },
-    {
-      id: 'app-qrcode' as any,
-      title: 'QR Code Aplikasi',
-      subtitle: 'Scan & Unduh Poster',
-      desc: 'Tampilkan, bagikan, atau unduh QR Code resmi untuk membuka aplikasi langsung dari kamera HP.',
-      icon: QrCode,
-      color: 'indigo',
-      gradient: 'from-sky-600 to-indigo-700',
-      badgeBg: 'bg-sky-100 text-sky-800',
-      actionText: 'Buka QR Aplikasi',
-      onClick: () => onOpenQRCodeModal && onOpenQRCodeModal()
-    },
+    ...(isAdminAuthenticated && onOpenQRCodeModal
+      ? [
+          {
+            id: 'app-qrcode' as any,
+            title: 'QR Code Aplikasi',
+            subtitle: 'Scan & Unduh Poster',
+            desc: 'Tampilkan, bagikan, atau unduh QR Code resmi untuk membuka aplikasi langsung dari kamera HP.',
+            icon: QrCode,
+            color: 'indigo',
+            gradient: 'from-sky-600 to-indigo-700',
+            badgeBg: 'bg-sky-100 text-sky-800',
+            actionText: 'Buka QR Aplikasi',
+            onClick: () => onOpenQRCodeModal()
+          }
+        ]
+      : []),
     {
       id: 'admin' as MainTabType,
       title: 'Admin Page',

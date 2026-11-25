@@ -108,7 +108,7 @@ service cloud.firestore {
           'id', 'day', 'date', 'startTime', 'endTime', 'timeString',
           'title', 'category', 'type', 'room', 'floor', 'roomColor',
           'moderator', 'speakers', 'abstract', 'keyTakeaways', 'capacity',
-          'rundown', 'presentationMaterials', 'isPublished', 'updatedAt'
+          'rundown', 'pdfUrl', 'presentationMaterials', 'isPublished', 'updatedAt'
         ]) &&
         data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
         data.day is string && data.day.size() >= 1 && data.day.size() <= 80 &&
@@ -136,6 +136,7 @@ service cloud.firestore {
           data.rundown.size() <= 50 &&
           (data.rundown.size() == 0 || data.rundown[0] is map)
         )) &&
+        isValidOptionalString(data, 'pdfUrl', 1000) &&
         (!( 'presentationMaterials' in data ) || (
           data.presentationMaterials is list &&
           data.presentationMaterials.size() <= 20 &&

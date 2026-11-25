@@ -59,7 +59,25 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
   const [pdfError, setPdfError] = useState<string | null>(null);
 
   const palette = getThemePalette(eventInfo);
-  const materials: PresentationMaterial[] = session?.presentationMaterials || [];
+  const uploadedMaterials: PresentationMaterial[] = session?.presentationMaterials || [];
+  const directPdfUrl = typeof session?.pdfUrl === 'string' ? session.pdfUrl.trim() : '';
+  const materials: PresentationMaterial[] =
+    uploadedMaterials.length > 0
+      ? uploadedMaterials
+      : directPdfUrl
+      ? [
+          {
+            id: `${session?.id || 'session'}_pdf`,
+            title: session?.title ? `Materi: ${session.title}` : 'Materi Presentasi',
+            fileName: 'materi-presentasi.pdf',
+            fileSize: 0,
+            mimeType: 'application/pdf',
+            chunkCount: 0,
+            externalUrl: directPdfUrl,
+            uploadedAt: '',
+          },
+        ]
+      : [];
 
   useEffect(() => {
     setActiveTab(initialTab);
@@ -428,16 +446,93 @@ ${takeawaysList}
           {activeTab === 'materials' && (
             <div className="space-y-4 animate-in fade-in duration-150">
               {materials.length === 0 ? (
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center space-y-2.5">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
-                    <FileText className="w-6 h-6" />
+                <div className="bg-slate-50/90 border border-dashed border-slate-300 rounded-2xl px-6 py-10 text-center flex flex-col items-center justify-center space-y-3">
+                  {/* Ilustrasi Sederhana Dokumen Materi Presentasi */}
+                  <svg
+                    viewBox="0 0 120 96"
+                    className="w-28 h-22 text-slate-300"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    aria-hidden="true"
+                  >
+                    <rect
+                      x="18"
+                      y="10"
+                      width="84"
+                      height="64"
+                      rx="10"
+                      fill="#ffffff"
+                      stroke="#cbd5e1"
+                      strokeWidth="2.5"
+                    />
+                    <rect
+                      x="28"
+                      y="22"
+                      width="36"
+                      height="6"
+                      rx="3"
+                      fill="#e2e8f0"
+                    />
+                    <rect
+                      x="28"
+                      y="34"
+                      width="64"
+                      height="4"
+                      rx="2"
+                      fill="#e2e8f0"
+                    />
+                    <rect
+                      x="28"
+                      y="44"
+                      width="52"
+                      height="4"
+                      rx="2"
+                      fill="#e2e8f0"
+                    />
+                    <rect
+                      x="28"
+                      y="54"
+                      width="40"
+                      height="4"
+                      rx="2"
+                      fill="#f1f5f9"
+                    />
+                    <line
+                      x1="60"
+                      y1="74"
+                      x2="60"
+                      y2="86"
+                      stroke="#cbd5e1"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1="44"
+                      y1="86"
+                      x2="76"
+                      y2="86"
+                      stroke="#cbd5e1"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                    />
+                    <circle cx="94" cy="20" r="14" fill="#eef2ff" stroke="#c7d2fe" strokeWidth="2" />
+                    <path
+                      d="M89 20h10M94 15v10"
+                      stroke="#94a3b8"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      transform="rotate(45 94 20)"
+                    />
+                  </svg>
+
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-bold text-slate-800">
+                      Materi belum tersedia
+                    </h3>
+                    <p className="text-xs text-slate-500 max-w-sm mx-auto leading-relaxed">
+                      File materi presentasi (PDF) untuk sesi ini belum diunggah oleh panitia atau pembicara. Silakan periksa kembali secara berkala.
+                    </p>
                   </div>
-                  <h3 className="text-sm font-bold text-slate-800">
-                    Belum Ada Materi Presentasi (PDF)
-                  </h3>
-                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
-                    File materi presentasi (slide/handout PDF) untuk sesi ini belum diunggah oleh panitia atau pembicara. Silakan periksa kembali secara berkala.
-                  </p>
                 </div>
               ) : (
                 <>

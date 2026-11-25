@@ -54,6 +54,7 @@ export interface Session {
   keyTakeaways?: string[];
   capacity?: number;
   rundown?: WorkshopRundownItem[];
+  pdfUrl?: string | null;
   presentationMaterials?: PresentationMaterial[];
 }
 

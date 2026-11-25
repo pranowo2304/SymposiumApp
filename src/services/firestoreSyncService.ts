@@ -225,6 +225,7 @@ function sanitizeSessionPayload(session: Session) {
           ? Math.max(0, Math.min(10000, Math.round(session.capacity)))
           : 100,
       rundown,
+      pdfUrl: clampStr(session.pdfUrl, 1000),
       presentationMaterials,
       isPublished: true,
       updatedAt: serverTimestamp(),

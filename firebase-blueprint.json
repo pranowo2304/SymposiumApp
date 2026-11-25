@@ -56,6 +56,7 @@
         "keyTakeaways": { "type": "array" },
         "capacity": { "type": "number" },
         "rundown": { "type": "array" },
+        "pdfUrl": { "type": "string", "maxLength": 1000 },
         "presentationMaterials": { "type": "array" },
         "isPublished": { "type": "boolean" },
         "updatedAt": { "type": "string", "format": "date-time" }

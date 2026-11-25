@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import {
@@ -183,6 +184,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   isLoading = false,
   error = null,
 }) => {
+  const viewerRootRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(640);
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -192,8 +194,90 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [renderMode, setRenderMode] = useState<'canvas' | 'iframe'>('canvas');
   const [layoutMode, setLayoutMode] = useState<'scroll' | 'single'>('scroll');
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState<boolean>(false);
   const [isParsingPdf, setIsParsingPdf] = useState<boolean>(false);
   const [parseError, setParseError] = useState<string | null>(null);
+
+  const isFullscreenActive = isBrowserFullscreen || isExpanded;
+
+  // Sync native browser Fullscreen API state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const docAny = document as Document & { webkitFullscreenElement?: Element | null };
+      const fsEl = document.fullscreenElement || docAny.webkitFullscreenElement || null;
+      const active = Boolean(viewerRootRef.current && fsEl === viewerRootRef.current);
+      setIsBrowserFullscreen(active);
+      if (!active) {
+        setIsExpanded(false);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isExpanded && !isBrowserFullscreen) {
+        setIsExpanded(false);
+      }
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isExpanded, isBrowserFullscreen]);
+
+  const handleToggleFullscreen = async () => {
+    const el = viewerRootRef.current as
+      | (HTMLDivElement & { webkitRequestFullscreen?: () => Promise<void> | void })
+      | null;
+    const docAny = document as Document & {
+      webkitFullscreenElement?: Element | null;
+      webkitExitFullscreen?: () => Promise<void> | void;
+    };
+
+    const activeNativeEl = document.fullscreenElement || docAny.webkitFullscreenElement || null;
+
+    if (activeNativeEl) {
+      try {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (docAny.webkitExitFullscreen) {
+          await docAny.webkitExitFullscreen();
+        }
+      } catch {
+        // ignore exit error
+      }
+      setIsBrowserFullscreen(false);
+      setIsExpanded(false);
+      return;
+    }
+
+    if (isExpanded) {
+      setIsExpanded(false);
+      return;
+    }
+
+    if (el) {
+      try {
+        if (el.requestFullscreen) {
+          await el.requestFullscreen();
+          setIsBrowserFullscreen(true);
+          return;
+        }
+        if (el.webkitRequestFullscreen) {
+          await el.webkitRequestFullscreen();
+          setIsBrowserFullscreen(true);
+          return;
+        }
+      } catch {
+        // Fallback when nested iframe blocks native Fullscreen API
+      }
+    }
+
+    setIsExpanded(true);
+  };
 
   // Track container width cleanly for sharp responsive fit-to-width rendering
   useEffect(() => {
@@ -214,7 +298,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     }
     window.addEventListener('resize', updateWidth);
     return () => window.removeEventListener('resize', updateWidth);
-  }, [isExpanded, renderMode, layoutMode]);
+  }, [isFullscreenActive, renderMode, layoutMode]);
 
   // Load PDF document via PDF.js from the stored Blob / Blob URL
   useEffect(() => {
@@ -291,10 +375,13 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
 
   const viewerBody = (
     <div
-      className={`flex flex-col border border-slate-200 rounded-xl overflow-hidden bg-slate-100 ${
-        isExpanded
-          ? 'fixed inset-2 sm:inset-4 z-[60] shadow-2xl bg-slate-900/95 border-slate-700'
-          : 'w-full'
+      ref={viewerRootRef}
+      className={`flex flex-col border overflow-hidden ${
+        isBrowserFullscreen
+          ? 'w-screen h-screen bg-slate-950 border-slate-800 rounded-none'
+          : isExpanded
+          ? 'fixed inset-0 z-[70] shadow-2xl bg-slate-950 border-slate-800 rounded-none'
+          : 'w-full border-slate-200 rounded-xl bg-slate-100'
       }`}
     >
       {/* Interactive PDF Viewer Toolbar */}
@@ -425,17 +512,31 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             </button>
           )}
 
-          {/* Expand Full Viewer */}
+          {/* Dedicated Browser View Fullscreen Button */}
           <button
             type="button"
-            onClick={() => setIsExpanded((v) => !v)}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white cursor-pointer"
-            title={isExpanded ? 'Kecilkan tampilan' : 'Perbesar layar viewer'}
+            onClick={handleToggleFullscreen}
+            className={`px-2.5 py-1 rounded-lg border text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ${
+              isFullscreenActive
+                ? 'bg-amber-500 hover:bg-amber-400 border-amber-400 text-slate-950'
+                : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-100'
+            }`}
+            title={
+              isFullscreenActive
+                ? 'Keluar dari mode layar penuh'
+                : 'Buka PDF dalam mode layar penuh browser (Fullscreen)'
+            }
           >
-            {isExpanded ? (
-              <Minimize2 className="w-3.5 h-3.5 text-amber-300" />
+            {isFullscreenActive ? (
+              <>
+                <Minimize2 className="w-3.5 h-3.5" />
+                <span>Keluar Fullscreen</span>
+              </>
             ) : (
-              <Maximize2 className="w-3.5 h-3.5" />
+              <>
+                <Maximize2 className="w-3.5 h-3.5 text-amber-300" />
+                <span>View Fullscreen</span>
+              </>
             )}
           </button>
 
@@ -469,7 +570,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       <div
         ref={scrollContainerRef}
         className={`relative overflow-y-auto bg-slate-200/80 ${
-          isExpanded ? 'flex-1 p-3 sm:p-5' : 'h-[52vh] min-h-[340px] p-2 sm:p-3'
+          isFullscreenActive ? 'flex-1 p-3 sm:p-5' : 'h-[52vh] min-h-[340px] p-2 sm:p-3'
         }`}
       >
         {isLoading || isParsingPdf ? (
@@ -568,6 +669,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
       </div>
     </div>
   );
+
+  if (isExpanded && !isBrowserFullscreen && typeof document !== 'undefined') {
+    return createPortal(viewerBody, document.body);
+  }
 
   return viewerBody;
 };

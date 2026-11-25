@@ -31,6 +31,7 @@ import type {
 } from '../types';
 import {
   base64ToPdfBlob,
+  getPdfMaterialLocal,
   savePdfMaterialLocal,
   splitBase64IntoChunks,
 } from '../utils/presentationPdfStorage';
@@ -1244,6 +1245,26 @@ export async function deletePdfMaterialFromFirestore(materialId: string): Promis
     await commitBatchOps(deleteOps, materialPath);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, materialPath);
+  }
+}
+
+export async function syncLocalPdfMaterialsToFirestore(sessions: Session[]): Promise<void> {
+  for (const session of sessions) {
+    const materials = session.presentationMaterials || [];
+    for (const mat of materials) {
+      if (!mat.id || mat.externalUrl || mat.chunkCount <= 0) continue;
+      const safeMatId = toFirestoreDocId(mat.id, 'mat');
+      try {
+        const existingSnap = await getDoc(doc(db, 'presentation_materials', safeMatId));
+        if (existingSnap.exists()) continue;
+        const localRec = await getPdfMaterialLocal(mat.id);
+        if (localRec?.base64Data) {
+          await uploadPdfMaterialToFirestore(session.id, mat, localRec.base64Data);
+        }
+      } catch (err) {
+        console.warn('syncLocalPdfMaterialsToFirestore warning:', err);
+      }
+    }
   }
 }
 

@@ -14,7 +14,6 @@ import {
   AlertCircle,
   Download,
   Eye,
-  Loader2,
   FileSpreadsheet,
   ExternalLink,
 } from 'lucide-react';
@@ -28,6 +27,7 @@ import {
   getPdfMaterialLocal,
 } from '../utils/presentationPdfStorage';
 import { fetchPdfMaterialBlobFromFirestore } from '../services/firestoreSyncService';
+import { PdfViewer } from './PdfViewer';
 
 export type SessionDetailTab = 'abstract' | 'materials' | 'speakers';
 
@@ -49,6 +49,7 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<SessionDetailTab>(initialTab);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [blobPreviewUrl, setBlobPreviewUrl] = useState<string | null>(null);
   const [externalUrls, setExternalUrls] = useState<{
     previewUrl: string;
@@ -83,6 +84,7 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
 
     setPdfError(null);
     setExternalUrls(null);
+    setPdfBlob(null);
     setBlobPreviewUrl(null);
 
     if (activeTab !== 'materials' || !activeMaterial) {
@@ -114,12 +116,13 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
 
         if (!blob) {
           setPdfError(
-            'File PDF belum tersedia di perangkat ini. Pastikan perangkat terhubung ke internet untuk mengunduh dari server.'
+            'File PDF belum tersedia di perangkat ini atau belum disinkronkan ke Cloud oleh Admin.'
           );
           return;
         }
 
         objectUrlToRevoke = URL.createObjectURL(blob);
+        setPdfBlob(blob);
         setBlobPreviewUrl(objectUrlToRevoke);
       } catch (err: any) {
         if (!cancelled) {
@@ -202,7 +205,6 @@ ${takeawaysList}
     window.open(waUrl, '_blank');
   };
 
-  const activePreviewUrl = blobPreviewUrl || externalUrls?.previewUrl || null;
   const activeDownloadUrl = blobPreviewUrl || externalUrls?.downloadUrl || null;
 
   return (
@@ -507,66 +509,48 @@ ${takeawaysList}
                     </div>
                   </div>
 
-                  {/* Active PDF Preview & Download Bar */}
+                  {/* Active PDF Viewer & Download Bar */}
                   {activeMaterial && (
                     <div className="space-y-2.5 pt-2 border-t border-slate-200">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 block">
-                            Pratinjau Dokumen PDF
-                          </span>
-                          <p className="text-xs font-bold text-slate-900 truncate">
-                            {activeMaterial.title}
-                          </p>
-                        </div>
+                      <PdfViewer
+                        blob={pdfBlob}
+                        blobUrl={blobPreviewUrl}
+                        externalPreviewUrl={externalUrls?.previewUrl || null}
+                        externalDownloadUrl={externalUrls?.downloadUrl || null}
+                        title={activeMaterial.title}
+                        fileName={activeMaterial.fileName}
+                        isLoading={isLoadingPdf}
+                        error={pdfError}
+                      />
 
-                        {activeDownloadUrl && (
-                          <div className="flex items-center gap-2 shrink-0">
-                            {activeMaterial.externalUrl ? (
-                              <a
-                                href={activeDownloadUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                <span>Buka / Unduh PDF</span>
-                              </a>
-                            ) : (
-                              <a
-                                href={activeDownloadUrl}
-                                download={activeMaterial.fileName}
-                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Unduh PDF</span>
-                              </a>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {isLoadingPdf ? (
-                        <div className="h-[48vh] bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-2 text-slate-500">
-                          <Loader2 className="w-7 h-7 animate-spin text-indigo-600" />
-                          <span className="text-xs font-semibold">
-                            Memuat file PDF materi presentasi...
+                      {activeDownloadUrl && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                          <span className="truncate">
+                            File: <strong className="text-slate-700">{activeMaterial.fileName}</strong>
+                            {activeMaterial.speakerName ? ` • ${activeMaterial.speakerName}` : ''}
                           </span>
+                          {activeMaterial.externalUrl ? (
+                            <a
+                              href={activeDownloadUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Buka / Unduh PDF</span>
+                            </a>
+                          ) : (
+                            <a
+                              href={activeDownloadUrl}
+                              download={activeMaterial.fileName}
+                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                              <span>Unduh File PDF</span>
+                            </a>
+                          )}
                         </div>
-                      ) : pdfError ? (
-                        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
-                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                          <span>{pdfError}</span>
-                        </div>
-                      ) : activePreviewUrl ? (
-                        <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-inner">
-                          <iframe
-                            src={activePreviewUrl}
-                            title={activeMaterial.title}
-                            className="w-full h-[52vh] min-h-[340px] bg-white"
-                          />
-                        </div>
-                      ) : null}
+                      )}
                     </div>
                   )}
                 </>

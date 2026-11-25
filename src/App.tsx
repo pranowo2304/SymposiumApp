@@ -15,6 +15,7 @@ import {
   saveBroadcastToFirestore,
   clearBroadcastInFirestore,
   syncParticipantsToFirestore,
+  syncLocalPdfMaterialsToFirestore,
 } from './services/firestoreSyncService';
 import { Header } from './components/Header';
 import { MainMenuTabs, MainTabType } from './components/MainMenuTabs';
@@ -688,6 +689,7 @@ export default function App() {
       await Promise.all([
         saveEventInfoToFirestore(eventInfo, firebaseUser.uid),
         syncSessionsToFirestore(sessions),
+        syncLocalPdfMaterialsToFirestore(sessions),
         syncSpeakersToFirestore(speakers),
         syncExhibitorsToFirestore(exhibitors),
         syncRoomsToFirestore(rooms),

@@ -1,14 +1,41 @@
-import React, { useState } from 'react';
-import { X, Clock, MapPin, User, FileText, Check, Share2, Copy, Sparkles, Building, BookOpen, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  Clock,
+  MapPin,
+  User,
+  FileText,
+  Check,
+  Share2,
+  Copy,
+  Sparkles,
+  Building,
+  BookOpen,
+  AlertCircle,
+  Download,
+  Eye,
+  Loader2,
+  FileSpreadsheet,
+  ExternalLink,
+} from 'lucide-react';
 import { motion } from 'motion/react';
-import { Session, Speaker, SymposiumInfo } from '../types';
+import { Session, Speaker, SymposiumInfo, PresentationMaterial } from '../types';
 import { getThemePalette } from '../utils/themeColors';
+import {
+  base64ToPdfBlob,
+  buildExternalPdfUrls,
+  formatPdfFileSize,
+  getPdfMaterialLocal,
+} from '../utils/presentationPdfStorage';
+import { fetchPdfMaterialBlobFromFirestore } from '../services/firestoreSyncService';
+
+export type SessionDetailTab = 'abstract' | 'materials' | 'speakers';
 
 interface SessionDetailModalProps {
   session: Session | null;
   onClose: () => void;
   onSelectSpeaker: (speaker: Speaker) => void;
-  initialTab?: 'abstract' | 'speakers';
+  initialTab?: SessionDetailTab;
   eventInfo?: SymposiumInfo;
 }
 
@@ -20,8 +47,100 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
   eventInfo,
 }) => {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'abstract' | 'speakers'>(initialTab);
+  const [activeTab, setActiveTab] = useState<SessionDetailTab>(initialTab);
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
+  const [blobPreviewUrl, setBlobPreviewUrl] = useState<string | null>(null);
+  const [externalUrls, setExternalUrls] = useState<{
+    previewUrl: string;
+    downloadUrl: string;
+  } | null>(null);
+  const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
   const palette = getThemePalette(eventInfo);
+  const materials: PresentationMaterial[] = session?.presentationMaterials || [];
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab, session?.id]);
+
+  useEffect(() => {
+    if (materials.length > 0) {
+      setSelectedMaterialId((prev) =>
+        prev && materials.some((m) => m.id === prev) ? prev : materials[0].id
+      );
+    } else {
+      setSelectedMaterialId(null);
+    }
+  }, [session?.id, materials.length]);
+
+  const activeMaterial =
+    materials.find((m) => m.id === selectedMaterialId) || materials[0] || null;
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrlToRevoke: string | null = null;
+
+    setPdfError(null);
+    setExternalUrls(null);
+    setBlobPreviewUrl(null);
+
+    if (activeTab !== 'materials' || !activeMaterial) {
+      return () => {};
+    }
+
+    if (activeMaterial.externalUrl) {
+      setExternalUrls(buildExternalPdfUrls(activeMaterial.externalUrl));
+      return () => {};
+    }
+
+    const loadPdfBlob = async () => {
+      setIsLoadingPdf(true);
+      try {
+        let blob: Blob | null = null;
+        const localRec = await getPdfMaterialLocal(activeMaterial.id);
+        if (localRec?.base64Data) {
+          blob = base64ToPdfBlob(localRec.base64Data, activeMaterial.mimeType);
+        } else if (activeMaterial.chunkCount > 0) {
+          blob = await fetchPdfMaterialBlobFromFirestore(
+            activeMaterial.id,
+            activeMaterial.chunkCount,
+            activeMaterial.fileName,
+            activeMaterial.mimeType
+          );
+        }
+
+        if (cancelled) return;
+
+        if (!blob) {
+          setPdfError(
+            'File PDF belum tersedia di perangkat ini. Pastikan perangkat terhubung ke internet untuk mengunduh dari server.'
+          );
+          return;
+        }
+
+        objectUrlToRevoke = URL.createObjectURL(blob);
+        setBlobPreviewUrl(objectUrlToRevoke);
+      } catch (err: any) {
+        if (!cancelled) {
+          setPdfError(err?.message || 'Gagal memuat pratinjau file PDF.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingPdf(false);
+        }
+      }
+    };
+
+    loadPdfBlob();
+
+    return () => {
+      cancelled = true;
+      if (objectUrlToRevoke) {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      }
+    };
+  }, [activeTab, activeMaterial?.id, activeMaterial?.externalUrl, activeMaterial?.chunkCount]);
 
   if (!session) return null;
 
@@ -33,13 +152,13 @@ export const SessionDetailModal: React.FC<SessionDetailModalProps> = ({
 👤 Moderator: ${session.moderator}
 
 *Pembicara:*
-${session.speakers.map(s => `- ${s.name} (${s.institution})`).join('\n')}
+${session.speakers.map((s) => `- ${s.name} (${s.institution})`).join('\n')}
 
 *Abstrak Latar Belakang:*
 ${session.abstract.background}
 
 *Poin Penting Klinis:*
-${session.keyTakeaways?.map(k => `• ${k}`).join('\n') || ''}
+${session.keyTakeaways?.map((k) => `• ${k}`).join('\n') || ''}
     `.trim();
 
     navigator.clipboard.writeText(text);
@@ -49,10 +168,16 @@ ${session.keyTakeaways?.map(k => `• ${k}`).join('\n') || ''}
 
   const handleShareWhatsApp = () => {
     const eventTitle = eventInfo?.title || 'Simposium Nasional Kedokteran 2026';
-    const speakersList = session.speakers.map(s => `• *${s.name}* (${s.institution})`).join('\n');
-    const takeawaysList = session.keyTakeaways && session.keyTakeaways.length > 0
-      ? `\n💡 *Poin Utama:*\n${session.keyTakeaways.slice(0, 2).map(k => `✓ ${k}`).join('\n')}`
-      : '';
+    const speakersList = session.speakers
+      .map((s) => `• *${s.name}* (${s.institution})`)
+      .join('\n');
+    const takeawaysList =
+      session.keyTakeaways && session.keyTakeaways.length > 0
+        ? `\n💡 *Poin Utama:*\n${session.keyTakeaways
+            .slice(0, 2)
+            .map((k) => `✓ ${k}`)
+            .join('\n')}`
+        : '';
 
     const waText = `🏥 *${eventTitle.toUpperCase()}*
 
@@ -77,8 +202,11 @@ ${takeawaysList}
     window.open(waUrl, '_blank');
   };
 
+  const activePreviewUrl = blobPreviewUrl || externalUrls?.previewUrl || null;
+  const activeDownloadUrl = blobPreviewUrl || externalUrls?.downloadUrl || null;
+
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -86,22 +214,22 @@ ${takeawaysList}
       className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/70 backdrop-blur-xs"
       onClick={onClose}
     >
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
-        transition={{ duration: 0.2, ease: "easeOut" }}
-        className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200"
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Top Header Bar */}
-        <div 
+        <div
           className="text-white p-4 sm:p-5 relative border-b border-white/10"
           style={{ backgroundColor: palette.primaryHex }}
         >
           <button
             onClick={onClose}
-            className="absolute right-4 top-4 w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 flex items-center justify-center text-white/90 hover:text-white transition-colors"
+            className="absolute right-4 top-4 w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 flex items-center justify-center text-white/90 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -129,38 +257,62 @@ ${takeawaysList}
         </div>
 
         {/* Navigation Tabs Inside Modal */}
-        <div className="flex border-b border-slate-200 bg-slate-50 px-4 pt-2 space-x-4 text-xs font-bold">
+        <div className="flex border-b border-slate-200 bg-slate-50 px-3 sm:px-4 pt-2 space-x-2 sm:space-x-4 text-xs font-bold overflow-x-auto no-scrollbar">
           <button
+            type="button"
             onClick={() => setActiveTab('abstract')}
-            className={`pb-2.5 px-2 border-b-2 flex items-center space-x-1.5 transition-colors ${
+            className={`pb-2.5 px-2 border-b-2 flex items-center space-x-1.5 whitespace-nowrap transition-colors cursor-pointer ${
               activeTab === 'abstract'
                 ? 'border-blue-600 text-blue-600 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <FileText className="w-4 h-4" />
-            <span>Abstrak & Ringkasan Materi</span>
+            <FileText className="w-4 h-4 shrink-0" />
+            <span>Abstrak &amp; Ringkasan Materi</span>
           </button>
 
           <button
+            type="button"
+            onClick={() => setActiveTab('materials')}
+            className={`pb-2.5 px-2 border-b-2 flex items-center space-x-1.5 whitespace-nowrap transition-colors cursor-pointer ${
+              activeTab === 'materials'
+                ? 'border-blue-600 text-blue-600 font-bold'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4 shrink-0" />
+            <span>Materi Presentasi</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                activeTab === 'materials'
+                  ? 'bg-blue-100 text-blue-700'
+                  : materials.length > 0
+                  ? 'bg-indigo-100 text-indigo-700'
+                  : 'bg-slate-200 text-slate-500'
+              }`}
+            >
+              {materials.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setActiveTab('speakers')}
-            className={`pb-2.5 px-2 border-b-2 flex items-center space-x-1.5 transition-colors ${
+            className={`pb-2.5 px-2 border-b-2 flex items-center space-x-1.5 whitespace-nowrap transition-colors cursor-pointer ${
               activeTab === 'speakers'
                 ? 'border-blue-600 text-blue-600 font-bold'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <User className="w-4 h-4" />
-            <span>Pembicara & Biografi ({session.speakers.length})</span>
+            <User className="w-4 h-4 shrink-0" />
+            <span>Pembicara &amp; Biografi ({session.speakers.length})</span>
           </button>
         </div>
 
         {/* Modal Content Body */}
         <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1 text-slate-700 text-sm">
-
           {activeTab === 'abstract' && (
             <div className="space-y-5 animate-in fade-in duration-150">
-              
               {/* Abstract: Background */}
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5 flex items-center">
@@ -197,11 +349,15 @@ ${takeawaysList}
                       <tbody className="divide-y divide-slate-100">
                         {session.rundown.map((item, idx) => (
                           <tr key={item.id || idx} className="hover:bg-emerald-50/40">
-                            <td className="py-1.5 px-2.5 text-center font-bold text-slate-400">{idx + 1}</td>
+                            <td className="py-1.5 px-2.5 text-center font-bold text-slate-400">
+                              {idx + 1}
+                            </td>
                             <td className="py-1.5 px-2.5 font-mono font-bold text-emerald-700 whitespace-nowrap">
                               {item.startTime} - {item.endTime}
                             </td>
-                            <td className="py-1.5 px-2.5 font-semibold text-slate-800">{item.activity}</td>
+                            <td className="py-1.5 px-2.5 font-semibold text-slate-800">
+                              {item.activity}
+                            </td>
                             <td className="py-1.5 px-2.5 text-slate-500">{item.pic || '-'}</td>
                           </tr>
                         ))}
@@ -215,11 +371,14 @@ ${takeawaysList}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2 flex items-center">
                   <Sparkles className="w-3.5 h-3.5 mr-1 text-indigo-600" />
-                  Poin Pembahasan & Update Klinis Terbaru
+                  Poin Pembahasan &amp; Update Klinis Terbaru
                 </h3>
                 <ul className="space-y-2">
                   {session.abstract.clinicalUpdates.map((item, idx) => (
-                    <li key={idx} className="flex items-start text-xs sm:text-sm bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-100">
+                    <li
+                      key={idx}
+                      className="flex items-start text-xs sm:text-sm bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-100"
+                    >
                       <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold mr-2.5 shrink-0 mt-0.5">
                         {idx + 1}
                       </span>
@@ -235,9 +394,7 @@ ${takeawaysList}
                   <Check className="w-4 h-4 mr-1 text-emerald-600" />
                   Implikasi Praktis Bagi Dokter
                 </h4>
-                <p className="text-emerald-800 leading-normal">
-                  {session.abstract.conclusion}
-                </p>
+                <p className="text-emerald-800 leading-normal">{session.abstract.conclusion}</p>
               </div>
 
               {/* Key Takeaways */}
@@ -263,7 +420,157 @@ ${takeawaysList}
                 <span>Moderator Sesi:</span>
                 <span className="font-semibold text-slate-800">{session.moderator}</span>
               </div>
+            </div>
+          )}
 
+          {activeTab === 'materials' && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              {materials.length === 0 ? (
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center space-y-2.5">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto">
+                    <FileText className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    Belum Ada Materi Presentasi (PDF)
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    File materi presentasi (slide/handout PDF) untuk sesi ini belum diunggah oleh panitia atau pembicara. Silakan periksa kembali secara berkala.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Material Selector Cards */}
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Daftar File Materi PDF ({materials.length})
+                    </h3>
+                    <div className="grid grid-cols-1 gap-2">
+                      {materials.map((mat) => {
+                        const isSelected = activeMaterial?.id === mat.id;
+                        return (
+                          <div
+                            key={mat.id}
+                            onClick={() => setSelectedMaterialId(mat.id)}
+                            className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                              isSelected
+                                ? 'bg-indigo-50 border-indigo-400 shadow-xs'
+                                : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <div
+                                className={`p-2 rounded-lg shrink-0 ${
+                                  isSelected
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'bg-rose-100 text-rose-600'
+                                }`}
+                              >
+                                <FileText className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
+                                  {mat.title}
+                                </h4>
+                                <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                                  <span className="truncate max-w-[200px]">{mat.fileName}</span>
+                                  <span>•</span>
+                                  <span className="font-semibold text-slate-700">
+                                    {mat.externalUrl
+                                      ? 'Tautan PDF Eksternal'
+                                      : formatPdfFileSize(mat.fileSize)}
+                                  </span>
+                                  {mat.speakerName && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="text-indigo-700 font-semibold">
+                                        {mat.speakerName}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <span
+                              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 shrink-0 ${
+                                isSelected
+                                  ? 'bg-indigo-600 text-white'
+                                  : 'bg-white border border-slate-200 text-slate-700'
+                              }`}
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>{isSelected ? 'Ditampilkan' : 'Lihat PDF'}</span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Active PDF Preview & Download Bar */}
+                  {activeMaterial && (
+                    <div className="space-y-2.5 pt-2 border-t border-slate-200">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 block">
+                            Pratinjau Dokumen PDF
+                          </span>
+                          <p className="text-xs font-bold text-slate-900 truncate">
+                            {activeMaterial.title}
+                          </p>
+                        </div>
+
+                        {activeDownloadUrl && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            {activeMaterial.externalUrl ? (
+                              <a
+                                href={activeDownloadUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>Buka / Unduh PDF</span>
+                              </a>
+                            ) : (
+                              <a
+                                href={activeDownloadUrl}
+                                download={activeMaterial.fileName}
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>Unduh PDF</span>
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {isLoadingPdf ? (
+                        <div className="h-[48vh] bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center justify-center gap-2 text-slate-500">
+                          <Loader2 className="w-7 h-7 animate-spin text-indigo-600" />
+                          <span className="text-xs font-semibold">
+                            Memuat file PDF materi presentasi...
+                          </span>
+                        </div>
+                      ) : pdfError ? (
+                        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <span>{pdfError}</span>
+                        </div>
+                      ) : activePreviewUrl ? (
+                        <div className="rounded-xl overflow-hidden border border-slate-200 bg-slate-100 shadow-inner">
+                          <iframe
+                            src={activePreviewUrl}
+                            title={activeMaterial.title}
+                            className="w-full h-[52vh] min-h-[340px] bg-white"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -294,9 +601,7 @@ ${takeawaysList}
                           Pembicara
                         </span>
                       </div>
-                      <p className="text-xs font-semibold text-sky-700 mt-0.5">
-                        {speaker.title}
-                      </p>
+                      <p className="text-xs font-semibold text-sky-700 mt-0.5">{speaker.title}</p>
                       <p className="text-xs text-slate-500 flex items-center mt-1">
                         <Building className="w-3 h-3 mr-1 text-slate-400 shrink-0" />
                         <span className="truncate">{speaker.institution}</span>
@@ -317,7 +622,6 @@ ${takeawaysList}
               ))}
             </div>
           )}
-
         </div>
 
         {/* Modal Footer Actions */}
@@ -325,9 +629,13 @@ ${takeawaysList}
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleCopySummary}
-              className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors"
+              className="px-3 py-2 bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
             >
-              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-500" />}
+              {copied ? (
+                <Check className="w-4 h-4 text-emerald-600" />
+              ) : (
+                <Copy className="w-4 h-4 text-slate-500" />
+              )}
               <span>{copied ? 'Tersalin!' : 'Salin Info'}</span>
             </button>
 
@@ -335,7 +643,7 @@ ${takeawaysList}
             <button
               id="btn-share-session-whatsapp"
               onClick={handleShareWhatsApp}
-              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-colors shadow-xs"
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center space-x-1.5 transition-colors shadow-xs cursor-pointer"
               title="Bagikan jadwal sesi ini melalui pesan WhatsApp"
             >
               <Share2 className="w-3.5 h-3.5" />
@@ -343,7 +651,6 @@ ${takeawaysList}
             </button>
           </div>
         </div>
-
       </motion.div>
     </motion.div>
   );

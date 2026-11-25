@@ -19,6 +19,18 @@ export interface WorkshopRundownItem {
   notes?: string;    // Catatan tambahan / Stasiun
 }
 
+export interface PresentationMaterial {
+  id: string;
+  title: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  chunkCount: number;
+  externalUrl?: string;
+  speakerName?: string;
+  uploadedAt: string;
+}
+
 export interface Session {
   id: string;
   day: string; // e.g. "Workshop (28 Nov)", "Hari I", "Hari II", "Hari III"
@@ -42,6 +54,7 @@ export interface Session {
   keyTakeaways?: string[];
   capacity?: number;
   rundown?: WorkshopRundownItem[];
+  presentationMaterials?: PresentationMaterial[];
 }
 
 export interface SymposiumInfo {

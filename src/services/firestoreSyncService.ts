@@ -27,7 +27,13 @@ import type {
   BroadcastNotification,
   AttendanceRecord,
   ChatMessage,
+  PresentationMaterial,
 } from '../types';
+import {
+  base64ToPdfBlob,
+  savePdfMaterialLocal,
+  splitBase64IntoChunks,
+} from '../utils/presentationPdfStorage';
 
 const BOOTSTRAP_ADMIN_EMAIL = 'pranowo.tfc@gmail.com';
 
@@ -170,6 +176,26 @@ function sanitizeSessionPayload(session: Session) {
       }))
     : [];
 
+  const presentationMaterials = Array.isArray(session.presentationMaterials)
+    ? session.presentationMaterials.slice(0, 20).map((mat) => ({
+        id: toFirestoreDocId(mat.id, 'mat'),
+        title: clampStr(mat.title, 300, 'Materi Presentasi'),
+        fileName: clampStr(mat.fileName, 250, 'materi.pdf'),
+        fileSize:
+          typeof mat.fileSize === 'number' && Number.isFinite(mat.fileSize)
+            ? Math.max(0, Math.min(15728640, Math.round(mat.fileSize)))
+            : 0,
+        mimeType: clampStr(mat.mimeType, 100, 'application/pdf'),
+        chunkCount:
+          typeof mat.chunkCount === 'number' && Number.isFinite(mat.chunkCount)
+            ? Math.max(0, Math.min(40, Math.round(mat.chunkCount)))
+            : 0,
+        externalUrl: clampStr(mat.externalUrl, 1000),
+        speakerName: clampStr(mat.speakerName, 200),
+        uploadedAt: clampStr(mat.uploadedAt, 60, new Date().toISOString()),
+      }))
+    : [];
+
   return {
     docId,
     data: {
@@ -198,6 +224,7 @@ function sanitizeSessionPayload(session: Session) {
           ? Math.max(0, Math.min(10000, Math.round(session.capacity)))
           : 100,
       rundown,
+      presentationMaterials,
       isPublished: true,
       updatedAt: serverTimestamp(),
     },
@@ -1078,3 +1105,145 @@ export async function answerChatQuestionFirestore(
     handleFirestoreError(error, OperationType.UPDATE, path);
   }
 }
+
+// ============================================================================
+// Session Presentation PDF Materials (Chunked Firestore Storage)
+// ============================================================================
+
+export async function uploadPdfMaterialToFirestore(
+  sessionId: string,
+  material: PresentationMaterial,
+  base64Data: string
+): Promise<PresentationMaterial> {
+  const safeMatId = toFirestoreDocId(material.id, 'mat');
+  const safeSessionId = toFirestoreDocId(sessionId, 'session');
+  const chunks = splitBase64IntoChunks(base64Data);
+
+  if (chunks.length > 40) {
+    throw new Error('Ukuran file PDF melebihi kapasitas maksimal penyimpanan Cloud.');
+  }
+
+  const materialPath = `presentation_materials/${safeMatId}`;
+  try {
+    await setDoc(doc(db, 'presentation_materials', safeMatId), {
+      id: safeMatId,
+      sessionId: safeSessionId,
+      title: clampStr(material.title, 300, 'Materi Presentasi'),
+      fileName: clampStr(material.fileName, 250, 'materi.pdf'),
+      fileSize: Math.max(0, Math.min(15728640, Math.round(material.fileSize || 0))),
+      mimeType: clampStr(material.mimeType, 100, 'application/pdf'),
+      chunkCount: chunks.length,
+      externalUrl: clampStr(material.externalUrl, 1000),
+      speakerName: clampStr(material.speakerName, 200),
+      isPublished: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, materialPath);
+  }
+
+  if (chunks.length > 0) {
+    const chunkOps = chunks.map((chunkStr, idx) => {
+      const chunkId = `chunk_${idx}`;
+      return {
+        type: 'set' as const,
+        ref: doc(db, 'presentation_materials', safeMatId, 'chunks', chunkId),
+        data: {
+          id: chunkId,
+          materialId: safeMatId,
+          index: idx,
+          data: chunkStr,
+          updatedAt: serverTimestamp(),
+        },
+      };
+    });
+    await commitBatchOps(chunkOps, `${materialPath}/chunks`);
+  }
+
+  return {
+    ...material,
+    id: safeMatId,
+    chunkCount: chunks.length,
+  };
+}
+
+export async function fetchPdfMaterialBlobFromFirestore(
+  materialId: string,
+  expectedChunkCount: number,
+  fileName = 'materi.pdf',
+  mimeType = 'application/pdf'
+): Promise<Blob | null> {
+  const safeMatId = toFirestoreDocId(materialId, 'mat');
+  let chunkCount = expectedChunkCount;
+
+  try {
+    const metaSnap = await getDoc(doc(db, 'presentation_materials', safeMatId));
+    if (metaSnap.exists()) {
+      const meta = metaSnap.data() as Record<string, any>;
+      if (typeof meta.chunkCount === 'number' && meta.chunkCount > 0) {
+        chunkCount = meta.chunkCount;
+      }
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `presentation_materials/${safeMatId}`);
+  }
+
+  if (!chunkCount || chunkCount <= 0) {
+    return null;
+  }
+
+  const indices = Array.from({ length: chunkCount }, (_, i) => i);
+  const chunkStrings = await Promise.all(
+    indices.map(async (idx) => {
+      const chunkId = `chunk_${idx}`;
+      const chunkPath = `presentation_materials/${safeMatId}/chunks/${chunkId}`;
+      try {
+        const snap = await getDoc(doc(db, 'presentation_materials', safeMatId, 'chunks', chunkId));
+        if (!snap.exists()) {
+          throw new Error(`Bagian file ${chunkId} tidak ditemukan di Cloud.`);
+        }
+        return (snap.data()?.data as string) || '';
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, chunkPath);
+        return '';
+      }
+    })
+  );
+
+  const combinedBase64 = chunkStrings.join('');
+  if (!combinedBase64) return null;
+
+  const blob = base64ToPdfBlob(combinedBase64, mimeType);
+  await savePdfMaterialLocal({
+    id: safeMatId,
+    base64Data: combinedBase64,
+    fileName,
+    fileSize: blob.size,
+    mimeType,
+    savedAt: new Date().toISOString(),
+  });
+
+  return blob;
+}
+
+export async function deletePdfMaterialFromFirestore(materialId: string): Promise<void> {
+  const safeMatId = toFirestoreDocId(materialId, 'mat');
+  const materialPath = `presentation_materials/${safeMatId}`;
+
+  try {
+    const chunksSnap = await getDocs(collection(db, 'presentation_materials', safeMatId, 'chunks'));
+    const deleteOps = chunksSnap.docs.map((d) => ({
+      type: 'delete' as const,
+      ref: doc(db, 'presentation_materials', safeMatId, 'chunks', d.id),
+    }));
+    deleteOps.push({
+      type: 'delete' as const,
+      ref: doc(db, 'presentation_materials', safeMatId),
+    });
+    await commitBatchOps(deleteOps, materialPath);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, materialPath);
+  }
+}
+

@@ -8,7 +8,7 @@ import { SessionCard } from './SessionCard';
 
 interface SymposiumScheduleViewProps {
   sessions?: Session[];
-  onSelectSession: (session: Session, initialTab?: 'abstract' | 'speakers') => void;
+  onSelectSession: (session: Session, initialTab?: 'abstract' | 'materials' | 'speakers') => void;
   onSelectSpeaker: (speaker: Speaker) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;

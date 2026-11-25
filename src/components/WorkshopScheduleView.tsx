@@ -14,7 +14,7 @@ import { SessionCard } from './SessionCard';
 
 interface WorkshopScheduleViewProps {
   sessions?: Session[];
-  onSelectSession: (session: Session, initialTab?: 'abstract' | 'speakers') => void;
+  onSelectSession: (session: Session, initialTab?: 'abstract' | 'materials' | 'speakers') => void;
   onSelectSpeaker: (speaker: Speaker) => void;
   onOpenVenue: () => void;
   eventInfo?: SymposiumInfo;

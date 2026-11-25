@@ -56,6 +56,7 @@
         "keyTakeaways": { "type": "array" },
         "capacity": { "type": "number" },
         "rundown": { "type": "array" },
+        "presentationMaterials": { "type": "array" },
         "isPublished": { "type": "boolean" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -265,6 +266,39 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["uid", "email", "createdAt"]
+    },
+    "PresentationMaterialDoc": {
+      "title": "PresentationMaterialDoc",
+      "description": "Metadata document for a session PDF presentation material.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "sessionId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "fileName": { "type": "string", "minLength": 1, "maxLength": 250 },
+        "fileSize": { "type": "number" },
+        "mimeType": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "chunkCount": { "type": "number" },
+        "externalUrl": { "type": "string", "maxLength": 1000 },
+        "speakerName": { "type": "string", "maxLength": 200 },
+        "isPublished": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "sessionId", "title", "fileName", "fileSize", "mimeType", "chunkCount", "isPublished", "createdAt", "updatedAt"]
+    },
+    "PresentationMaterialChunk": {
+      "title": "PresentationMaterialChunk",
+      "description": "Chunked base64 payload slice for a presentation PDF material.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "materialId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "index": { "type": "number" },
+        "data": { "type": "string", "minLength": 1, "maxLength": 500000 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "materialId", "index", "data", "updatedAt"]
     }
   },
   "firestore": {
@@ -295,6 +329,14 @@
     "/sessions/{sessionId}/chat_messages/{messageId}": {
       "schema": { "$ref": "#/entities/ChatMessage" },
       "description": "Live Q&A and discussion messages scoped to a session."
+    },
+    "/presentation_materials/{materialId}": {
+      "schema": { "$ref": "#/entities/PresentationMaterialDoc" },
+      "description": "Metadata for uploaded session presentation PDF files."
+    },
+    "/presentation_materials/{materialId}/chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/PresentationMaterialChunk" },
+      "description": "Base64 payload chunks for uploaded session presentation PDF files."
     },
     "/participants/{participantId}": {
       "schema": { "$ref": "#/entities/Participant" },

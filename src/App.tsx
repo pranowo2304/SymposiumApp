@@ -506,10 +506,10 @@ export default function App() {
 
   // Modals
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
-  const [selectedSessionTab, setSelectedSessionTab] = useState<'abstract' | 'speakers'>('abstract');
+  const [selectedSessionTab, setSelectedSessionTab] = useState<'abstract' | 'materials' | 'speakers'>('abstract');
   const [selectedSpeaker, setSelectedSpeaker] = useState<Speaker | null>(null);
 
-  const handleOpenSession = (session: Session, tab: 'abstract' | 'speakers' = 'abstract') => {
+  const handleOpenSession = (session: Session, tab: 'abstract' | 'materials' | 'speakers' = 'abstract') => {
     setSelectedSession(session);
     setSelectedSessionTab(tab);
   };

@@ -108,7 +108,7 @@ service cloud.firestore {
           'id', 'day', 'date', 'startTime', 'endTime', 'timeString',
           'title', 'category', 'type', 'room', 'floor', 'roomColor',
           'moderator', 'speakers', 'abstract', 'keyTakeaways', 'capacity',
-          'rundown', 'isPublished', 'updatedAt'
+          'rundown', 'presentationMaterials', 'isPublished', 'updatedAt'
         ]) &&
         data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
         data.day is string && data.day.size() >= 1 && data.day.size() <= 80 &&
@@ -135,6 +135,11 @@ service cloud.firestore {
           data.rundown is list &&
           data.rundown.size() <= 50 &&
           (data.rundown.size() == 0 || data.rundown[0] is map)
+        )) &&
+        (!( 'presentationMaterials' in data ) || (
+          data.presentationMaterials is list &&
+          data.presentationMaterials.size() <= 20 &&
+          (data.presentationMaterials.size() == 0 || data.presentationMaterials[0] is map)
         )) &&
         data.isPublished is bool &&
         data.updatedAt is timestamp && data.updatedAt == request.time;
@@ -332,6 +337,40 @@ service cloud.firestore {
         data.createdAt is timestamp && data.createdAt == request.time;
     }
 
+    function isValidPresentationMaterial(data) {
+      return data.keys().hasAll([
+          'id', 'sessionId', 'title', 'fileName', 'fileSize',
+          'mimeType', 'chunkCount', 'isPublished', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'sessionId', 'title', 'fileName', 'fileSize',
+          'mimeType', 'chunkCount', 'externalUrl', 'speakerName',
+          'isPublished', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.sessionId) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+        data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 250 &&
+        data.fileSize is number && data.fileSize >= 0 && data.fileSize <= 15728640 &&
+        data.mimeType is string && data.mimeType.size() >= 1 && data.mimeType.size() <= 100 &&
+        data.chunkCount is number && data.chunkCount >= 0 && data.chunkCount <= 40 &&
+        isValidOptionalString(data, 'externalUrl', 1000) &&
+        isValidOptionalString(data, 'speakerName', 200) &&
+        data.isPublished is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidPresentationMaterialChunk(data) {
+      return data.keys().hasAll(['id', 'materialId', 'index', 'data', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'materialId', 'index', 'data', 'updatedAt']) &&
+        isValidId(data.id) &&
+        isValidId(data.materialId) &&
+        data.index is number && data.index >= 0 && data.index < 40 &&
+        data.data is string && data.data.size() >= 1 && data.data.size() <= 500000 &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
     // =========================================================================
     // CONNECTIVITY HEALTH CHECK DOC (/test/connection)
     // =========================================================================
@@ -428,6 +467,38 @@ service cloud.firestore {
       allow list: if existing().isPublished == true || isAdmin();
       allow create, update: if isAdmin() && isValidId(broadcastId) && isValidBroadcast(incoming());
       allow delete: if isAdmin() && isValidId(broadcastId);
+    }
+
+    match /presentation_materials/{materialId} {
+      allow get: if isValidId(materialId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isAdmin();
+      allow create: if isAdmin() &&
+        isValidId(materialId) &&
+        isValidPresentationMaterial(incoming()) &&
+        incoming().id == materialId &&
+        incoming().createdAt == request.time;
+      allow update: if isAdmin() &&
+        isValidId(materialId) &&
+        isValidPresentationMaterial(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().createdAt == existing().createdAt;
+      allow delete: if isAdmin() && isValidId(materialId);
+
+      match /chunks/{chunkId} {
+        allow get: if isValidId(materialId) && isValidId(chunkId) && (
+          get(/databases/$(database)/documents/presentation_materials/$(materialId)).data.isPublished == true ||
+          isAdmin()
+        );
+        allow list: if isAdmin();
+        allow create, update: if isAdmin() &&
+          isValidId(materialId) &&
+          isValidId(chunkId) &&
+          isValidPresentationMaterialChunk(incoming()) &&
+          incoming().materialId == materialId &&
+          incoming().id == chunkId &&
+          exists(/databases/$(database)/documents/presentation_materials/$(materialId));
+        allow delete: if isAdmin() && isValidId(materialId) && isValidId(chunkId);
+      }
     }
 
     // =========================================================================

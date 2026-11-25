@@ -4,7 +4,7 @@ import { Session, Speaker } from '../types';
 
 interface SessionCardProps {
   session: Session;
-  onSelectSession: (session: Session, initialTab?: 'abstract' | 'speakers') => void;
+  onSelectSession: (session: Session, initialTab?: 'abstract' | 'materials' | 'speakers') => void;
   onSelectSpeaker: (speaker: Speaker) => void;
 }
 
@@ -127,9 +127,19 @@ export const SessionCard: React.FC<SessionCardProps> = ({
           </div>
 
           <div className="flex items-center space-x-2">
+            {(session.presentationMaterials?.length || 0) > 0 && (
+              <button
+                type="button"
+                onClick={() => onSelectSession(session, 'materials')}
+                className="inline-flex items-center gap-1 font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg text-[11px] transition-colors py-1 px-2 cursor-pointer"
+              >
+                <FileText className="w-3 h-3" />
+                <span>Materi PDF ({session.presentationMaterials?.length})</span>
+              </button>
+            )}
             <button
               onClick={() => onSelectSession(session, 'abstract')}
-              className="inline-flex items-center font-bold text-blue-600 hover:text-blue-800 text-xs transition-colors py-1 px-1.5"
+              className="inline-flex items-center font-bold text-blue-600 hover:text-blue-800 text-xs transition-colors py-1 px-1.5 cursor-pointer"
             >
               <span>Detail →</span>
             </button>

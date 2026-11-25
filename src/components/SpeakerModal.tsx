@@ -7,7 +7,7 @@ interface SpeakerModalProps {
   speaker: Speaker | null;
   allSessions: Session[];
   onClose: () => void;
-  onSelectSession: (session: Session, initialTab?: 'abstract' | 'speakers') => void;
+  onSelectSession: (session: Session, initialTab?: 'abstract' | 'materials' | 'speakers') => void;
 }
 
 export const SpeakerModal: React.FC<SpeakerModalProps> = ({

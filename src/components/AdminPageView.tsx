@@ -42,13 +42,14 @@ import {
   QrCode
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { Speaker, Session, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification, AttendanceRecord, WorkshopRundownItem } from '../types';
+import { Speaker, Session, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification, AttendanceRecord, WorkshopRundownItem, PresentationMaterial } from '../types';
 import { AdminParticipantsManager } from './admin/AdminParticipantsManager';
 import { SessionImportExportModal } from './admin/SessionImportExportModal';
 import { AdminEventSettings } from './admin/AdminEventSettings';
 import { AdminBroadcastManager } from './admin/AdminBroadcastManager';
 import { AdminAnalyticsDashboard } from './admin/AdminAnalyticsDashboard';
 import { AdminAiPdfScheduleExtractor } from './admin/AdminAiPdfScheduleExtractor';
+import { AdminPresentationMaterialsEditor } from './admin/AdminPresentationMaterialsEditor';
 import { 
   MUNAS_SESSIONS, 
   MUNAS_SPEAKERS, 
@@ -313,6 +314,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
   // -------------------------------------------------------------
   const [isSessionModalOpen, setIsSessionModalOpen] = useState<boolean>(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [draftSessionId, setDraftSessionId] = useState<string>(() => `session-${Date.now()}`);
   const [sessionFormType, setSessionFormType] = useState<'symposium' | 'workshop'>('symposium');
 
   const [sessionForm, setSessionForm] = useState<Omit<Session, 'id'>>({
@@ -336,7 +338,8 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
     },
     keyTakeaways: [],
     capacity: 60,
-    rundown: []
+    rundown: [],
+    presentationMaterials: []
   });
 
   const buildDefaultWorkshopRundown = (start: string, end: string, instructorName?: string): WorkshopRundownItem[] => {
@@ -374,6 +377,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
     setSessionFormType(targetType);
     if (session) {
       setEditingSessionId(session.id);
+      setDraftSessionId(session.id);
       setSessionForm({
         day: session.day,
         date: session.date,
@@ -395,10 +399,12 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         },
         keyTakeaways: session.keyTakeaways ? [...session.keyTakeaways] : [],
         capacity: session.capacity || (targetType === 'workshop' ? 60 : 250),
-        rundown: session.rundown && session.rundown.length > 0 ? session.rundown.map(r => ({ ...r })) : []
+        rundown: session.rundown && session.rundown.length > 0 ? session.rundown.map(r => ({ ...r })) : [],
+        presentationMaterials: session.presentationMaterials ? [...session.presentationMaterials] : []
       });
     } else {
       setEditingSessionId(null);
+      setDraftSessionId(`session-${Date.now()}`);
       const isWs = targetType === 'workshop';
       const defaultRoom = isWs 
         ? rooms.find(r => r.id === 'Antareja Room' || r.type === 'workshop') || rooms[0]
@@ -431,7 +437,8 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         },
         keyTakeaways: ['Evidence-Based Protocol', 'Hands-On Skill Certification', 'Direct Expert Guidance'],
         capacity: isWs ? 60 : 350,
-        rundown: []
+        rundown: [],
+        presentationMaterials: []
       });
     }
     setIsSessionModalOpen(true);
@@ -521,18 +528,22 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
 
     const payload: Session = {
       ...sessionForm,
-      id: editingSessionId || `session-${Date.now()}`,
+      id: editingSessionId || draftSessionId || `session-${Date.now()}`,
       timeString: fullTimeString,
       floor: resolvedFloor,
-      rundown: cleanedRundown.length > 0 ? cleanedRundown : undefined
+      rundown: cleanedRundown.length > 0 ? cleanedRundown : undefined,
+      presentationMaterials:
+        sessionForm.presentationMaterials && sessionForm.presentationMaterials.length > 0
+          ? sessionForm.presentationMaterials
+          : undefined,
     };
 
     if (editingSessionId) {
       onSaveSessions(sessions.map(s => s.id === editingSessionId ? payload : s));
-      showToast(`Sesi "${payload.title}" beserta rundown berhasil diperbarui.`);
+      showToast(`Sesi "${payload.title}" berhasil diperbarui.`);
     } else {
       onSaveSessions([payload, ...sessions]);
-      showToast(`Sesi "${payload.title}" beserta rundown berhasil ditambahkan.`);
+      showToast(`Sesi "${payload.title}" berhasil ditambahkan.`);
     }
     setIsSessionModalOpen(false);
   };
@@ -584,14 +595,18 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
     setAbstractConclusion(s.abstract.conclusion);
   };
 
+  const activeAbstractSession = selectedSessionForAbstract
+    ? sessions.find(s => s.id === selectedSessionForAbstract.id) || selectedSessionForAbstract
+    : null;
+
   const handleSaveAbstract = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedSessionForAbstract) return;
+    if (!activeAbstractSession) return;
 
     const filteredUpdates = abstractUpdates.filter(u => u.trim() !== '');
 
     const updatedSessions = sessions.map(s => {
-      if (s.id === selectedSessionForAbstract.id) {
+      if (s.id === activeAbstractSession.id) {
         return {
           ...s,
           abstract: {
@@ -605,7 +620,20 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
     });
 
     onSaveSessions(updatedSessions);
-    showToast(`Abstrak untuk sesi "${selectedSessionForAbstract.title}" berhasil disimpan.`);
+    showToast(`Abstrak untuk sesi "${activeAbstractSession.title}" berhasil disimpan.`);
+  };
+
+  const handleUpdateSessionMaterials = (sessionId: string, updatedMaterials: PresentationMaterial[]) => {
+    const updatedSessions = sessions.map(s => {
+      if (s.id === sessionId) {
+        return {
+          ...s,
+          presentationMaterials: updatedMaterials.length > 0 ? updatedMaterials : undefined
+        };
+      }
+      return s;
+    });
+    onSaveSessions(updatedSessions);
   };
 
   // -------------------------------------------------------------
@@ -1221,7 +1249,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
               }`}
             >
               <FileText className="w-4 h-4 text-amber-400" />
-              <span>Abstract Speaker</span>
+              <span>Abstrak &amp; Materi PDF</span>
             </button>
 
             <button
@@ -1581,6 +1609,14 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                         <span>Moderator: <strong className="text-slate-200">{session.moderator || '-'}</strong></span>
                         <span>•</span>
                         <span>Narasumber ({session.speakers.length}): <strong className="text-slate-200">{session.speakers.map(s => s.name.split(',')[0]).join(', ') || 'Belum dipilih'}</strong></span>
+                        {(session.presentationMaterials?.length || 0) > 0 && (
+                          <>
+                            <span>•</span>
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
+                              {session.presentationMaterials?.length} PDF Materi
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -1776,6 +1812,14 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                         <span>Instruktur ({ws.speakers.length}): <strong className="text-slate-200">{ws.speakers.map(s => s.name.split(',')[0]).join(', ') || 'Tim Panitia / Instruktur'}</strong></span>
                         <span>•</span>
                         <span>Kuota: <strong className="text-slate-200">{ws.capacity || 60} Peserta</strong></span>
+                        {(ws.presentationMaterials?.length || 0) > 0 && (
+                          <>
+                            <span>•</span>
+                            <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/30">
+                              {ws.presentationMaterials?.length} PDF Materi
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -1811,10 +1855,10 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
               <div>
                 <h2 className="text-lg font-black text-white flex items-center gap-2">
                   <FileText className="w-5 h-5 text-amber-400" />
-                  Manajemen & Input Abstract Speaker
+                  Manajemen Abstrak &amp; Upload Materi Presentasi (PDF)
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Pilih sesi atau materi narasumber untuk mengedit latar belakang klinis (*background*), rangkuman evidence-based updates, dan kesimpulan / key takeaways.
+                  Pilih sesi untuk mengedit abstrak ilmiah serta mengunggah file presentasi PDF agar peserta dapat melihat dan mengunduhnya pada detail sesi.
                 </p>
               </div>
             </div>
@@ -1829,12 +1873,13 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
 
                 <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
                   {sessions.map((s) => {
-                    const isSelected = selectedSessionForAbstract?.id === s.id;
+                    const isSelected = activeAbstractSession?.id === s.id;
+                    const pdfCount = s.presentationMaterials?.length || 0;
                     return (
                       <button
                         key={s.id}
                         onClick={() => handleSelectSessionForAbstract(s)}
-                        className={`w-full text-left p-3 rounded-xl border transition-all text-xs flex flex-col gap-1 ${
+                        className={`w-full text-left p-3 rounded-xl border transition-all text-xs flex flex-col gap-1 cursor-pointer ${
                           isSelected
                             ? 'bg-blue-600 text-white border-blue-500 shadow-md ring-1 ring-blue-400'
                             : 'bg-slate-950 hover:bg-slate-900 text-slate-300 border-slate-800'
@@ -1846,7 +1891,16 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                           }`}>
                             {s.day} • {s.timeString.split(' ')[0]}
                           </span>
-                          <span className="text-[10px] truncate opacity-80">{s.room}</span>
+                          <div className="flex items-center gap-1 min-w-0">
+                            {pdfCount > 0 && (
+                              <span className={`text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 ${
+                                isSelected ? 'bg-amber-400 text-slate-950' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                              }`}>
+                                {pdfCount} PDF
+                              </span>
+                            )}
+                            <span className="text-[10px] truncate opacity-80">{s.room}</span>
+                          </div>
                         </div>
                         <span className="font-bold line-clamp-2 leading-snug">
                           {s.title}
@@ -1860,9 +1914,19 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                 </div>
               </div>
 
-              {/* Right Column: Abstract Editor Form */}
-              <div className="lg:col-span-2">
-                {selectedSessionForAbstract ? (
+              {/* Right Column: Abstract Editor Form + Presentation PDF Upload */}
+              <div className="lg:col-span-2 space-y-4">
+                {activeAbstractSession ? (
+                  <>
+                  <AdminPresentationMaterialsEditor
+                    sessionId={activeAbstractSession.id}
+                    speakers={activeAbstractSession.speakers}
+                    materials={activeAbstractSession.presentationMaterials || []}
+                    isCloudAdmin={isCloudAdmin}
+                    onMaterialsChange={(updated) => handleUpdateSessionMaterials(activeAbstractSession.id, updated)}
+                    onNotify={showToast}
+                  />
+
                   <form onSubmit={handleSaveAbstract} className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-4">
                     
                     <div className="border-b border-slate-800 pb-3">
@@ -1870,12 +1934,12 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                         Editor Abstrak Ilmiah
                       </span>
                       <h3 className="text-base font-black text-white mt-1">
-                        {selectedSessionForAbstract.title}
+                        {activeAbstractSession.title}
                       </h3>
                       <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-slate-400">
-                        <span>{selectedSessionForAbstract.category}</span>
+                        <span>{activeAbstractSession.category}</span>
                         <span>•</span>
-                        <span>{selectedSessionForAbstract.speakers.map(s => s.name).join(' & ')}</span>
+                        <span>{activeAbstractSession.speakers.map(s => s.name).join(' & ')}</span>
                       </div>
                     </div>
 
@@ -1967,9 +2031,10 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                     </div>
 
                   </form>
+                  </>
                 ) : (
                   <div className="p-8 text-center text-slate-500 bg-slate-950 rounded-2xl border border-slate-800">
-                    Pilih sesi di sebelah kiri untuk melihat atau mengedit abstrak.
+                    Pilih sesi di sebelah kiri untuk mengedit abstrak atau mengunggah file PDF materi presentasi.
                   </div>
                 )}
               </div>
@@ -2792,6 +2857,24 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                   )}
                 </div>
               )}
+
+              {/* UPLOAD MATERI PRESENTASI (PDF) */}
+              <AdminPresentationMaterialsEditor
+                sessionId={editingSessionId || draftSessionId}
+                speakers={sessionForm.speakers}
+                materials={sessionForm.presentationMaterials || []}
+                isCloudAdmin={isCloudAdmin}
+                onMaterialsChange={(updated) => {
+                  setSessionForm((prev) => ({
+                    ...prev,
+                    presentationMaterials: updated,
+                  }));
+                  if (editingSessionId) {
+                    handleUpdateSessionMaterials(editingSessionId, updated);
+                  }
+                }}
+                onNotify={showToast}
+              />
 
               <div className="pt-3 border-t border-slate-800 flex justify-end gap-2">
                 <button

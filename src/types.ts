@@ -82,6 +82,7 @@ export interface SymposiumInfo {
   contactPhone?: string;
   websiteUrl?: string;
   enableQrAttendance?: boolean;
+  customIdentityCardUrl?: string;
 }
 
 export interface Participant {

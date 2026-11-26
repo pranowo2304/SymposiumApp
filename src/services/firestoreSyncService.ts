@@ -336,12 +336,12 @@ function sanitizeCustomFields(
 }
 
 function isIdRegistrantCustomKey(key: string): boolean {
-  const normalized = (key || '').trim();
+  const normalized = (key || '').trim().replace(/[\s-]+/g, '_');
   return (
-    /^(id|id[_\s-]*registrant|registrant[_\s-]*id|registrant|registration[_\s-]*id|reg[_\s-]*id|no\.?\s?registrasi|kode\s?registrasi|id[_\s-]*pendaftaran|id[_\s-]*peserta|kode[_\s-]*peserta)$/i.test(
+    /^(id|id_registrant|id_registrasi|registrant_id|registrant|registration_id|reg_id|no_registrasi|kode_registrasi|id_pendaftaran|id_peserta|kode_peserta)$/i.test(
       normalized
     ) ||
-    /(id[_\s-]*registrant|registrant[_\s-]*id|no\.?\s?registrasi|kode\s?registrasi|id[_\s-]*pendaftaran|registration[_\s-]*id|reg[_\s-]*id)/i.test(
+    /(id_registrant|id_registrasi|registrant_id|no_registrasi|kode_registrasi|id_pendaftaran|registration_id|reg_id)/i.test(
       normalized
     )
   );
@@ -358,7 +358,7 @@ function resolveIdRegistrantValue(participant: Participant): string {
       }
     }
   }
-  return participant.badgeId?.trim() || '';
+  return '';
 }
 
 function buildRegistrantDirectoryEntries(participant: Participant): Array<{
@@ -1016,7 +1016,10 @@ export async function lookupParticipantByIdRegistrantInFirestore(
   rawId: string
 ): Promise<Participant | null> {
   const cleaned = (rawId || '').trim();
-  if (!cleaned) return null;
+  if (!cleaned) {
+    console.warn('[lookupParticipantByIdRegistrantInFirestore] Empty rawId passed');
+    return null;
+  }
 
   const candidates = Array.from(
     new Set([
@@ -1026,11 +1029,16 @@ export async function lookupParticipantByIdRegistrantInFirestore(
     ])
   );
 
+  console.log('[lookupParticipantByIdRegistrantInFirestore] Searching for ID:', cleaned, 'Candidates:', candidates);
+
   for (const lookupId of candidates) {
     try {
-      const snap = await getDoc(doc(db, 'registrant_directory', lookupId));
+      const docRef = doc(db, 'registrant_directory', lookupId);
+      const snap = await getDoc(docRef);
+      console.log(`[lookupParticipantByIdRegistrantInFirestore] Doc path 'registrant_directory/${lookupId}' exists:`, snap.exists());
       if (snap.exists()) {
         const d = snap.data() as Record<string, any>;
+        console.log('[lookupParticipantByIdRegistrantInFirestore] Retrieved doc data:', d);
         if (d.isActive !== false) {
           return {
             id: `reg_${lookupId}`,
@@ -1043,13 +1051,16 @@ export async function lookupParticipantByIdRegistrantInFirestore(
             ticketType: String(d.ticketType || 'Simposium Full Pass'),
             badgeId: String(d.badgeId || d.idRegistrant || cleaned),
           };
+        } else {
+          console.warn('[lookupParticipantByIdRegistrantInFirestore] Record is marked isActive: false', d);
         }
       }
-    } catch {
-      // Ignore permission / offline errors and fall through to local database fallback
+    } catch (err) {
+      console.error(`[lookupParticipantByIdRegistrantInFirestore] Error reading doc '${lookupId}':`, err);
     }
   }
 
+  console.warn('[lookupParticipantByIdRegistrantInFirestore] No matching registrant_directory doc found for:', cleaned);
   return null;
 }
 

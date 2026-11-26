@@ -1380,6 +1380,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
             activeParticipant={activeParticipant}
             onSetActiveParticipant={onSetActiveParticipant}
             onShowToast={showToast}
+            eventInfo={eventInfo}
             isCloudAdmin={isCloudAdmin}
             isCloudSyncing={isCloudSyncing}
             onForceCloudSync={onForceCloudSync}

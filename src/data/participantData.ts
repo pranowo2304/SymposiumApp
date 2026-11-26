@@ -154,13 +154,14 @@ export function saveStoredParticipants(participants: Participant[]): void {
 }
 
 const ID_REGISTRANT_KEY_REGEX =
-  /^(id|id[_\s-]*registrant|registrant[_\s-]*id|registrant|registration[_\s-]*id|reg[_\s-]*id|no\.?\s?registrasi|kode\s?registrasi|id[_\s-]*pendaftaran|id[_\s-]*peserta|kode[_\s-]*peserta)$/i;
+  /^(id[_\s-]*registran|id[_\s-]*registrant|registrant[_\s-]*id|registrant|registration[_\s-]*id|reg[_\s-]*id|no\.?\s?registrasi|kode\s?registrasi|id[_\s-]*pendaftaran|id[_\s-]*peserta|kode[_\s-]*peserta)$/i;
 
 function isIdRegistrantFieldKey(key: string): boolean {
-  const normalized = (key || '').trim();
+  const normalized = (key || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalized === 'id' || normalized === 'no' || normalized === '#') return false;
   return (
     ID_REGISTRANT_KEY_REGEX.test(normalized) ||
-    /(id[_\s-]*registrant|registrant[_\s-]*id|no\.?\s?registrasi|kode\s?registrasi|id[_\s-]*pendaftaran|registration[_\s-]*id|reg[_\s-]*id)/i.test(
+    /(id_registran|id_registrant|registrant_id|no_registrasi|kode_registrasi|id_pendaftaran|registration_id|reg_id)/i.test(
       normalized
     )
   );
@@ -171,15 +172,17 @@ function isIdRegistrantFieldKey(key: string): boolean {
  */
 export function extractParticipantIdRegistrant(p: Participant | undefined | null): string {
   if (!p) return '';
-  if (p.idRegistrant && p.idRegistrant.trim()) return p.idRegistrant.trim();
+  const directIdReg = p.idRegistrant != null ? String(p.idRegistrant).trim() : '';
+  if (directIdReg) return directIdReg;
   if (p.customFields) {
     for (const [k, v] of Object.entries(p.customFields)) {
-      if (isIdRegistrantFieldKey(k) && v?.trim()) {
-        return v.trim();
+      const val = v != null ? String(v).trim() : '';
+      if (isIdRegistrantFieldKey(k) && val) {
+        return val;
       }
     }
   }
-  return p.badgeId?.trim() || '';
+  return '';
 }
 
 /**

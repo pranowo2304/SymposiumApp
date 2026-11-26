@@ -503,10 +503,17 @@ export default function App() {
     setParticipants(newParticipants);
     saveStoredParticipants(newParticipants);
     if (isCloudAdmin) {
+      try {
+        localStorage.removeItem('simposium_participants_dirty_local_v1');
+      } catch {}
       syncParticipantsToFirestore(newParticipants).catch((err) => {
         console.error('Firestore participants sync failed:', err);
         showToast('Data tersimpan lokal, namun gagal sinkron ke Cloud Database.');
       });
+    } else {
+      try {
+        localStorage.setItem('simposium_participants_dirty_local_v1', 'true');
+      } catch {}
     }
   };
 
@@ -538,26 +545,35 @@ export default function App() {
 
   const handleParticipantGoogleSignIn = async (): Promise<{ ok: boolean; error?: string }> => {
     try {
+      console.log('[handleParticipantGoogleSignIn] Initiating Google Sign-In...');
       const user = await signInWithGoogle();
       await ensureUserProfileAndCheckAdmin(user);
       const userEmail = (user.email || '').trim().toLowerCase();
+      console.log('[handleParticipantGoogleSignIn] Authenticated Google user email:', userEmail);
+
       const localMatch = findParticipantByEmail(userEmail, participants);
+      console.log('[handleParticipantGoogleSignIn] Local participant match by email:', localMatch);
       if (localMatch) {
         handleParticipantLoginSuccess(localMatch);
         return { ok: true };
       }
+
       const cloudMatch = await lookupOwnParticipantByEmailInFirestore(userEmail);
+      console.log('[handleParticipantGoogleSignIn] Cloud participant match by email:', cloudMatch);
       if (cloudMatch) {
         const { participants: merged } = registerOrUpdateParticipant(cloudMatch);
         setParticipants(merged);
         handleParticipantLoginSuccess(cloudMatch);
         return { ok: true };
       }
+
+      console.warn('[handleParticipantGoogleSignIn] Email not found in local or cloud store:', userEmail);
       return {
         ok: false,
         error: `Email Google "${user.email || 'Anda'}" belum terdaftar di data peserta simposium. Silakan login menggunakan Id_registrant atau hubungi panitia.`,
       };
     } catch (err: unknown) {
+      console.error('[handleParticipantGoogleSignIn] Error during Google Sign-In:', err);
       const formatted = formatFirebaseAuthError(err);
       return {
         ok: false,
@@ -739,16 +755,53 @@ export default function App() {
         onParticipants: (cloudParticipants) => {
           if (isCloudAdmin) {
             if (pendingLocalParticipantPushRef.current) return;
+
+            let hasUnsyncedLocalEdits = false;
+            try {
+              hasUnsyncedLocalEdits =
+                localStorage.getItem('simposium_participants_dirty_local_v1') === 'true';
+            } catch {}
+
+            if (hasUnsyncedLocalEdits && latestCatalogRef.current.participants.length > 0) {
+              const localToPush = [...latestCatalogRef.current.participants];
+              pendingLocalParticipantPushRef.current = true;
+              syncParticipantsToFirestore(localToPush)
+                .then(() => {
+                  try {
+                    localStorage.removeItem('simposium_participants_dirty_local_v1');
+                  } catch {}
+                  showToast(`${localToPush.length} data peserta lokal disinkronkan ke Cloud!`);
+                })
+                .catch((err) => {
+                  console.error('Auto-push local participants failed:', err);
+                })
+                .finally(() => {
+                  pendingLocalParticipantPushRef.current = false;
+                });
+              return;
+            }
+
             setParticipants(cloudParticipants);
             saveStoredParticipants(cloudParticipants);
             const sig = cloudParticipants
-              .map((p) => `${p.id}:${p.idRegistrant || ''}:${p.badgeId || ''}:${p.name}`)
+              .map(
+                (p) =>
+                  `${p.id}:${p.idRegistrant || ''}:${p.badgeId || ''}:${p.name}:${JSON.stringify(
+                    p.customFields || {}
+                  )}`
+              )
               .join('|');
             if (sig && sig !== lastDirSyncSigRef.current) {
               lastDirSyncSigRef.current = sig;
-              ensureRegistrantDirectorySynced(cloudParticipants).catch((err) => {
-                console.warn('Auto registrant_directory backfill failed:', err);
-              });
+              ensureRegistrantDirectorySynced(cloudParticipants)
+                .then((writtenCount) => {
+                  if (writtenCount > 0) {
+                    showToast(`${writtenCount} ID peserta disinkronkan ke Cloud.`);
+                  }
+                })
+                .catch((err) => {
+                  console.warn('Auto registrant_directory backfill failed:', err);
+                });
             }
           } else if (cloudParticipants.length > 0) {
             const ownMatch = cloudParticipants[0];
@@ -893,6 +946,9 @@ export default function App() {
         setIsCloudSyncing(true);
         try {
           await syncParticipantsToFirestore(localSnapshot);
+          try {
+            localStorage.removeItem('simposium_participants_dirty_local_v1');
+          } catch {}
           setIsCloudAdmin(true);
           setIsAdminAuthenticated(true);
           showToast(`Terhubung sebagai ${user.email} & ${localSnapshot.length} data peserta tersinkron ke Cloud!`);
@@ -1303,6 +1359,7 @@ export default function App() {
               onLoginSuccess={handleParticipantLoginSuccess}
               onLogout={handleParticipantLogout}
               onGoogleSignIn={handleParticipantGoogleSignIn}
+              eventInfo={eventInfo}
             />
           )}
         </AnimatePresence>

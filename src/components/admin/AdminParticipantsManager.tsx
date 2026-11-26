@@ -21,8 +21,10 @@ import {
   Cloud,
   RefreshCw,
   LogIn,
+  QrCode,
 } from 'lucide-react';
-import { Participant } from '../../types';
+import { Participant, SymposiumInfo } from '../../types';
+import { ParticipantIdentityCard } from '../ParticipantIdentityCard';
 import {
   saveStoredParticipants,
   exportParticipantsToCSV,
@@ -41,6 +43,7 @@ interface AdminParticipantsManagerProps {
   activeParticipant: Participant;
   onSetActiveParticipant: (participant: Participant) => void;
   onShowToast: (msg: string) => void;
+  eventInfo?: SymposiumInfo;
   isCloudAdmin?: boolean;
   isCloudSyncing?: boolean;
   onForceCloudSync?: () => void;
@@ -84,6 +87,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
   activeParticipant,
   onSetActiveParticipant,
   onShowToast,
+  eventInfo,
   isCloudAdmin = false,
   isCloudSyncing = false,
   onForceCloudSync,
@@ -93,6 +97,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [ticketFilter, setTicketFilter] = useState<string>('all');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [qrModalParticipant, setQrModalParticipant] = useState<Participant | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<
     | { mode: 'single'; participant: Participant }
     | { mode: 'selected'; ids: string[] }
@@ -631,7 +636,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
               Integrasi Identitas &amp; Database
             </span>
             <span className="text-xs text-slate-400">
-              Total: {participants.length} Peserta Terdaftar
+              Total: {participants.length} Peserta ({participants.filter((p) => Boolean(extractParticipantIdRegistrant(p))).length} punya Id_registrant)
             </span>
           </div>
           <h2 className="text-lg sm:text-xl font-black text-white">
@@ -769,6 +774,15 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
             <span className="px-2.5 py-1 bg-slate-800 rounded-lg text-xs font-mono font-bold text-amber-300 border border-slate-700">
               {extractParticipantIdRegistrant(activeParticipant) || activeParticipant.badgeId || 'ID-SIMP'}
             </span>
+            <button
+              type="button"
+              onClick={() => setQrModalParticipant(activeParticipant)}
+              className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              title="Lihat Kartu Identitas & QR Code"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              <span>Kartu QR</span>
+            </button>
           </div>
         </div>
       )}
@@ -1005,6 +1019,15 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                             <span className="hidden md:inline">
                               {isActive ? 'User Aktif' : 'Pilih Akun'}
                             </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setQrModalParticipant(p)}
+                            title="Lihat & unduh Kartu Identitas + QR Code peserta"
+                            className="p-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 hover:text-emerald-200 rounded-lg border border-emerald-500/30 transition-colors cursor-pointer"
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
                           </button>
 
                           <button
@@ -1646,6 +1669,46 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                     : 'Ya, Hapus Peserta'}
                 </span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Participant QR Identity Card Preview Modal */}
+      {qrModalParticipant && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setQrModalParticipant(null)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-participant-qr-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <QrCode className="w-5 h-5 text-emerald-400 shrink-0" />
+                <h3 id="admin-participant-qr-title" className="font-bold text-white text-sm sm:text-base">
+                  Kartu Identitas &amp; QR Code Peserta
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQrModalParticipant(null)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 cursor-pointer"
+                aria-label="Tutup dialog"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5">
+              <ParticipantIdentityCard
+                participant={qrModalParticipant}
+                eventInfo={eventInfo}
+              />
             </div>
           </div>
         </div>

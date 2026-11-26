@@ -109,6 +109,7 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
     contactEmail: eventInfo.contactEmail || 'sekretariat@adhphki.org',
     contactPhone: eventInfo.contactPhone || '+62 811-2345-6789',
     websiteUrl: eventInfo.websiteUrl || 'https://kivnahk-munas.adhphki.org',
+    customIdentityCardUrl: eventInfo.customIdentityCardUrl || '',
     enableQrAttendance: false
   }));
 
@@ -200,6 +201,7 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
       contactEmail: SYMPOSIUM_INFO.contactEmail || 'sekretariat@adhphki.org',
       contactPhone: SYMPOSIUM_INFO.contactPhone || '+62 811-2345-6789',
       websiteUrl: SYMPOSIUM_INFO.websiteUrl || 'https://kivnahk-munas.adhphki.org',
+      customIdentityCardUrl: SYMPOSIUM_INFO.customIdentityCardUrl || '',
       enableQrAttendance: false
     });
     setHasChanges(true);
@@ -826,6 +828,95 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
                   );
                 })}
               </div>
+            </div>
+
+            {/* Sub-Section: Upload Desain Khusus Kartu Identitas Peserta */}
+            <div className="pt-4 border-t border-slate-800 space-y-3">
+              <div>
+                <label className="block font-bold text-slate-200 text-xs mb-0.5 flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Template Desain Khusus Kartu Identitas Peserta (Opsional):</span>
+                </label>
+                <p className="text-[11px] text-slate-400">
+                  Unggah gambar template ID Card khusus (PNG/JPG latar belakang kartu). Jika diisi, sistem akan menggunakan template tersebut saat peserta mengunduh Kartu ID.
+                </p>
+              </div>
+
+              <div className="bg-slate-950 border-2 border-dashed border-slate-800 hover:border-slate-700 rounded-2xl p-4 text-center">
+                <input
+                  type="file"
+                  id="custom-card-file-input"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    if (!file.type.startsWith('image/')) {
+                      onShowToast('Mohon pilih file gambar kartu.');
+                      return;
+                    }
+                    if (file.size > 3 * 1024 * 1024) {
+                      onShowToast('Ukuran file maksimal 3 MB.');
+                      return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = (uploadEvent) => {
+                      const res = uploadEvent.target?.result as string;
+                      setFormData(prev => ({ ...prev, customIdentityCardUrl: res }));
+                      setHasChanges(true);
+                      onShowToast('Template desain kartu identitas berhasil diunggah!');
+                    };
+                    reader.readAsDataURL(file);
+                    e.target.value = '';
+                  }}
+                  className="hidden"
+                />
+                <label
+                  htmlFor="custom-card-file-input"
+                  className="cursor-pointer flex flex-col items-center justify-center space-y-1.5"
+                >
+                  <div className="w-9 h-9 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-emerald-400 shadow-inner">
+                    <Upload className="w-4 h-4" />
+                  </div>
+                  <span className="text-xs font-bold text-white block">
+                    {formData.customIdentityCardUrl ? 'Ganti Template Kartu ID' : 'Klik untuk Unggah Gambar Template Kartu ID'}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block">
+                    Disarankan rasio vertikal (misal 760 x 1080 px)
+                  </span>
+                </label>
+              </div>
+
+              {formData.customIdentityCardUrl && (
+                <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800 gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <img
+                      src={formData.customIdentityCardUrl}
+                      alt="Template Kartu ID Peserta"
+                      className="w-12 h-16 rounded-lg object-cover bg-slate-900 border border-emerald-500/50 shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-emerald-300 block truncate">
+                        Template Kartu ID Khusus Aktif
+                      </span>
+                      <span className="text-[10px] text-slate-400 block truncate">
+                        Akan diterapkan pada cetakan / unduhan PNG kartu identitas peserta
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => ({ ...prev, customIdentityCardUrl: '' }));
+                      setHasChanges(true);
+                      onShowToast('Template kartu ID khusus dihapus. Menggunakan desain bawaan.');
+                    }}
+                    className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1 border border-rose-500/20 shrink-0 cursor-pointer"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Hapus Template</span>
+                  </button>
+                </div>
+              )}
             </div>
 
           </div>

@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import { 
   Users, 
   Stethoscope, 
@@ -55,6 +56,31 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   const palette = getThemePalette(info);
   const { isInstallable, isInstalled, installApp } = usePWAInstall();
   const activeIdReg = extractParticipantIdRegistrant(currentUser);
+  const resolvedIdCode = (activeIdReg || currentUser?.badgeId || currentUser?.id || '').trim();
+  const [inlineQrUrl, setInlineQrUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (!isParticipantLoggedIn || !resolvedIdCode) {
+      setInlineQrUrl('');
+      return;
+    }
+    let active = true;
+    QRCode.toDataURL(resolvedIdCode, {
+      width: 240,
+      margin: 2,
+      errorCorrectionLevel: 'H',
+      color: { dark: '#0f172a', light: '#ffffff' },
+    })
+      .then((url) => {
+        if (active) setInlineQrUrl(url);
+      })
+      .catch(() => {
+        if (active) setInlineQrUrl('');
+      });
+    return () => {
+      active = false;
+    };
+  }, [isParticipantLoggedIn, resolvedIdCode]);
 
   const handleInstallTrigger = async () => {
     if (isInstallable) {
@@ -257,8 +283,6 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
           </div>
         </div>
       </section>
-
-
 
       {/* Grid Menu-Menu Event - 3 items per row like a mobile app (3 columns grid) */}
       <div className="grid grid-cols-3 gap-2 sm:gap-3.5 lg:gap-4">

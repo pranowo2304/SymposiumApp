@@ -861,9 +861,11 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
                     const reader = new FileReader();
                     reader.onload = (uploadEvent) => {
                       const res = uploadEvent.target?.result as string;
-                      setFormData(prev => ({ ...prev, customIdentityCardUrl: res }));
-                      setHasChanges(true);
-                      onShowToast('Template desain kartu identitas berhasil diunggah!');
+                      const updated = { ...formData, customIdentityCardUrl: res };
+                      setFormData(updated);
+                      setHasChanges(false);
+                      onSaveEventInfo(updated);
+                      onShowToast('Template desain kartu identitas berhasil diunggah dan diterapkan!');
                     };
                     reader.readAsDataURL(file);
                     e.target.value = '';
@@ -906,8 +908,10 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      setFormData(prev => ({ ...prev, customIdentityCardUrl: '' }));
-                      setHasChanges(true);
+                      const updated = { ...formData, customIdentityCardUrl: '' };
+                      setFormData(updated);
+                      setHasChanges(false);
+                      onSaveEventInfo(updated);
                       onShowToast('Template kartu ID khusus dihapus. Menggunakan desain bawaan.');
                     }}
                     className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1 border border-rose-500/20 shrink-0 cursor-pointer"

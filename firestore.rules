@@ -287,24 +287,43 @@ service cloud.firestore {
     function isValidParticipant(data) {
       return data.keys().hasAll(['id', 'email', 'name', 'institution', 'role', 'badgeId', 'createdAt', 'updatedAt']) &&
         data.keys().hasOnly([
-          'id', 'userId', 'email', 'name', 'title', 'npaIdi', 'institution',
-          'role', 'phone', 'ticketType', 'badgeId', 'registeredAt', 'createdAt', 'updatedAt'
+          'id', 'idRegistrant', 'userId', 'email', 'name', 'title', 'npaIdi', 'institution',
+          'role', 'phone', 'ticketType', 'badgeId', 'registeredAt', 'customFields',
+          'createdAt', 'updatedAt'
         ]) &&
         data.id is string && data.id.size() >= 1 && data.id.size() <= 128 &&
+        isValidOptionalString(data, 'idRegistrant', 80) &&
         isValidOptionalString(data, 'userId', 128) &&
         data.email is string && data.email.size() >= 3 && data.email.size() <= 180 &&
         data.name is string && data.name.size() >= 1 && data.name.size() <= 180 &&
         isValidOptionalString(data, 'title', 60) &&
         isValidOptionalString(data, 'npaIdi', 80) &&
         data.institution is string && data.institution.size() <= 200 &&
-        data.role in ['Dokter Spesialis', 'Dokter Umum', 'Residen', 'Mahasiswa Kedokteran', 'Panitia', 'Peserta'] &&
+        data.role is string && data.role.size() >= 1 && data.role.size() <= 100 &&
         isValidOptionalString(data, 'phone', 50) &&
-        (!( 'ticketType' in data ) || data.ticketType in [
-          'Simposium Full Pass', 'Workshop Only', 'All-Access (Simposium + Workshop)', 'VIP / Speaker'
-        ]) &&
+        isValidOptionalString(data, 'ticketType', 120) &&
         data.badgeId is string && data.badgeId.size() >= 1 && data.badgeId.size() <= 80 &&
         isValidOptionalString(data, 'registeredAt', 40) &&
+        (!( 'customFields' in data ) || (data.customFields is map && data.customFields.size() <= 30)) &&
         data.createdAt is timestamp &&
+        data.updatedAt is timestamp && data.updatedAt == request.time;
+    }
+
+    function isValidRegistrantDirectory(data) {
+      return data.keys().hasAll(['id', 'idRegistrant', 'name', 'institution', 'role', 'badgeId', 'isActive', 'updatedAt']) &&
+        data.keys().hasOnly([
+          'id', 'idRegistrant', 'name', 'title', 'institution', 'role',
+          'ticketType', 'badgeId', 'isActive', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.idRegistrant is string && data.idRegistrant.size() >= 1 && data.idRegistrant.size() <= 80 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 180 &&
+        isValidOptionalString(data, 'title', 60) &&
+        data.institution is string && data.institution.size() <= 200 &&
+        data.role is string && data.role.size() >= 1 && data.role.size() <= 100 &&
+        isValidOptionalString(data, 'ticketType', 120) &&
+        data.badgeId is string && data.badgeId.size() >= 1 && data.badgeId.size() <= 80 &&
+        data.isActive is bool &&
         data.updatedAt is timestamp && data.updatedAt == request.time;
     }
 
@@ -589,6 +608,14 @@ service cloud.firestore {
           )
         );
       allow delete: if isAdmin() && isValidId(participantId);
+    }
+
+    // Non-PII single-document lookup directory keyed by Id_registrant (no public list)
+    match /registrant_directory/{lookupId} {
+      allow get: if isValidId(lookupId) && (resource == null || existing().isActive == true);
+      allow list: if isAdmin();
+      allow create, update: if isAdmin() && isValidId(lookupId) && isValidRegistrantDirectory(incoming()) && incoming().id == lookupId;
+      allow delete: if isAdmin() && isValidId(lookupId);
     }
   }
 }

@@ -16,6 +16,10 @@ import {
   clearBroadcastInFirestore,
   syncParticipantsToFirestore,
   syncLocalPdfMaterialsToFirestore,
+  ensureRegistrantDirectorySynced,
+  lookupOwnParticipantByEmailInFirestore,
+  lookupParticipantByIdRegistrantInFirestore,
+  subscribeParticipantByIdRegistrantInFirestore,
 } from './services/firestoreSyncService';
 import { Header } from './components/Header';
 import { MainMenuTabs, MainTabType } from './components/MainMenuTabs';
@@ -31,6 +35,7 @@ import { BroadcastNotificationToast } from './components/BroadcastNotificationTo
 import { AdminPageView } from './components/AdminPageView';
 import { LandingPageView } from './components/LandingPageView';
 import { AdminLoginModal } from './components/AdminLoginModal';
+import { ParticipantLoginModal } from './components/ParticipantLoginModal';
 import { PWAInstallModal, OfflineIndicator } from './components/PWAInstallModal';
 import { AppQRCodeModal } from './components/AppQRCodeModal';
 import { playBroadcastChime } from './utils/broadcastSound';
@@ -39,11 +44,17 @@ import { SESSIONS_DATA, SPEAKERS_DATABASE, SYMPOSIUM_INFO } from './data/symposi
 import { EXHIBITORS_DATA } from './data/exhibitorsData';
 import { DEFAULT_ROOMS_DATA } from './data/roomsData';
 import { 
+  DEFAULT_PARTICIPANTS_DATABASE,
   getActiveParticipant, 
   setActiveParticipant, 
   getStoredParticipants, 
   saveStoredParticipants, 
-  registerOrUpdateParticipant 
+  registerOrUpdateParticipant,
+  findParticipantByEmail,
+  findParticipantByIdRegistrant,
+  extractParticipantIdRegistrant,
+  isParticipantSessionLoggedIn,
+  setParticipantSessionLoggedIn,
 } from './data/participantData';
 import { Session, Speaker, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification } from './types';
 import { TAB_HASH_ORDER, parseTabFromHash, syncTabToUrlHash } from './utils/hashRouter';
@@ -91,6 +102,10 @@ export default function App() {
   // Participants Database (managed in Admin)
   const [participants, setParticipants] = useState<Participant[]>(() => getStoredParticipants());
   const [currentUser, setCurrentUser] = useState<Participant>(() => getActiveParticipant());
+  const [isParticipantLoggedIn, setIsParticipantLoggedIn] = useState<boolean>(() =>
+    isParticipantSessionLoggedIn()
+  );
+  const [isParticipantLoginModalOpen, setIsParticipantLoginModalOpen] = useState<boolean>(false);
 
   // Firebase Auth & Cloud Database Sync State
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
@@ -488,9 +503,10 @@ export default function App() {
     setParticipants(newParticipants);
     saveStoredParticipants(newParticipants);
     if (isCloudAdmin) {
-      syncParticipantsToFirestore(newParticipants).catch((err) =>
-        console.error('Firestore participants sync failed:', err)
-      );
+      syncParticipantsToFirestore(newParticipants).catch((err) => {
+        console.error('Firestore participants sync failed:', err);
+        showToast('Data tersimpan lokal, namun gagal sinkron ke Cloud Database.');
+      });
     }
   };
 
@@ -498,6 +514,56 @@ export default function App() {
     setCurrentUser(p);
     setActiveParticipant(p);
     showToast(`Identitas aktif: ${p.name}`);
+  };
+
+  const handleParticipantLoginSuccess = (p: Participant) => {
+    setCurrentUser(p);
+    setActiveParticipant(p);
+    setParticipantSessionLoggedIn(true);
+    setIsParticipantLoggedIn(true);
+    showToast(`Selamat datang, ${p.name}!`);
+  };
+
+  const handleParticipantLogout = () => {
+    setParticipantSessionLoggedIn(false);
+    setIsParticipantLoggedIn(false);
+    const fallbackUser = participants[0] || DEFAULT_PARTICIPANTS_DATABASE[0];
+    setCurrentUser(fallbackUser);
+    setActiveParticipant(fallbackUser);
+    if (firebaseUser && !isCloudAdmin) {
+      signOutFirebase().catch(() => {});
+    }
+    showToast('Anda telah keluar dari sesi peserta.');
+  };
+
+  const handleParticipantGoogleSignIn = async (): Promise<{ ok: boolean; error?: string }> => {
+    try {
+      const user = await signInWithGoogle();
+      await ensureUserProfileAndCheckAdmin(user);
+      const userEmail = (user.email || '').trim().toLowerCase();
+      const localMatch = findParticipantByEmail(userEmail, participants);
+      if (localMatch) {
+        handleParticipantLoginSuccess(localMatch);
+        return { ok: true };
+      }
+      const cloudMatch = await lookupOwnParticipantByEmailInFirestore(userEmail);
+      if (cloudMatch) {
+        const { participants: merged } = registerOrUpdateParticipant(cloudMatch);
+        setParticipants(merged);
+        handleParticipantLoginSuccess(cloudMatch);
+        return { ok: true };
+      }
+      return {
+        ok: false,
+        error: `Email Google "${user.email || 'Anda'}" belum terdaftar di data peserta simposium. Silakan login menggunakan Id_registrant atau hubungi panitia.`,
+      };
+    } catch (err: unknown) {
+      const formatted = formatFirebaseAuthError(err);
+      return {
+        ok: false,
+        error: formatted || 'Gagal masuk dengan akun Google.',
+      };
+    }
   };
 
   // Filter States
@@ -560,6 +626,11 @@ export default function App() {
         const { isAdmin } = await ensureUserProfileAndCheckAdmin(user);
         setIsCloudAdmin(isAdmin);
         if (isAdmin) {
+          setIsAdminAuthenticated(true);
+          setIsAdminLoginModalOpen(false);
+          if (typeof window !== 'undefined' && parseTabFromHash(window.location.hash) === 'admin') {
+            setActiveTab('admin');
+          }
           setIsCloudSyncing(true);
           try {
             const didSeed = await seedInitialCatalogIfEmpty({
@@ -652,6 +723,10 @@ export default function App() {
     return () => unsubscribeCatalog();
   }, []);
 
+  const lastDirSyncSigRef = useRef<string>('');
+
+  const pendingLocalParticipantPushRef = useRef<boolean>(false);
+
   // 3. Authenticated User Private Data Subscription (Participants)
   useEffect(() => {
     if (!authReady || !firebaseUser) return;
@@ -663,12 +738,24 @@ export default function App() {
       {
         onParticipants: (cloudParticipants) => {
           if (isCloudAdmin) {
+            if (pendingLocalParticipantPushRef.current) return;
             setParticipants(cloudParticipants);
             saveStoredParticipants(cloudParticipants);
+            const sig = cloudParticipants
+              .map((p) => `${p.id}:${p.idRegistrant || ''}:${p.badgeId || ''}:${p.name}`)
+              .join('|');
+            if (sig && sig !== lastDirSyncSigRef.current) {
+              lastDirSyncSigRef.current = sig;
+              ensureRegistrantDirectorySynced(cloudParticipants).catch((err) => {
+                console.warn('Auto registrant_directory backfill failed:', err);
+              });
+            }
           } else if (cloudParticipants.length > 0) {
             const ownMatch = cloudParticipants[0];
             setCurrentUser(ownMatch);
             setActiveParticipant(ownMatch);
+            setParticipantSessionLoggedIn(true);
+            setIsParticipantLoggedIn(true);
             const { participants: merged } = registerOrUpdateParticipant(ownMatch);
             setParticipants(merged);
           }
@@ -678,6 +765,78 @@ export default function App() {
 
     return () => unsubscribePrivate();
   }, [authReady, firebaseUser?.uid, firebaseUser?.email, isCloudAdmin]);
+
+  // 4. Real-time Firestore Connection for Logged-in Participant (Id_registrant)
+  const loggedInIdRegistrant = isParticipantLoggedIn
+    ? extractParticipantIdRegistrant(currentUser)
+    : '';
+
+  useEffect(() => {
+    if (!isParticipantLoggedIn || !loggedInIdRegistrant) return;
+
+    const unsubscribeParticipantDoc = subscribeParticipantByIdRegistrantInFirestore(
+      loggedInIdRegistrant,
+      (cloudParticipant) => {
+        setCurrentUser((prev) => {
+          const merged: Participant = {
+            ...prev,
+            ...cloudParticipant,
+            id: prev.id || cloudParticipant.id,
+            email: prev.email || cloudParticipant.email,
+          };
+          if (
+            prev.name === merged.name &&
+            prev.title === merged.title &&
+            prev.institution === merged.institution &&
+            prev.role === merged.role &&
+            prev.ticketType === merged.ticketType &&
+            prev.badgeId === merged.badgeId &&
+            prev.idRegistrant === merged.idRegistrant
+          ) {
+            return prev;
+          }
+          setActiveParticipant(merged);
+          return merged;
+        });
+      }
+    );
+
+    return () => unsubscribeParticipantDoc();
+  }, [isParticipantLoggedIn, loggedInIdRegistrant]);
+
+  // 5. Auto-login Participant via URL QR/Link (?id_registrant=... or ?registrant=...)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const paramId = (
+      params.get('id_registrant') ||
+      params.get('registrant') ||
+      params.get('id') ||
+      ''
+    )
+      .trim()
+      .slice(0, 80);
+    if (!paramId) return;
+
+    let cancelled = false;
+    (async () => {
+      const cloudMatch = await lookupParticipantByIdRegistrantInFirestore(paramId);
+      const localMatch = findParticipantByIdRegistrant(paramId, latestCatalogRef.current.participants);
+      const resolved = cloudMatch
+        ? localMatch
+          ? { ...localMatch, ...cloudMatch, id: localMatch.id || cloudMatch.id }
+          : cloudMatch
+        : localMatch;
+
+      if (!cancelled && resolved) {
+        handleParticipantLoginSuccess(resolved);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleForceCloudSync = async () => {
     if (!isCloudAdmin || !firebaseUser) {
@@ -717,6 +876,37 @@ export default function App() {
         showToast(`Akun ${user.email} belum terdaftar sebagai Administrator.`);
       }
     } catch (err: unknown) {
+      const formatted = formatFirebaseAuthError(err);
+      if (formatted) {
+        showToast(formatted);
+      }
+    }
+  };
+
+  const handleCloudSignInAndSyncParticipants = async () => {
+    const localSnapshot = [...latestCatalogRef.current.participants];
+    pendingLocalParticipantPushRef.current = true;
+    try {
+      const user = await signInWithGoogle();
+      const { isAdmin } = await ensureUserProfileAndCheckAdmin(user);
+      if (isAdmin) {
+        setIsCloudSyncing(true);
+        try {
+          await syncParticipantsToFirestore(localSnapshot);
+          setIsCloudAdmin(true);
+          setIsAdminAuthenticated(true);
+          showToast(`Terhubung sebagai ${user.email} & ${localSnapshot.length} data peserta tersinkron ke Cloud!`);
+        } finally {
+          pendingLocalParticipantPushRef.current = false;
+          setIsCloudSyncing(false);
+        }
+      } else {
+        pendingLocalParticipantPushRef.current = false;
+        await signOutFirebase();
+        showToast(`Akun ${user.email} belum terdaftar sebagai Administrator.`);
+      }
+    } catch (err: unknown) {
+      pendingLocalParticipantPushRef.current = false;
       const formatted = formatFirebaseAuthError(err);
       if (formatted) {
         showToast(formatted);
@@ -845,6 +1035,9 @@ export default function App() {
           onOpenAdmin={handleOpenAdmin}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
           onOpenQRCodeModal={isAdminAuthenticated ? () => setIsQRCodeModalOpen(true) : undefined}
+          onOpenParticipantLogin={() => setIsParticipantLoginModalOpen(true)}
+          currentUser={currentUser}
+          isParticipantLoggedIn={isParticipantLoggedIn}
           speakerCount={speakers.length}
           workshopCount={workshopsCount}
           symposiumCount={symposiumsCount}
@@ -905,6 +1098,7 @@ export default function App() {
           isCloudSyncing={isCloudSyncing}
           onForceCloudSync={handleForceCloudSync}
           onCloudAdminSignIn={handleCloudAdminSignIn}
+          onCloudSignInAndSyncParticipants={handleCloudSignInAndSyncParticipants}
           onOpenQRCodeModal={() => setIsQRCodeModalOpen(true)}
         />
       );
@@ -995,6 +1189,9 @@ export default function App() {
           onAdminLogout={handleAdminLogout}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
           onOpenQRCodeModal={isAdminAuthenticated ? () => setIsQRCodeModalOpen(true) : undefined}
+          onOpenParticipantLogin={() => setIsParticipantLoginModalOpen(true)}
+          currentUser={currentUser}
+          isParticipantLoggedIn={isParticipantLoggedIn}
           isMobileFrame={isMobileFrame}
           onToggleFrame={() => setIsMobileFrame(!isMobileFrame)}
           activeTab={activeTab}
@@ -1090,6 +1287,22 @@ export default function App() {
               isOpen={isAdminLoginModalOpen}
               onClose={() => setIsAdminLoginModalOpen(false)}
               onLoginSuccess={handleAdminLoginSuccess}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Participant Login Modal (Id_registrant) */}
+        <AnimatePresence>
+          {isParticipantLoginModalOpen && (
+            <ParticipantLoginModal
+              isOpen={isParticipantLoginModalOpen}
+              onClose={() => setIsParticipantLoginModalOpen(false)}
+              participants={participants}
+              currentUser={currentUser}
+              isParticipantLoggedIn={isParticipantLoggedIn}
+              onLoginSuccess={handleParticipantLoginSuccess}
+              onLogout={handleParticipantLogout}
+              onGoogleSignIn={handleParticipantGoogleSignIn}
             />
           )}
         </AnimatePresence>

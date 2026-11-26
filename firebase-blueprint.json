@@ -189,23 +189,19 @@
       "type": "object",
       "properties": {
         "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "idRegistrant": { "type": "string", "maxLength": 80 },
         "userId": { "type": "string", "maxLength": 128 },
         "email": { "type": "string", "format": "email", "minLength": 3, "maxLength": 180 },
         "name": { "type": "string", "minLength": 1, "maxLength": 180 },
         "title": { "type": "string", "maxLength": 60 },
         "npaIdi": { "type": "string", "maxLength": 80 },
         "institution": { "type": "string", "maxLength": 200 },
-        "role": {
-          "type": "string",
-          "enum": ["Dokter Spesialis", "Dokter Umum", "Residen", "Mahasiswa Kedokteran", "Panitia", "Peserta"]
-        },
+        "role": { "type": "string", "minLength": 1, "maxLength": 100 },
         "phone": { "type": "string", "maxLength": 50 },
-        "ticketType": {
-          "type": "string",
-          "enum": ["Simposium Full Pass", "Workshop Only", "All-Access (Simposium + Workshop)", "VIP / Speaker"]
-        },
+        "ticketType": { "type": "string", "maxLength": 120 },
         "badgeId": { "type": "string", "minLength": 1, "maxLength": 80 },
         "registeredAt": { "type": "string", "maxLength": 40 },
+        "customFields": { "type": "object" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -300,6 +296,24 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "materialId", "index", "data", "updatedAt"]
+    },
+    "RegistrantDirectoryEntry": {
+      "title": "RegistrantDirectoryEntry",
+      "description": "Non-PII public lookup entry keyed by normalized Id_registrant for participant badge sign-in.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "idRegistrant": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 180 },
+        "title": { "type": "string", "maxLength": 60 },
+        "institution": { "type": "string", "maxLength": 200 },
+        "role": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "ticketType": { "type": "string", "maxLength": 120 },
+        "badgeId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "isActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "idRegistrant", "name", "institution", "role", "badgeId", "isActive", "updatedAt"]
     }
   },
   "firestore": {
@@ -342,6 +356,10 @@
     "/participants/{participantId}": {
       "schema": { "$ref": "#/entities/Participant" },
       "description": "Participant registration database containing PII."
+    },
+    "/registrant_directory/{lookupId}": {
+      "schema": { "$ref": "#/entities/RegistrantDirectoryEntry" },
+      "description": "Non-PII single-document lookup directory keyed by Id_registrant."
     },
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },

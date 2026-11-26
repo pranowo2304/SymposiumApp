@@ -70,22 +70,6 @@ const VALID_ROOM_TYPES = [
   'facility',
 ] as const;
 
-const VALID_PARTICIPANT_ROLES = [
-  'Dokter Spesialis',
-  'Dokter Umum',
-  'Residen',
-  'Mahasiswa Kedokteran',
-  'Panitia',
-  'Peserta',
-] as const;
-
-const VALID_TICKET_TYPES = [
-  'Simposium Full Pass',
-  'Workshop Only',
-  'All-Access (Simposium + Workshop)',
-  'VIP / Speaker',
-] as const;
-
 const VALID_CHAT_ROLES = [
   'Peserta',
   'Dokter Spesialis',
@@ -332,22 +316,110 @@ function sanitizeBroadcastPayload(broadcast: BroadcastNotification) {
   };
 }
 
+function sanitizeCustomFields(
+  raw: unknown
+): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const entries = Object.entries(raw as Record<string, unknown>)
+    .filter(([k, v]) => k.trim().length > 0 && v !== undefined && v !== null && String(v).trim().length > 0)
+    .slice(0, 30);
+  if (entries.length === 0) return undefined;
+  const result: Record<string, string> = {};
+  for (const [key, value] of entries) {
+    const cleanKey = key.trim().slice(0, 60);
+    const cleanVal = String(value).trim().slice(0, 300);
+    if (cleanKey && cleanVal) {
+      result[cleanKey] = cleanVal;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function isIdRegistrantCustomKey(key: string): boolean {
+  const normalized = (key || '').trim();
+  return (
+    /^(id|id[_\s-]*registrant|registrant[_\s-]*id|registrant|registration[_\s-]*id|reg[_\s-]*id|no\.?\s?registrasi|kode\s?registrasi|id[_\s-]*pendaftaran|id[_\s-]*peserta|kode[_\s-]*peserta)$/i.test(
+      normalized
+    ) ||
+    /(id[_\s-]*registrant|registrant[_\s-]*id|no\.?\s?registrasi|kode\s?registrasi|id[_\s-]*pendaftaran|registration[_\s-]*id|reg[_\s-]*id)/i.test(
+      normalized
+    )
+  );
+}
+
+function resolveIdRegistrantValue(participant: Participant): string {
+  if (participant.idRegistrant && participant.idRegistrant.trim()) {
+    return participant.idRegistrant.trim();
+  }
+  if (participant.customFields) {
+    for (const [k, v] of Object.entries(participant.customFields)) {
+      if (isIdRegistrantCustomKey(k) && String(v || '').trim()) {
+        return String(v).trim();
+      }
+    }
+  }
+  return participant.badgeId?.trim() || '';
+}
+
+function buildRegistrantDirectoryEntries(participant: Participant): Array<{
+  lookupId: string;
+  data: Record<string, any>;
+}> {
+  const rawKeys = new Set<string>();
+  const primaryIdReg = resolveIdRegistrantValue(participant);
+  if (primaryIdReg) rawKeys.add(primaryIdReg);
+  if (participant.badgeId?.trim()) rawKeys.add(participant.badgeId.trim());
+  if (participant.customFields) {
+    for (const [k, v] of Object.entries(participant.customFields)) {
+      if (isIdRegistrantCustomKey(k) && String(v || '').trim()) {
+        rawKeys.add(String(v).trim());
+      }
+    }
+  }
+
+  const seenDocIds = new Set<string>();
+  const entries: Array<{ lookupId: string; data: Record<string, any> }> = [];
+
+  for (const rawKey of rawKeys) {
+    const lookupId = toFirestoreDocId(rawKey.toUpperCase(), 'reg');
+    if (seenDocIds.has(lookupId)) continue;
+    seenDocIds.add(lookupId);
+
+    entries.push({
+      lookupId,
+      data: {
+        id: lookupId,
+        idRegistrant: clampStr(primaryIdReg || rawKey, 80, lookupId),
+        name: clampStr(participant.name, 180, 'Peserta'),
+        title: clampStr(participant.title, 60),
+        institution: clampStr(participant.institution, 200, 'RS / Faskes Peserta'),
+        role: clampStr(participant.role, 100, 'Peserta'),
+        ticketType: clampStr(participant.ticketType, 120, 'Simposium Full Pass'),
+        badgeId: clampStr(participant.badgeId || primaryIdReg, 80, lookupId),
+        isActive: true,
+        updatedAt: serverTimestamp(),
+      },
+    });
+  }
+
+  return entries;
+}
+
 function sanitizeParticipantPayload(
   participant: Participant,
   existingCreatedAt?: Timestamp | null,
   ownerUid?: string
 ) {
   const docId = toFirestoreDocId(participant.id || participant.email, 'part');
-  const role = VALID_PARTICIPANT_ROLES.includes(participant.role as any)
-    ? participant.role
-    : 'Peserta';
-  const ticketType = VALID_TICKET_TYPES.includes(participant.ticketType as any)
-    ? participant.ticketType
-    : 'Simposium Full Pass';
+  const role = clampStr(participant.role, 100, 'Peserta');
+  const ticketType = clampStr(participant.ticketType, 120, 'Simposium Full Pass');
+  const safeEmail = clampStr(participant.email, 180).toLowerCase();
+  const resolvedIdRegistrant = resolveIdRegistrantValue(participant);
 
   const data: Record<string, any> = {
     id: clampStr(participant.id || docId, 128),
-    email: clampStr(participant.email, 180).toLowerCase(),
+    idRegistrant: clampStr(resolvedIdRegistrant, 80),
+    email: safeEmail.length >= 3 ? safeEmail : `${docId}@peserta.local`,
     name: clampStr(participant.name, 180, 'Peserta'),
     title: clampStr(participant.title, 60),
     npaIdi: clampStr(participant.npaIdi, 80),
@@ -355,11 +427,16 @@ function sanitizeParticipantPayload(
     role,
     phone: clampStr(participant.phone, 50),
     ticketType,
-    badgeId: clampStr(participant.badgeId, 80, `ID-SIMP-2026`),
+    badgeId: clampStr(participant.badgeId || resolvedIdRegistrant, 80, `ID-SIMP-2026`),
     registeredAt: clampStr(participant.registeredAt, 40, new Date().toISOString().split('T')[0]),
     createdAt: existingCreatedAt || serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
+
+  const cleanCustomFields = sanitizeCustomFields(participant.customFields);
+  if (cleanCustomFields) {
+    data.customFields = cleanCustomFields;
+  }
 
   if (ownerUid) {
     data.userId = clampStr(ownerUid, 128);
@@ -522,6 +599,13 @@ export async function seedInitialCatalogIfEmpty(defaults: {
     for (const p of defaults.participants) {
       const { docId, data } = sanitizeParticipantPayload(p);
       ops.push({ type: 'set', ref: doc(db, 'participants', docId), data });
+      for (const dirEntry of buildRegistrantDirectoryEntries(p)) {
+        ops.push({
+          type: 'set',
+          ref: doc(db, 'registrant_directory', dirEntry.lookupId),
+          data: dirEntry.data,
+        });
+      }
     }
 
     await commitBatchOps(ops, 'catalog_seed');
@@ -704,13 +788,11 @@ export function subscribeUserPrivateData(
       onSnapshot(
         collection(db, 'participants'),
         (snapshot) => {
-          if (!snapshot.empty) {
-            const list = snapshot.docs.map((d) => {
-              const { createdAt, updatedAt, userId, ...rest } = d.data() as any;
-              return rest as Participant;
-            });
-            callbacks.onParticipants(list);
-          }
+          const list = snapshot.docs.map((d) => {
+            const { createdAt, updatedAt, userId, ...rest } = d.data() as any;
+            return rest as Participant;
+          });
+          callbacks.onParticipants(list);
         },
         (error) => handleFirestoreError(error, OperationType.LIST, 'participants')
       )
@@ -844,6 +926,185 @@ export async function syncParticipantsToFirestore(participants: Participant[]): 
   }
 
   await commitBatchOps(ops, 'participants');
+
+  // Sync non-PII single-document lookup directory keyed by Id_registrant
+  try {
+    const existingDirSnap = await getDocs(collection(db, 'registrant_directory'));
+    const existingDirIds = existingDirSnap.docs.map((d) => d.id);
+    const targetDirIds = new Set<string>();
+    const dirOps: Array<{ type: 'set' | 'delete'; ref: ReturnType<typeof doc>; data?: any }> = [];
+
+    for (const p of participants) {
+      for (const dirEntry of buildRegistrantDirectoryEntries(p)) {
+        if (!targetDirIds.has(dirEntry.lookupId)) {
+          targetDirIds.add(dirEntry.lookupId);
+          dirOps.push({
+            type: 'set',
+            ref: doc(db, 'registrant_directory', dirEntry.lookupId),
+            data: dirEntry.data,
+          });
+        }
+      }
+    }
+
+    for (const oldDirId of existingDirIds) {
+      if (!targetDirIds.has(oldDirId)) {
+        dirOps.push({ type: 'delete', ref: doc(db, 'registrant_directory', oldDirId) });
+      }
+    }
+
+    if (dirOps.length > 0) {
+      await commitBatchOps(dirOps, 'registrant_directory');
+    }
+  } catch (error) {
+    console.warn('Registrant directory sync skipped or failed:', error);
+  }
+}
+
+export async function ensureRegistrantDirectorySynced(
+  participants: Participant[]
+): Promise<number> {
+  const existingDirSnap = await getDocs(collection(db, 'registrant_directory'));
+  const existingDirMap = new Map<string, Record<string, any>>();
+  for (const d of existingDirSnap.docs) {
+    existingDirMap.set(d.id, d.data() as Record<string, any>);
+  }
+
+  const targetDirIds = new Set<string>();
+  const dirOps: Array<{ type: 'set' | 'delete'; ref: ReturnType<typeof doc>; data?: any }> = [];
+
+  for (const p of participants) {
+    for (const dirEntry of buildRegistrantDirectoryEntries(p)) {
+      if (targetDirIds.has(dirEntry.lookupId)) continue;
+      targetDirIds.add(dirEntry.lookupId);
+
+      const prev = existingDirMap.get(dirEntry.lookupId);
+      const needsWrite =
+        !prev ||
+        prev.idRegistrant !== dirEntry.data.idRegistrant ||
+        prev.name !== dirEntry.data.name ||
+        prev.title !== dirEntry.data.title ||
+        prev.institution !== dirEntry.data.institution ||
+        prev.role !== dirEntry.data.role ||
+        prev.ticketType !== dirEntry.data.ticketType ||
+        prev.badgeId !== dirEntry.data.badgeId ||
+        prev.isActive !== true;
+
+      if (needsWrite) {
+        dirOps.push({
+          type: 'set',
+          ref: doc(db, 'registrant_directory', dirEntry.lookupId),
+          data: dirEntry.data,
+        });
+      }
+    }
+  }
+
+  for (const oldDirId of existingDirMap.keys()) {
+    if (!targetDirIds.has(oldDirId)) {
+      dirOps.push({ type: 'delete', ref: doc(db, 'registrant_directory', oldDirId) });
+    }
+  }
+
+  if (dirOps.length > 0) {
+    await commitBatchOps(dirOps, 'registrant_directory');
+  }
+  return dirOps.length;
+}
+
+export async function lookupParticipantByIdRegistrantInFirestore(
+  rawId: string
+): Promise<Participant | null> {
+  const cleaned = (rawId || '').trim();
+  if (!cleaned) return null;
+
+  const candidates = Array.from(
+    new Set([
+      toFirestoreDocId(cleaned.toUpperCase(), 'reg'),
+      toFirestoreDocId(cleaned, 'reg'),
+      toFirestoreDocId(cleaned.toLowerCase(), 'reg'),
+    ])
+  );
+
+  for (const lookupId of candidates) {
+    try {
+      const snap = await getDoc(doc(db, 'registrant_directory', lookupId));
+      if (snap.exists()) {
+        const d = snap.data() as Record<string, any>;
+        if (d.isActive !== false) {
+          return {
+            id: `reg_${lookupId}`,
+            idRegistrant: String(d.idRegistrant || cleaned),
+            email: '',
+            name: String(d.name || 'Peserta'),
+            title: String(d.title || ''),
+            institution: String(d.institution || 'RS / Faskes Peserta'),
+            role: String(d.role || 'Peserta'),
+            ticketType: String(d.ticketType || 'Simposium Full Pass'),
+            badgeId: String(d.badgeId || d.idRegistrant || cleaned),
+          };
+        }
+      }
+    } catch {
+      // Ignore permission / offline errors and fall through to local database fallback
+    }
+  }
+
+  return null;
+}
+
+export function subscribeParticipantByIdRegistrantInFirestore(
+  rawId: string,
+  onUpdate: (participant: Participant) => void
+): Unsubscribe {
+  const cleaned = (rawId || '').trim();
+  if (!cleaned) return () => {};
+
+  const primaryLookupId = toFirestoreDocId(cleaned.toUpperCase(), 'reg');
+  return onSnapshot(
+    doc(db, 'registrant_directory', primaryLookupId),
+    (snap) => {
+      if (snap.exists()) {
+        const d = snap.data() as Record<string, any>;
+        if (d.isActive !== false) {
+          onUpdate({
+            id: `reg_${primaryLookupId}`,
+            idRegistrant: String(d.idRegistrant || cleaned),
+            email: '',
+            name: String(d.name || 'Peserta'),
+            title: String(d.title || ''),
+            institution: String(d.institution || 'RS / Faskes Peserta'),
+            role: String(d.role || 'Peserta'),
+            ticketType: String(d.ticketType || 'Simposium Full Pass'),
+            badgeId: String(d.badgeId || d.idRegistrant || cleaned),
+          });
+        }
+      }
+    },
+    () => {
+      // Gracefully ignore permission/offline errors if record is local-only or offline
+    }
+  );
+}
+
+export async function lookupOwnParticipantByEmailInFirestore(
+  email: string
+): Promise<Participant | null> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@')) return null;
+
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'participants'), where('email', '==', cleanEmail))
+    );
+    if (!snap.empty) {
+      const { createdAt, updatedAt, userId, ...rest } = snap.docs[0].data() as any;
+      return rest as Participant;
+    }
+  } catch {
+    // Ignore permission or offline errors
+  }
+  return null;
 }
 
 export async function saveOwnParticipantToFirestore(

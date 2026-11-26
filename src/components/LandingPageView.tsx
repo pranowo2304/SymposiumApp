@@ -9,11 +9,14 @@ import {
   CalendarDays,
   Smartphone,
   Download,
-  QrCode
+  QrCode,
+  IdCard,
+  BadgeCheck
 } from 'lucide-react';
 import { MainTabType } from './MainMenuTabs';
-import { SymposiumInfo } from '../types';
+import { Participant, SymposiumInfo } from '../types';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
+import { extractParticipantIdRegistrant } from '../data/participantData';
 import { getThemePalette } from '../utils/themeColors';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
@@ -22,6 +25,9 @@ interface LandingPageViewProps {
   onOpenAdmin: () => void;
   onOpenInstallModal?: () => void;
   onOpenQRCodeModal?: () => void;
+  onOpenParticipantLogin?: () => void;
+  currentUser?: Participant;
+  isParticipantLoggedIn?: boolean;
   speakerCount: number;
   workshopCount: number;
   symposiumCount: number;
@@ -35,6 +41,9 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   onOpenAdmin,
   onOpenInstallModal,
   onOpenQRCodeModal,
+  onOpenParticipantLogin,
+  currentUser,
+  isParticipantLoggedIn,
   speakerCount,
   workshopCount,
   symposiumCount,
@@ -45,6 +54,7 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   const info = eventInfo || SYMPOSIUM_INFO;
   const palette = getThemePalette(info);
   const { isInstallable, isInstalled, installApp } = usePWAInstall();
+  const activeIdReg = extractParticipantIdRegistrant(currentUser);
 
   const handleInstallTrigger = async () => {
     if (isInstallable) {
@@ -217,6 +227,33 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
               <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
               <span>{info.location}</span>
             </div>
+
+            {onOpenParticipantLogin && (
+              <button
+                type="button"
+                onClick={onOpenParticipantLogin}
+                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg border transition-all cursor-pointer shadow-2xs ${
+                  isParticipantLoggedIn && currentUser
+                    ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
+                    : 'bg-sky-500/20 hover:bg-sky-500/30 text-sky-200 border-sky-400/50'
+                }`}
+              >
+                {isParticipantLoggedIn && currentUser ? (
+                  <>
+                    <BadgeCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span className="truncate max-w-[200px]">
+                      {currentUser.name}
+                      {activeIdReg ? ` • ${activeIdReg}` : ''}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <IdCard className="w-3.5 h-3.5 text-sky-300 shrink-0" />
+                    <span>Login Peserta (Id_registrant)</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </div>
       </section>

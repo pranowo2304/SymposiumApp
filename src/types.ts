@@ -86,16 +86,18 @@ export interface SymposiumInfo {
 
 export interface Participant {
   id: string;
+  idRegistrant?: string;
   email: string;
   name: string;
   title?: string;
   npaIdi?: string;
   institution: string;
-  role: 'Dokter Spesialis' | 'Dokter Umum' | 'Residen' | 'Mahasiswa Kedokteran' | 'Panitia' | 'Peserta';
+  role: string;
   phone?: string;
-  ticketType?: 'Simposium Full Pass' | 'Workshop Only' | 'All-Access (Simposium + Workshop)' | 'VIP / Speaker';
+  ticketType?: string;
   badgeId: string;
   registeredAt?: string;
+  customFields?: Record<string, string>;
 }
 
 export interface AttendanceRecord {

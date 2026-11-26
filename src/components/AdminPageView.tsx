@@ -87,6 +87,7 @@ interface AdminPageViewProps {
   isCloudSyncing?: boolean;
   onForceCloudSync?: () => void;
   onCloudAdminSignIn?: () => void;
+  onCloudSignInAndSyncParticipants?: () => void;
   onOpenQRCodeModal?: () => void;
 }
 
@@ -128,6 +129,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
   isCloudSyncing = false,
   onForceCloudSync,
   onCloudAdminSignIn,
+  onCloudSignInAndSyncParticipants,
   onOpenQRCodeModal
 }) => {
   const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>('analytics');
@@ -862,7 +864,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
       
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-4 right-4 z-50 bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-xl flex items-center gap-2 text-xs sm:text-sm font-bold animate-in fade-in slide-in-from-top-4">
+        <div className="fixed top-4 right-4 z-[70] bg-emerald-600 text-white px-4 py-3 rounded-xl shadow-2xl border border-emerald-400/40 flex items-center gap-2 text-xs sm:text-sm font-bold animate-in fade-in slide-in-from-top-4">
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{toastMessage}</span>
         </div>
@@ -1378,6 +1380,10 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
             activeParticipant={activeParticipant}
             onSetActiveParticipant={onSetActiveParticipant}
             onShowToast={showToast}
+            isCloudAdmin={isCloudAdmin}
+            isCloudSyncing={isCloudSyncing}
+            onForceCloudSync={onForceCloudSync}
+            onCloudAdminSignIn={onCloudSignInAndSyncParticipants || onCloudAdminSignIn}
           />
         )}
 

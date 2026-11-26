@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Search, Smartphone, Monitor, Sliders, Lock, Download, LogOut, QrCode } from 'lucide-react';
+import { Search, Smartphone, Monitor, Sliders, Lock, Download, LogOut, QrCode, IdCard, UserCheck } from 'lucide-react';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
-import { SymposiumInfo } from '../types';
+import { extractParticipantIdRegistrant } from '../data/participantData';
+import { Participant, SymposiumInfo } from '../types';
 import { getThemePalette } from '../utils/themeColors';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
@@ -10,6 +11,9 @@ interface HeaderProps {
   onAdminLogout?: () => void;
   onOpenInstallModal?: () => void;
   onOpenQRCodeModal?: () => void;
+  onOpenParticipantLogin?: () => void;
+  currentUser?: Participant;
+  isParticipantLoggedIn?: boolean;
   isMobileFrame: boolean;
   onToggleFrame: () => void;
   activeTab: string;
@@ -25,6 +29,9 @@ export const Header: React.FC<HeaderProps> = ({
   onAdminLogout,
   onOpenInstallModal,
   onOpenQRCodeModal,
+  onOpenParticipantLogin,
+  currentUser,
+  isParticipantLoggedIn,
   isMobileFrame,
   onToggleFrame,
   activeTab,
@@ -38,6 +45,7 @@ export const Header: React.FC<HeaderProps> = ({
   const palette = getThemePalette(info);
   const [showSearchMobile, setShowSearchMobile] = useState(false);
   const { isInstallable, isInstalled, installApp } = usePWAInstall();
+  const activeIdReg = extractParticipantIdRegistrant(currentUser);
 
   const handleInstallClick = async () => {
     if (isInstallable) {
@@ -146,6 +154,39 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Download className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                 <span className="hidden md:inline">Install App</span>
+              </button>
+            )}
+
+            {/* Participant Login / Identity Button */}
+            {onOpenParticipantLogin && (
+              <button
+                id="header-btn-participant-login"
+                type="button"
+                onClick={onOpenParticipantLogin}
+                title={
+                  isParticipantLoggedIn && currentUser
+                    ? `Peserta Teridentifikasi: ${currentUser.name} (${activeIdReg || 'Aktif'})`
+                    : 'Login Peserta menggunakan Id_registrant'
+                }
+                className={`px-2 py-1.5 rounded-lg transition-colors text-xs font-bold flex items-center gap-1 border shadow-2xs shrink-0 cursor-pointer ${
+                  isParticipantLoggedIn
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                    : 'bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200'
+                }`}
+              >
+                {isParticipantLoggedIn ? (
+                  <>
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span className="hidden sm:inline max-w-[110px] truncate">
+                      {activeIdReg || currentUser?.name?.split(' ')[0] || 'Peserta'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <IdCard className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                    <span className="hidden sm:inline">Login Peserta</span>
+                  </>
+                )}
               </button>
             )}
 

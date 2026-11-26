@@ -122,6 +122,7 @@ export const DEFAULT_PARTICIPANTS_DATABASE: Participant[] = [
 
 const STORAGE_PARTICIPANTS_KEY = 'simposium_participants_list_v1';
 const STORAGE_CURRENT_USER_KEY = 'simposium_active_participant_v1';
+const STORAGE_PARTICIPANT_LOGGED_IN_KEY = 'simposium_participant_logged_in_v1';
 
 /**
  * Load all participants from localStorage or default database
@@ -129,9 +130,9 @@ const STORAGE_CURRENT_USER_KEY = 'simposium_active_participant_v1';
 export function getStoredParticipants(): Participant[] {
   try {
     const raw = localStorage.getItem(STORAGE_PARTICIPANTS_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
@@ -152,6 +153,35 @@ export function saveStoredParticipants(participants: Participant[]): void {
   }
 }
 
+const ID_REGISTRANT_KEY_REGEX =
+  /^(id|id[_\s-]*registrant|registrant[_\s-]*id|registrant|registration[_\s-]*id|reg[_\s-]*id|no\.?\s?registrasi|kode\s?registrasi|id[_\s-]*pendaftaran|id[_\s-]*peserta|kode[_\s-]*peserta)$/i;
+
+function isIdRegistrantFieldKey(key: string): boolean {
+  const normalized = (key || '').trim();
+  return (
+    ID_REGISTRANT_KEY_REGEX.test(normalized) ||
+    /(id[_\s-]*registrant|registrant[_\s-]*id|no\.?\s?registrasi|kode\s?registrasi|id[_\s-]*pendaftaran|registration[_\s-]*id|reg[_\s-]*id)/i.test(
+      normalized
+    )
+  );
+}
+
+/**
+ * Extract primary Id_registrant from participant record (explicit field, customFields, or badgeId)
+ */
+export function extractParticipantIdRegistrant(p: Participant | undefined | null): string {
+  if (!p) return '';
+  if (p.idRegistrant && p.idRegistrant.trim()) return p.idRegistrant.trim();
+  if (p.customFields) {
+    for (const [k, v] of Object.entries(p.customFields)) {
+      if (isIdRegistrantFieldKey(k) && v?.trim()) {
+        return v.trim();
+      }
+    }
+  }
+  return p.badgeId?.trim() || '';
+}
+
 /**
  * Find participant by email (case insensitive, trimmed)
  */
@@ -163,6 +193,50 @@ export function findParticipantByEmail(email: string, participantsList?: Partici
 }
 
 /**
+ * Find participant by Id_registrant, badgeId, or matching custom field (case-insensitive)
+ */
+export function findParticipantByIdRegistrant(
+  rawId: string,
+  participantsList?: Participant[]
+): Participant | undefined {
+  if (!rawId || typeof rawId !== 'string') return undefined;
+  const target = rawId.trim().toLowerCase();
+  if (!target) return undefined;
+  const list = participantsList || getStoredParticipants();
+
+  return list.find((p) => {
+    if (p.idRegistrant && p.idRegistrant.trim().toLowerCase() === target) return true;
+    if (p.badgeId && p.badgeId.trim().toLowerCase() === target) return true;
+    if (p.customFields) {
+      for (const [k, v] of Object.entries(p.customFields)) {
+        if (isIdRegistrantFieldKey(k) && String(v || '').trim().toLowerCase() === target) {
+          return true;
+        }
+      }
+    }
+    return false;
+  });
+}
+
+export function isParticipantSessionLoggedIn(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_PARTICIPANT_LOGGED_IN_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setParticipantSessionLoggedIn(loggedIn: boolean): void {
+  try {
+    if (loggedIn) {
+      localStorage.setItem(STORAGE_PARTICIPANT_LOGGED_IN_KEY, 'true');
+    } else {
+      localStorage.removeItem(STORAGE_PARTICIPANT_LOGGED_IN_KEY);
+    }
+  } catch {}
+}
+
+/**
  * Get active identified participant, defaulting to first participant (dr. Pranowo) or first stored
  */
 export function getActiveParticipant(): Participant {
@@ -170,7 +244,7 @@ export function getActiveParticipant(): Participant {
     const raw = localStorage.getItem(STORAGE_CURRENT_USER_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && parsed.name && parsed.email) {
+      if (parsed && typeof parsed === 'object' && parsed.name) {
         return parsed;
       }
     }
@@ -234,125 +308,435 @@ export function registerOrUpdateParticipant(participant: Participant): { partici
   return { participants: updatedList, saved: toSave };
 }
 
+export type ParticipantMappingTarget =
+  | 'idRegistrant'
+  | 'email'
+  | 'name'
+  | 'title'
+  | 'institution'
+  | 'role'
+  | 'npaIdi'
+  | 'phone'
+  | 'ticketType'
+  | 'badgeId'
+  | 'custom'
+  | 'ignore';
+
+function detectDelimiter(sampleLine: string): string {
+  const tabCount = (sampleLine.match(/\t/g) || []).length;
+  const semiCount = (sampleLine.match(/;/g) || []).length;
+  const commaCount = (sampleLine.match(/,/g) || []).length;
+  if (tabCount >= semiCount && tabCount >= commaCount && tabCount > 0) return '\t';
+  if (semiCount >= commaCount && semiCount > 0) return ';';
+  return ',';
+}
+
+function parseDelimitedLine(line: string, delimiter: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === delimiter && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+const HEADER_KEYWORDS = [
+  'email', 'e-mail', 'surel', 'mail', 'nama', 'name', 'peserta',
+  'institusi', 'instansi', 'rumah sakit', 'hospital', 'rs', 'afiliasi',
+  'profesi', 'role', 'jabatan', 'kategori', 'npa', 'idi', 'hp', 'wa',
+  'telepon', 'telp', 'phone', 'tiket', 'ticket', 'paket', 'badge', 'no', 'nik'
+];
+
+export function parseDelimitedSpreadsheetText(rawText: string): {
+  headers: string[];
+  rows: string[][];
+  hasDetectedHeader: boolean;
+} {
+  const cleaned = (rawText || '').replace(/^\uFEFF/, '');
+  const lines = cleaned
+    .split(/\r?\n/)
+    .map((l) => l.trimEnd())
+    .filter((l) => l.trim().length > 0);
+
+  if (lines.length === 0) {
+    return { headers: [], rows: [], hasDetectedHeader: false };
+  }
+
+  const delimiter = detectDelimiter(lines[0]);
+  const parsedLines = lines.map((line) => parseDelimitedLine(line, delimiter));
+  const maxCols = Math.max(...parsedLines.map((row) => row.length), 1);
+
+  const firstRow = parsedLines[0];
+  const firstRowJoined = firstRow.join(' ').toLowerCase();
+  const firstRowHasEmail = firstRow.some((cell) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cell.trim()));
+  const firstRowLooksLikeHeader =
+    !firstRowHasEmail &&
+    (HEADER_KEYWORDS.some((kw) => firstRowJoined.includes(kw)) || parsedLines.length > 1);
+
+  const rawHeaders = firstRowLooksLikeHeader
+    ? firstRow
+    : Array.from({ length: maxCols }, (_, idx) => `Kolom ${idx + 1}`);
+
+  const headers = Array.from({ length: maxCols }, (_, idx) => {
+    const val = (rawHeaders[idx] || '').trim();
+    return val || `Kolom ${idx + 1}`;
+  });
+
+  const dataRows = (firstRowLooksLikeHeader ? parsedLines.slice(1) : parsedLines).map((row) =>
+    Array.from({ length: maxCols }, (_, idx) => (row[idx] ?? '').trim())
+  );
+
+  return {
+    headers,
+    rows: dataRows.filter((row) => row.some((cell) => cell.length > 0)),
+    hasDetectedHeader: firstRowLooksLikeHeader,
+  };
+}
+
+export function detectParticipantColumnMapping(
+  headers: string[],
+  rows: string[][]
+): ParticipantMappingTarget[] {
+  const usedTargets = new Set<ParticipantMappingTarget>();
+
+  const pickUnique = (target: ParticipantMappingTarget): ParticipantMappingTarget => {
+    if (usedTargets.has(target)) return 'custom';
+    usedTargets.add(target);
+    return target;
+  };
+
+  const initial: ParticipantMappingTarget[] = headers.map((header) => {
+    const h = header.trim().toLowerCase();
+
+    if (/^(no|no\.|#|nomor|urut)$/.test(h)) return 'ignore';
+    if (isIdRegistrantFieldKey(h)) {
+      return pickUnique('idRegistrant');
+    }
+    if (/(e-?mail|surel|\bmail\b)/.test(h)) return pickUnique('email');
+    if (/(nama|full.?name|\bname\b|peserta)/.test(h) && !/(institusi|instansi|rs|rumah sakit|kegiatan|event)/.test(h)) {
+      return pickUnique('name');
+    }
+    if (/(gelar|\btitle\b)/.test(h)) return pickUnique('title');
+    if (/(institusi|instansi|rumah sakit|\brs\b|hospital|afiliasi|faskes|asal|lembaga|unit kerja|universitas|fk)/.test(h)) {
+      return pickUnique('institution');
+    }
+    if (/(profesi|\brole\b|jabatan|kategori|spesialis|bidang|peran)/.test(h)) {
+      return pickUnique('role');
+    }
+    if (/(npa|idi|\bstr\b|\bsip\b|anggota)/.test(h)) return pickUnique('npaIdi');
+    if (/(\bhp\b|\bwa\b|whatsapp|telepon|telp|phone|handphone|no\.?\s?hp|kontak|seluler)/.test(h)) {
+      return pickUnique('phone');
+    }
+    if (/(tiket|ticket|paket|registrasi|jenis.?peserta|kepesertaan)/.test(h)) {
+      return pickUnique('ticketType');
+    }
+    if (/(badge|kode.?peserta|id.?peserta|qr.?id)/.test(h)) {
+      return pickUnique('badgeId');
+    }
+    return 'custom';
+  });
+
+  // Content-based fallback for headerless or non-standard headers
+  if (!usedTargets.has('email')) {
+    const emailColIdx = headers.findIndex((_, colIdx) =>
+      rows.slice(0, 10).some((row) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((row[colIdx] || '').trim()))
+    );
+    if (emailColIdx >= 0) {
+      initial[emailColIdx] = 'email';
+      usedTargets.add('email');
+    }
+  }
+
+  if (!usedTargets.has('name')) {
+    const nameColIdx = initial.findIndex(
+      (target, colIdx) =>
+        target === 'custom' &&
+        rows.slice(0, 5).some((row) => {
+          const val = (row[colIdx] || '').trim();
+          return val.length >= 3 && !/^\d+$/.test(val) && !val.includes('@');
+        })
+    );
+    if (nameColIdx >= 0) {
+      initial[nameColIdx] = 'name';
+      usedTargets.add('name');
+    }
+  }
+
+  return initial;
+}
+
+function slugifyEmailLocal(text: string, fallbackIndex: number): string {
+  const slug = (text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '')
+    .slice(0, 48);
+  return slug || `peserta.${fallbackIndex + 1}`;
+}
+
+export function importParticipantsWithMapping(params: {
+  headers: string[];
+  rows: string[][];
+  mapping: ParticipantMappingTarget[];
+  existingParticipants?: Participant[];
+  autoGeneratePlaceholderEmail?: boolean;
+}): {
+  importedCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  totalParticipants: Participant[];
+  errors: string[];
+} {
+  const {
+    headers,
+    rows,
+    mapping,
+    existingParticipants,
+    autoGeneratePlaceholderEmail = false,
+  } = params;
+
+  const baseList = existingParticipants ? [...existingParticipants] : [...getStoredParticipants()];
+
+  if (rows.length === 0) {
+    return {
+      importedCount: 0,
+      updatedCount: 0,
+      skippedCount: 0,
+      totalParticipants: baseList,
+      errors: ['Tidak ada baris data yang dapat diproses.'],
+    };
+  }
+
+  const errors: string[] = [];
+  let importedCount = 0;
+  let updatedCount = 0;
+  let skippedCount = 0;
+  const nowDate = new Date().toISOString().split('T')[0];
+
+  rows.forEach((row, idx) => {
+    if (!row.some((cell) => cell.trim().length > 0)) return;
+
+    let idRegistrant = '';
+    let email = '';
+    let name = '';
+    let title = '';
+    let institution = '';
+    let role = '';
+    let npaIdi = '';
+    let phone = '';
+    let ticketType = '';
+    let badgeId = '';
+    const customFields: Record<string, string> = {};
+
+    mapping.forEach((target, colIdx) => {
+      const val = (row[colIdx] ?? '').trim();
+      if (!val || target === 'ignore') return;
+
+      switch (target) {
+        case 'idRegistrant':
+          idRegistrant = val;
+          break;
+        case 'email':
+          email = val.toLowerCase();
+          break;
+        case 'name':
+          name = val;
+          break;
+        case 'title':
+          title = val;
+          break;
+        case 'institution':
+          institution = val;
+          break;
+        case 'role':
+          role = val;
+          break;
+        case 'npaIdi':
+          npaIdi = val;
+          break;
+        case 'phone':
+          phone = val;
+          break;
+        case 'ticketType':
+          ticketType = val;
+          break;
+        case 'badgeId':
+          badgeId = val;
+          break;
+        case 'custom': {
+          const headerName = (headers[colIdx] || `Kolom_${colIdx + 1}`).trim().slice(0, 60);
+          if (headerName) {
+            customFields[headerName] = val.slice(0, 300);
+          }
+          break;
+        }
+      }
+    });
+
+    if (!name && !email && !idRegistrant && Object.keys(customFields).length === 0) {
+      skippedCount++;
+      return;
+    }
+
+    if (!email || !email.includes('@')) {
+      if (autoGeneratePlaceholderEmail && (name || badgeId || idRegistrant)) {
+        email = `${slugifyEmailLocal(idRegistrant || name || badgeId, idx)}@peserta.local`;
+      } else {
+        skippedCount++;
+        errors.push(
+          `Baris ${idx + 1}: Email "${email || '-'}" tidak valid atau kosong (kolom Email belum terisi).`
+        );
+        return;
+      }
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanIdReg = idRegistrant.trim().toLowerCase();
+    const existingIndex = baseList.findIndex(
+      (p) =>
+        p.email.trim().toLowerCase() === cleanEmail ||
+        (cleanIdReg && p.idRegistrant && p.idRegistrant.trim().toLowerCase() === cleanIdReg)
+    );
+    const existing = existingIndex >= 0 ? baseList[existingIndex] : undefined;
+
+    const mergedCustomFields = {
+      ...(existing?.customFields || {}),
+      ...customFields,
+    };
+
+    const resolvedIdRegistrant = idRegistrant || existing?.idRegistrant || '';
+    const resolvedBadgeId =
+      badgeId ||
+      resolvedIdRegistrant ||
+      existing?.badgeId ||
+      `ID-SIMP-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const participantObj: Participant = {
+      id: existing ? existing.id : `part-${Date.now()}-${idx}`,
+      ...(resolvedIdRegistrant ? { idRegistrant: resolvedIdRegistrant } : {}),
+      email: cleanEmail,
+      name: name || existing?.name || cleanEmail.split('@')[0],
+      title: title || existing?.title || '',
+      institution: institution || existing?.institution || 'RS / Faskes Peserta',
+      role: role || existing?.role || 'Peserta',
+      npaIdi: npaIdi || existing?.npaIdi || '',
+      phone: phone || existing?.phone || '',
+      ticketType: ticketType || existing?.ticketType || 'Simposium Full Pass',
+      badgeId: resolvedBadgeId,
+      registeredAt: existing?.registeredAt || nowDate,
+      ...(Object.keys(mergedCustomFields).length > 0 ? { customFields: mergedCustomFields } : {}),
+    };
+
+    if (existingIndex >= 0) {
+      baseList[existingIndex] = { ...existing, ...participantObj };
+      updatedCount++;
+    } else {
+      baseList.unshift(participantObj);
+      importedCount++;
+    }
+  });
+
+  saveStoredParticipants(baseList);
+
+  return {
+    importedCount,
+    updatedCount,
+    skippedCount,
+    totalParticipants: baseList,
+    errors,
+  };
+}
+
 /**
- * Bulk import participants from CSV or TSV text
- * Supports header line: email, name, institution, role, npa_idi, phone, ticket_type
+ * Bulk import participants from CSV or TSV text (auto-detects columns from headers)
  */
-export function importParticipantsFromCSV(csvText: string): {
+export function importParticipantsFromCSV(
+  csvText: string,
+  existingParticipants?: Participant[]
+): {
   importedCount: number;
   updatedCount: number;
   totalParticipants: Participant[];
   errors: string[];
 } {
-  const currentList = getStoredParticipants();
-  const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-
-  if (lines.length === 0) {
-    return { importedCount: 0, updatedCount: 0, totalParticipants: currentList, errors: ['Teks CSV kosong.'] };
-  }
-
-  const errors: string[] = [];
-  const listCopy = [...currentList];
-  let importedCount = 0;
-  let updatedCount = 0;
-
-  // Check if first line is a header
-  const firstLine = lines[0].toLowerCase();
-  const hasHeader = firstLine.includes('email') || firstLine.includes('nama') || firstLine.includes('name');
-  const dataLines = hasHeader ? lines.slice(1) : lines;
-
-  dataLines.forEach((line, idx) => {
-    // Delimiter can be comma or semicolon or tab
-    const delimiter = line.includes('\t') ? '\t' : line.includes(';') ? ';' : ',';
-    const parts = line.split(delimiter).map(p => p.trim().replace(/^["']|["']$/g, ''));
-
-    if (parts.length < 2) {
-      errors.push(`Baris ${idx + (hasHeader ? 2 : 1)}: Format tidak lengkap (minimal butuh email dan nama)`);
-      return;
-    }
-
-    const email = parts[0]?.trim();
-    const name = parts[1]?.trim();
-    const institution = parts[2]?.trim() || 'RS / Faskes Peserta';
-    const roleRaw = parts[3]?.trim() || 'Dokter Spesialis';
-    const npaIdi = parts[4]?.trim() || `${Math.floor(100 + Math.random() * 800)}.${Math.floor(100 + Math.random() * 800)}/IDI`;
-    const phone = parts[5]?.trim() || '';
-    const ticketTypeRaw = parts[6]?.trim() || 'Simposium Full Pass';
-
-    if (!email || !email.includes('@')) {
-      errors.push(`Baris ${idx + (hasHeader ? 2 : 1)}: Alamat email "${email}" tidak valid.`);
-      return;
-    }
-
-    // Normalize role
-    let role: Participant['role'] = 'Dokter Spesialis';
-    const lowerRole = roleRaw.toLowerCase();
-    if (lowerRole.includes('umum')) role = 'Dokter Umum';
-    else if (lowerRole.includes('residen') || lowerRole.includes('ppds')) role = 'Residen';
-    else if (lowerRole.includes('mahasiswa') || lowerRole.includes('koas')) role = 'Mahasiswa Kedokteran';
-    else if (lowerRole.includes('panitia')) role = 'Panitia';
-    else if (lowerRole.includes('peserta')) role = 'Peserta';
-
-    // Normalize ticket
-    let ticketType: Participant['ticketType'] = 'Simposium Full Pass';
-    const lowerTicket = ticketTypeRaw.toLowerCase();
-    if (lowerTicket.includes('workshop')) ticketType = 'Workshop Only';
-    else if (lowerTicket.includes('all') || lowerTicket.includes('semua')) ticketType = 'All-Access (Simposium + Workshop)';
-    else if (lowerTicket.includes('vip') || lowerTicket.includes('speaker')) ticketType = 'VIP / Speaker';
-
-    const cleanEmail = email.toLowerCase();
-    const existingIndex = listCopy.findIndex(p => p.email.trim().toLowerCase() === cleanEmail);
-
-    const participantObj: Participant = {
-      id: existingIndex >= 0 ? listCopy[existingIndex].id : `part-${Date.now()}-${idx}`,
-      email: cleanEmail,
-      name: name || email.split('@')[0],
-      institution,
-      role,
-      npaIdi,
-      phone,
-      ticketType,
-      badgeId: existingIndex >= 0 ? listCopy[existingIndex].badgeId : `ID-SIMP-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      registeredAt: new Date().toISOString().split('T')[0]
+  const { headers, rows } = parseDelimitedSpreadsheetText(csvText);
+  if (rows.length === 0) {
+    return {
+      importedCount: 0,
+      updatedCount: 0,
+      totalParticipants: existingParticipants || getStoredParticipants(),
+      errors: ['Teks CSV kosong atau tidak memiliki baris data.'],
     };
-
-    if (existingIndex >= 0) {
-      listCopy[existingIndex] = { ...listCopy[existingIndex], ...participantObj };
-      updatedCount++;
-    } else {
-      listCopy.unshift(participantObj);
-      importedCount++;
-    }
+  }
+  const mapping = detectParticipantColumnMapping(headers, rows);
+  const res = importParticipantsWithMapping({
+    headers,
+    rows,
+    mapping,
+    existingParticipants,
   });
-
-  saveStoredParticipants(listCopy);
-
   return {
-    importedCount,
-    updatedCount,
-    totalParticipants: listCopy,
-    errors
+    importedCount: res.importedCount,
+    updatedCount: res.updatedCount,
+    totalParticipants: res.totalParticipants,
+    errors: res.errors,
   };
 }
 
 /**
- * Export participants to CSV format
+ * Export participants to CSV format (including any customFields columns)
  */
 export function exportParticipantsToCSV(participants: Participant[]): string {
-  const headers = ['Email', 'Nama Lengkap & Gelar', 'Institusi / Rumah Sakit', 'Kategori Profesi', 'NPA IDI', 'No. Telepon/WA', 'Jenis Tiket', 'ID Badge', 'Tanggal Daftar'];
-  const rows = participants.map(p => [
-    `"${p.email}"`,
-    `"${p.name}"`,
-    `"${p.institution}"`,
-    `"${p.role}"`,
-    `"${p.npaIdi || '-'}"`,
-    `"${p.phone || '-'}"`,
-    `"${p.ticketType || 'Simposium Full Pass'}"`,
-    `"${p.badgeId}"`,
-    `"${p.registeredAt || '-'}"`
+  const customKeys = Array.from(
+    new Set(
+      participants.flatMap((p) => (p.customFields ? Object.keys(p.customFields) : []))
+    )
+  );
+  const headers = [
+    'Id_registrant',
+    'Email',
+    'Nama Lengkap & Gelar',
+    'Institusi / Rumah Sakit',
+    'Kategori Profesi',
+    'NPA IDI',
+    'No. Telepon/WA',
+    'Jenis Tiket',
+    'ID Badge',
+    'Tanggal Daftar',
+    ...customKeys,
+  ];
+  const escapeCsv = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+  const rows = participants.map((p) => [
+    escapeCsv(extractParticipantIdRegistrant(p) || '-'),
+    escapeCsv(p.email),
+    escapeCsv(p.name),
+    escapeCsv(p.institution),
+    escapeCsv(p.role),
+    escapeCsv(p.npaIdi || '-'),
+    escapeCsv(p.phone || '-'),
+    escapeCsv(p.ticketType || 'Simposium Full Pass'),
+    escapeCsv(p.badgeId),
+    escapeCsv(p.registeredAt || '-'),
+    ...customKeys.map((k) => escapeCsv(p.customFields?.[k] || '')),
   ]);
 
-  return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
 }
 
 /**

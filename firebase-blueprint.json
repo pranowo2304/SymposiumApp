@@ -18,6 +18,7 @@
         "logoUrl": { "type": "string", "maxLength": 100000 },
         "customIdentityCardUrl": { "type": "string", "maxLength": 500000 },
         "identityCardLayout": { "type": "object", "description": "Field positions, font sizes, colors, and visibility for participant ID cards." },
+        "workshopRundownPdfs": { "type": "object", "description": "Metadata mapping each workshop track to its uploaded rundown schedule PDF." },
         "themeColor": {
           "type": "string",
           "enum": ["medical-navy", "gold-amber", "cyan-teal", "emerald-green", "crimson-ruby", "royal-indigo"]
@@ -316,12 +317,32 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "idRegistrant", "name", "institution", "role", "badgeId", "isActive", "updatedAt"]
+    },
+    "IdentityCardTemplate": {
+      "title": "IdentityCardTemplate",
+      "description": "Custom participant ID card template image and optional field layout for a specific workshop track.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "workshopKey": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "workshopLabel": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "templateUrl": { "type": "string", "maxLength": 500000 },
+        "layout": { "type": "object", "description": "Optional per-workshop field positions and styling for the ID card." },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "workshopKey", "workshopLabel", "templateUrl", "isPublished", "updatedAt"]
     }
   },
   "firestore": {
     "/event_info/{docId}": {
       "schema": { "$ref": "#/entities/EventInfo" },
       "description": "Public symposium configuration document (e.g. /event_info/main)."
+    },
+    "/identity_card_templates/{templateId}": {
+      "schema": { "$ref": "#/entities/IdentityCardTemplate" },
+      "description": "Per-workshop custom participant ID card template images and optional field layouts."
     },
     "/sessions/{sessionId}": {
       "schema": { "$ref": "#/entities/Session" },

@@ -28,6 +28,8 @@ import type {
   AttendanceRecord,
   ChatMessage,
   PresentationMaterial,
+  WorkshopIdentityCardTemplate,
+  WorkshopRundownPdf,
 } from '../types';
 import {
   base64ToPdfBlob,
@@ -100,6 +102,35 @@ function clampStringArray(val: unknown, maxItems: number, maxItemLen = 500): str
 // Payload Sanitizers matching firebase-blueprint.json & firestore.rules
 // ============================================================================
 
+function sanitizeWorkshopRundownPdfsMap(
+  rawMap?: Record<string, WorkshopRundownPdf>
+): Record<string, WorkshopRundownPdf> {
+  const result: Record<string, WorkshopRundownPdf> = {};
+  if (!rawMap || typeof rawMap !== 'object') return result;
+
+  Object.entries(rawMap)
+    .slice(0, 15)
+    .forEach(([key, val]) => {
+      if (!val || typeof val !== 'object') return;
+      const safeKey = toFirestoreDocId(val.workshopKey || key, 'ws_rundown').slice(0, 120);
+      const safeMatId = toFirestoreDocId(val.materialId, 'mat').slice(0, 128);
+      result[safeKey] = {
+        workshopKey: safeKey,
+        workshopLabel: clampStr(val.workshopLabel, 200, safeKey),
+        materialId: safeMatId,
+        title: clampStr(val.title, 300, `Rundown ${val.workshopLabel || safeKey}`),
+        fileName: clampStr(val.fileName, 250, 'rundown-workshop.pdf'),
+        fileSize: Math.max(0, Math.min(15728640, Math.round(Number(val.fileSize) || 0))),
+        mimeType: clampStr(val.mimeType, 100, 'application/pdf'),
+        chunkCount: Math.max(0, Math.min(40, Math.round(Number(val.chunkCount) || 0))),
+        ...(val.externalUrl ? { externalUrl: clampStr(val.externalUrl, 1000) } : {}),
+        uploadedAt: clampStr(val.uploadedAt, 60, new Date().toISOString()),
+      };
+    });
+
+  return result;
+}
+
 function sanitizeEventInfoPayload(info: SymposiumInfo, updatedBy?: string) {
   const themeColor = VALID_THEME_COLORS.includes(info.themeColor as any)
     ? info.themeColor
@@ -119,6 +150,7 @@ function sanitizeEventInfoPayload(info: SymposiumInfo, updatedBy?: string) {
     logoUrl: clampStr(info.logoUrl, 500000),
     customIdentityCardUrl: clampStr(info.customIdentityCardUrl, 500000),
     identityCardLayout: normalizeIdentityCardLayout(info.identityCardLayout),
+    workshopRundownPdfs: sanitizeWorkshopRundownPdfsMap(info.workshopRundownPdfs),
     themeColor,
     contactEmail: clampStr(info.contactEmail, 160),
     contactPhone: clampStr(info.contactPhone, 60),
@@ -132,6 +164,31 @@ function sanitizeEventInfoPayload(info: SymposiumInfo, updatedBy?: string) {
     payload.updatedBy = clampStr(updatedBy, 128);
   }
   return payload;
+}
+
+function sanitizeIdentityCardTemplatePayload(
+  tpl: WorkshopIdentityCardTemplate,
+  updatedBy?: string
+) {
+  const docId = toFirestoreDocId(tpl.workshopKey || tpl.workshopLabel, 'workshop_card').slice(
+    0,
+    120
+  );
+  const payload: Record<string, any> = {
+    id: docId,
+    workshopKey: docId,
+    workshopLabel: clampStr(tpl.workshopLabel, 200, docId),
+    templateUrl: clampStr(tpl.templateUrl, 500000),
+    isPublished: true,
+    updatedAt: serverTimestamp(),
+  };
+  if (tpl.layout) {
+    payload.layout = normalizeIdentityCardLayout(tpl.layout);
+  }
+  if (updatedBy) {
+    payload.updatedBy = clampStr(updatedBy, 128);
+  }
+  return { docId, data: payload };
 }
 
 function sanitizeSessionPayload(session: Session) {
@@ -626,6 +683,7 @@ export async function seedInitialCatalogIfEmpty(defaults: {
 
 export function subscribePublicCatalog(callbacks: {
   onEventInfo: (info: SymposiumInfo) => void;
+  onWorkshopCardTemplates?: (templates: Record<string, WorkshopIdentityCardTemplate>) => void;
   onSessions: (sessions: Session[]) => void;
   onSpeakers: (speakers: Speaker[]) => void;
   onExhibitors: (exhibitors: Exhibitor[]) => void;
@@ -639,7 +697,8 @@ export function subscribePublicCatalog(callbacks: {
       query(collection(db, 'event_info'), where('isPublished', '==', true)),
       (snapshot) => {
         if (!snapshot.empty) {
-          const docData = snapshot.docs[0].data() as any;
+          const mainDoc = snapshot.docs.find((d) => d.id === 'main') || snapshot.docs[0];
+          const docData = mainDoc.data() as any;
           const { isPublished, updatedAt, updatedBy, ...rest } = docData;
           callbacks.onEventInfo(rest as SymposiumInfo);
         }
@@ -647,6 +706,31 @@ export function subscribePublicCatalog(callbacks: {
       (error) => handleFirestoreError(error, OperationType.LIST, 'event_info')
     )
   );
+
+  if (callbacks.onWorkshopCardTemplates) {
+    unsubscribers.push(
+      onSnapshot(
+        query(collection(db, 'identity_card_templates'), where('isPublished', '==', true)),
+        (snapshot) => {
+          const templatesMap: Record<string, WorkshopIdentityCardTemplate> = {};
+          snapshot.docs.forEach((d) => {
+            const raw = d.data() as any;
+            const key = typeof raw.workshopKey === 'string' && raw.workshopKey ? raw.workshopKey : d.id;
+            if (typeof raw.templateUrl === 'string' && raw.templateUrl.trim()) {
+              templatesMap[key] = {
+                workshopKey: key,
+                workshopLabel: typeof raw.workshopLabel === 'string' ? raw.workshopLabel : key,
+                templateUrl: raw.templateUrl,
+                ...(raw.layout ? { layout: normalizeIdentityCardLayout(raw.layout) } : {}),
+              };
+            }
+          });
+          callbacks.onWorkshopCardTemplates?.(templatesMap);
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, 'identity_card_templates')
+      )
+    );
+  }
 
   unsubscribers.push(
     onSnapshot(
@@ -832,6 +916,42 @@ export async function saveEventInfoToFirestore(info: SymposiumInfo, adminUid?: s
     await setDoc(doc(db, 'event_info', 'main'), sanitizeEventInfoPayload(info, adminUid));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, 'event_info/main');
+  }
+
+  // Sync per-workshop ID card templates in their own documents to avoid the 1 MiB document limit
+  if (info.workshopIdentityCardTemplates !== undefined) {
+    let existingIds: string[] = [];
+    try {
+      const snap = await getDocs(collection(db, 'identity_card_templates'));
+      existingIds = snap.docs.map((d) => d.id);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.LIST, 'identity_card_templates');
+    }
+
+    const activeTemplates = Object.values(info.workshopIdentityCardTemplates || {}).filter(
+      (tpl) => Boolean(tpl && tpl.templateUrl && tpl.templateUrl.trim())
+    );
+    const targetIds = new Set<string>();
+
+    for (const tpl of activeTemplates) {
+      const { docId, data } = sanitizeIdentityCardTemplatePayload(tpl, adminUid);
+      targetIds.add(docId);
+      try {
+        await setDoc(doc(db, 'identity_card_templates', docId), data);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, `identity_card_templates/${docId}`);
+      }
+    }
+
+    for (const oldId of existingIds) {
+      if (!targetIds.has(oldId)) {
+        try {
+          await deleteDoc(doc(db, 'identity_card_templates', oldId));
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `identity_card_templates/${oldId}`);
+        }
+      }
+    }
   }
 }
 

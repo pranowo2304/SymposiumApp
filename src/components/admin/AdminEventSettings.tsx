@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Building, 
   Calendar, 
@@ -22,16 +22,19 @@ import {
   Palette,
   QrCode,
   Settings,
-  Cloud
+  Cloud,
+  LayoutTemplate,
 } from 'lucide-react';
-import { SymposiumInfo } from '../../types';
+import { Session, SymposiumInfo, WorkshopIdentityCardTemplate } from '../../types';
 import { SYMPOSIUM_INFO } from '../../data/symposiumData';
 import { COLOR_PALETTES, LogoPaletteType } from '../../utils/themeColors';
 import { normalizeIdentityCardLayout } from '../../utils/identityCardLayout';
+import { getWorkshopCardSlots } from '../../utils/workshopCardTemplates';
 import { AdminIdentityCardLayoutEditor } from './AdminIdentityCardLayoutEditor';
 
 interface AdminEventSettingsProps {
   eventInfo: SymposiumInfo;
+  sessions?: Session[];
   onSaveEventInfo: (info: SymposiumInfo) => void;
   onShowToast: (msg: string) => void;
   isCloudAdmin?: boolean;
@@ -164,6 +167,7 @@ export const EVENT_LOGO_PRESETS = [
 
 export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
   eventInfo,
+  sessions,
   onSaveEventInfo,
   onShowToast,
   isCloudAdmin = false,
@@ -196,13 +200,24 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
     websiteUrl: info.websiteUrl || 'https://kivnahk-munas.adhphki.org',
     customIdentityCardUrl: info.customIdentityCardUrl || '',
     identityCardLayout: normalizeIdentityCardLayout(info.identityCardLayout),
+    workshopIdentityCardTemplates: info.workshopIdentityCardTemplates
+      ? { ...info.workshopIdentityCardTemplates }
+      : {},
+    workshopRundownPdfs: info.workshopRundownPdfs ? { ...info.workshopRundownPdfs } : {},
     enableQrAttendance: false
   });
 
   const [formData, setFormData] = useState<SymposiumInfo>(() => buildFormFromEventInfo(eventInfo));
   const [hasChanges, setHasChanges] = useState<boolean>(false);
   const [isCompressingCardTemplate, setIsCompressingCardTemplate] = useState<boolean>(false);
+  const [compressingWorkshopKey, setCompressingWorkshopKey] = useState<string | null>(null);
+  const [activeLayoutTarget, setActiveLayoutTarget] = useState<string>('default');
   const [logoInputType, setLogoInputType] = useState<'preset' | 'upload' | 'url'>('preset');
+
+  const workshopCardSlots = useMemo(
+    () => getWorkshopCardSlots(sessions, formData.workshopIdentityCardTemplates),
+    [sessions, formData.workshopIdentityCardTemplates]
+  );
 
   // Keep form synchronized when eventInfo loads/updates from Firestore if no unsaved draft edits exist
   useEffect(() => {
@@ -298,6 +313,8 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
       websiteUrl: SYMPOSIUM_INFO.websiteUrl || 'https://kivnahk-munas.adhphki.org',
       customIdentityCardUrl: SYMPOSIUM_INFO.customIdentityCardUrl || '',
       identityCardLayout: normalizeIdentityCardLayout(SYMPOSIUM_INFO.identityCardLayout),
+      workshopIdentityCardTemplates: {},
+      workshopRundownPdfs: {},
       enableQrAttendance: false
     });
     setHasChanges(true);
@@ -1052,24 +1069,317 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
                 </div>
               )}
 
-              <AdminIdentityCardLayoutEditor
-                eventInfo={formData}
-                layout={formData.identityCardLayout}
-                onChangeLayout={(nextLayout, saveImmediately) => {
-                  const updated: SymposiumInfo = {
-                    ...formData,
-                    identityCardLayout: nextLayout,
-                  };
-                  setFormData(updated);
-                  if (saveImmediately) {
-                    setHasChanges(false);
-                    onSaveEventInfo(updated);
-                  } else {
-                    setHasChanges(true);
-                  }
-                }}
-                onShowToast={onShowToast}
-              />
+              {/* Sub-Section: Upload Desain Khusus ID Card per Jenis Workshop */}
+              <div className="pt-4 border-t border-slate-800 space-y-3">
+                <div>
+                  <label className="block font-bold text-slate-200 text-xs mb-0.5 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                    <span>
+                      Template Desain Khusus ID Card per Jenis Workshop ({workshopCardSlots.length} Workshop):
+                    </span>
+                  </label>
+                  <p className="text-[11px] text-slate-400">
+                    Unggah desain template ID Card berbeda untuk masing-masing jenis workshop. Peserta yang memiliki tiket workshop tersebut akan otomatis menggunakan template workshop-nya saat melihat dan mengunduh PNG/PDF Kartu ID.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {workshopCardSlots.map((slot, index) => {
+                    const savedTpl = formData.workshopIdentityCardTemplates?.[slot.workshopKey];
+                    const hasTpl = Boolean(savedTpl?.templateUrl);
+                    const isUploadingThis = compressingWorkshopKey === slot.workshopKey;
+                    const inputId = `workshop-card-file-input-${slot.workshopKey}`;
+
+                    return (
+                      <div
+                        key={slot.workshopKey}
+                        className={`bg-slate-950 rounded-2xl border p-3.5 space-y-3 transition-colors ${
+                          hasTpl ? 'border-sky-500/40' : 'border-slate-800'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-sky-500/15 text-sky-300 border border-sky-500/30 mb-1">
+                              Workshop {index + 1}
+                            </span>
+                            <h4 className="text-xs font-extrabold text-white leading-snug">
+                              {slot.workshopLabel}
+                            </h4>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {slot.roomLabel ? `${slot.roomLabel} · ` : ''}
+                              {slot.sessionCount > 0 ? `${slot.sessionCount} sesi` : 'Template kustom'}
+                            </p>
+                          </div>
+
+                          {hasTpl && (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
+                              Aktif
+                            </span>
+                          )}
+                        </div>
+
+                        <input
+                          type="file"
+                          id={inputId}
+                          accept="image/*"
+                          disabled={isUploadingThis}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            if (!file.type.startsWith('image/')) {
+                              onShowToast('Mohon pilih file gambar kartu (PNG, JPG, WebP).');
+                              return;
+                            }
+                            if (file.size > 10 * 1024 * 1024) {
+                              onShowToast('Ukuran file maksimal 10 MB.');
+                              return;
+                            }
+                            setCompressingWorkshopKey(slot.workshopKey);
+                            try {
+                              const compressedDataUrl = await compressIdentityCardTemplate(file);
+                              const existingEntry =
+                                formData.workshopIdentityCardTemplates?.[slot.workshopKey];
+                              const nextEntry: WorkshopIdentityCardTemplate = {
+                                workshopKey: slot.workshopKey,
+                                workshopLabel: slot.workshopLabel,
+                                templateUrl: compressedDataUrl,
+                                ...(existingEntry?.layout ? { layout: existingEntry.layout } : {}),
+                              };
+                              const updated: SymposiumInfo = {
+                                ...formData,
+                                workshopIdentityCardTemplates: {
+                                  ...(formData.workshopIdentityCardTemplates || {}),
+                                  [slot.workshopKey]: nextEntry,
+                                },
+                              };
+                              setFormData(updated);
+                              setHasChanges(false);
+                              setActiveLayoutTarget(slot.workshopKey);
+                              onSaveEventInfo(updated);
+                              onShowToast(
+                                isCloudAdmin
+                                  ? `Template ID Card "${slot.shortLabel}" berhasil disimpan ke Cloud!`
+                                  : `Template ID Card "${slot.shortLabel}" berhasil disimpan di browser ini!`
+                              );
+                            } catch (err) {
+                              console.error('Failed processing workshop ID card template:', err);
+                              onShowToast(
+                                `Gagal memproses gambar template untuk ${slot.shortLabel}.`
+                              );
+                            } finally {
+                              setCompressingWorkshopKey(null);
+                            }
+                          }}
+                          className="hidden"
+                        />
+
+                        {hasTpl ? (
+                          <div className="space-y-2.5">
+                            <div className="flex items-center gap-3 bg-slate-900/70 p-2.5 rounded-xl border border-slate-800">
+                              <img
+                                src={savedTpl!.templateUrl}
+                                alt={`Template ${slot.workshopLabel}`}
+                                className="w-12 h-16 rounded-lg object-cover bg-slate-900 border border-sky-500/40 shrink-0"
+                              />
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <span className="text-[11px] font-bold text-emerald-300 block truncate">
+                                  Template {slot.shortLabel} Terpasang
+                                </span>
+                                <span className="text-[10px] text-slate-400 block leading-snug">
+                                  Otomatis diterapkan untuk peserta dengan tiket {slot.shortLabel}.
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <label
+                                htmlFor={inputId}
+                                className="flex-1 min-w-[90px] py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-bold flex items-center justify-center gap-1.5 border border-slate-700 cursor-pointer transition-colors"
+                              >
+                                <Upload className="w-3 h-3 text-sky-400" />
+                                <span>{isUploadingThis ? 'Memproses...' : 'Ganti'}</span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setActiveLayoutTarget(slot.workshopKey)}
+                                className={`flex-1 min-w-[110px] py-1.5 px-2.5 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 border cursor-pointer transition-colors ${
+                                  activeLayoutTarget === slot.workshopKey
+                                    ? 'bg-sky-600 text-white border-sky-500'
+                                    : 'bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border-sky-500/30'
+                                }`}
+                              >
+                                <LayoutTemplate className="w-3 h-3" />
+                                <span>Atur Posisi</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const nextMap = {
+                                    ...(formData.workshopIdentityCardTemplates || {}),
+                                  };
+                                  delete nextMap[slot.workshopKey];
+                                  const updated: SymposiumInfo = {
+                                    ...formData,
+                                    workshopIdentityCardTemplates: nextMap,
+                                  };
+                                  setFormData(updated);
+                                  setHasChanges(false);
+                                  if (activeLayoutTarget === slot.workshopKey) {
+                                    setActiveLayoutTarget('default');
+                                  }
+                                  onSaveEventInfo(updated);
+                                  onShowToast(
+                                    `Template ID Card "${slot.shortLabel}" dihapus.`
+                                  );
+                                }}
+                                className="py-1.5 px-2.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-[11px] font-bold flex items-center justify-center gap-1 border border-rose-500/20 cursor-pointer transition-colors"
+                                title="Hapus template workshop ini"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <label
+                            htmlFor={inputId}
+                            className="cursor-pointer border-2 border-dashed border-slate-800 hover:border-sky-500/50 rounded-xl p-3.5 flex flex-col items-center justify-center text-center space-y-1.5 transition-colors bg-slate-900/40"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-sky-400">
+                              <Upload className="w-4 h-4" />
+                            </div>
+                            <span className="text-[11px] font-bold text-white block">
+                              {isUploadingThis
+                                ? 'Mengoptimalkan & menyimpan...'
+                                : `Unggah Desain ID Card ${slot.shortLabel}`}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block">
+                              PNG/JPG vertikal (760 x 1080 px) · Simpan otomatis
+                            </span>
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Target Template Switcher for the Interactive Layout Editor */}
+              {(() => {
+                const selectedWorkshopSlot =
+                  activeLayoutTarget !== 'default'
+                    ? workshopCardSlots.find((s) => s.workshopKey === activeLayoutTarget) || null
+                    : null;
+                const selectedWorkshopTpl = selectedWorkshopSlot
+                  ? formData.workshopIdentityCardTemplates?.[selectedWorkshopSlot.workshopKey]
+                  : undefined;
+                const editorTemplateUrl = selectedWorkshopSlot
+                  ? selectedWorkshopTpl?.templateUrl || formData.customIdentityCardUrl || ''
+                  : formData.customIdentityCardUrl || '';
+                const editorLayout = selectedWorkshopSlot
+                  ? selectedWorkshopTpl?.layout || formData.identityCardLayout
+                  : formData.identityCardLayout;
+
+                return (
+                  <div className="space-y-2.5">
+                    {workshopCardSlots.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2">
+                          Edit Posisi Field untuk:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setActiveLayoutTarget('default')}
+                          className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                            activeLayoutTarget === 'default'
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          Template Utama (Simposium)
+                        </button>
+                        {workshopCardSlots.map((slot) => {
+                          const hasCustomTpl = Boolean(
+                            formData.workshopIdentityCardTemplates?.[slot.workshopKey]?.templateUrl
+                          );
+                          return (
+                            <button
+                              key={slot.workshopKey}
+                              type="button"
+                              onClick={() => setActiveLayoutTarget(slot.workshopKey)}
+                              className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer ${
+                                activeLayoutTarget === slot.workshopKey
+                                  ? 'bg-sky-600 text-white shadow-xs'
+                                  : 'bg-slate-900 text-slate-300 hover:bg-slate-800'
+                              }`}
+                            >
+                              <span>{slot.shortLabel}</span>
+                              {hasCustomTpl && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <AdminIdentityCardLayoutEditor
+                      eventInfo={formData}
+                      layout={editorLayout}
+                      templateUrlOverride={editorTemplateUrl}
+                      templateLabel={
+                        selectedWorkshopSlot
+                          ? selectedWorkshopSlot.shortLabel
+                          : 'Template Utama (Simposium)'
+                      }
+                      sampleTicketLabel={
+                        selectedWorkshopSlot
+                          ? `${selectedWorkshopSlot.workshopLabel} Pass`
+                          : 'Simposium Full Pass'
+                      }
+                      onChangeLayout={(nextLayout, saveImmediately) => {
+                        let updated: SymposiumInfo;
+                        if (selectedWorkshopSlot) {
+                          const existingEntry =
+                            formData.workshopIdentityCardTemplates?.[
+                              selectedWorkshopSlot.workshopKey
+                            ];
+                          if (!existingEntry?.templateUrl) {
+                            onShowToast(
+                              `Unggah dulu gambar template untuk ${selectedWorkshopSlot.shortLabel} agar posisi kustom tersimpan khusus workshop ini.`
+                            );
+                            return;
+                          }
+                          updated = {
+                            ...formData,
+                            workshopIdentityCardTemplates: {
+                              ...(formData.workshopIdentityCardTemplates || {}),
+                              [selectedWorkshopSlot.workshopKey]: {
+                                ...existingEntry,
+                                layout: nextLayout,
+                              },
+                            },
+                          };
+                        } else {
+                          updated = {
+                            ...formData,
+                            identityCardLayout: nextLayout,
+                          };
+                        }
+
+                        setFormData(updated);
+                        if (saveImmediately) {
+                          setHasChanges(false);
+                          onSaveEventInfo(updated);
+                        } else {
+                          setHasChanges(true);
+                        }
+                      }}
+                      onShowToast={onShowToast}
+                    />
+                  </div>
+                );
+              })()}
             </div>
 
           </div>

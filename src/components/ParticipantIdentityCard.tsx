@@ -13,7 +13,7 @@ import { Participant, SymposiumInfo } from '../types';
 import { extractParticipantIdRegistrant } from '../data/participantData';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { getThemePalette } from '../utils/themeColors';
-import { normalizeIdentityCardLayout } from '../utils/identityCardLayout';
+import { resolveParticipantCardTemplates } from '../utils/workshopCardTemplates';
 
 interface ParticipantIdentityCardProps {
   participant: Participant;
@@ -49,10 +49,28 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
 }) => {
   const info = eventInfo || SYMPOSIUM_INFO;
   const palette = getThemePalette(info);
-  const layout = useMemo(
-    () => normalizeIdentityCardLayout(info.identityCardLayout),
-    [info.identityCardLayout]
+  const cardResolution = useMemo(
+    () => resolveParticipantCardTemplates(participant, info),
+    [participant, info]
   );
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState<string>(
+    () => cardResolution.defaultOptionKey
+  );
+
+  useEffect(() => {
+    setSelectedTemplateKey(cardResolution.defaultOptionKey);
+  }, [cardResolution.defaultOptionKey, participant.id, participant.ticketType]);
+
+  const activeCardOption = useMemo(
+    () =>
+      cardResolution.options.find((opt) => opt.key === selectedTemplateKey) ||
+      cardResolution.options[0],
+    [cardResolution.options, selectedTemplateKey]
+  );
+
+  const activeTemplateUrl = activeCardOption.templateUrl;
+  const layout = activeCardOption.layout;
+
   const [qrMode, setQrMode] = useState<QrPayloadMode>('id');
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [qrError, setQrError] = useState<boolean>(false);
@@ -60,14 +78,14 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
   const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
   const [logoLoadFailed, setLogoLoadFailed] = useState<boolean>(false);
   const [previewMode, setPreviewMode] = useState<'card' | 'compact'>(() =>
-    info.customIdentityCardUrl ? 'card' : 'compact'
+    activeTemplateUrl ? 'card' : 'compact'
   );
 
   useEffect(() => {
-    if (info.customIdentityCardUrl) {
+    if (activeTemplateUrl) {
       setPreviewMode('card');
     }
-  }, [info.customIdentityCardUrl]);
+  }, [activeTemplateUrl]);
 
   const qrIdCode = useMemo(() => {
     const idReg = extractParticipantIdRegistrant(participant);
@@ -160,16 +178,16 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
 
     const headerH = 220;
     let customTemplateImg: HTMLImageElement | null = null;
-    if (info.customIdentityCardUrl) {
+    if (activeTemplateUrl) {
       try {
         const img = new Image();
-        if (!info.customIdentityCardUrl.startsWith('data:')) {
+        if (!activeTemplateUrl.startsWith('data:')) {
           img.crossOrigin = 'anonymous';
         }
         await new Promise<void>((res, rej) => {
           img.onload = () => res();
           img.onerror = () => rej();
-          img.src = info.customIdentityCardUrl!;
+          img.src = activeTemplateUrl;
         });
         customTemplateImg = img;
       } catch {
@@ -403,7 +421,7 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
       const pngUrl = canvas.toDataURL('image/png');
       const link = document.createElement('a');
       link.href = pngUrl;
-      link.download = `kartu-identitas-${safeFileSlug}.png`;
+      link.download = `kartu-identitas${activeCardOption.fileSlugSuffix}-${safeFileSlug}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -470,7 +488,7 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
       pdf.line(pageW - margin + 0.5, pageH - margin, pageW - margin + mark, pageH - margin);
       pdf.line(pageW - margin, pageH - margin + 0.5, pageW - margin, pageH - margin + mark);
 
-      pdf.save(`kartu-identitas-${safeFileSlug}.pdf`);
+      pdf.save(`kartu-identitas${activeCardOption.fileSlugSuffix}-${safeFileSlug}.pdf`);
     } catch (err) {
       console.error('Failed to render printable ID Card PDF:', err);
       await handleDownloadIdCardPng();
@@ -487,6 +505,40 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
 
   return (
     <div className="space-y-3">
+      {/* Multi-template switcher when participant qualifies for multiple uploaded ID card designs */}
+      {cardResolution.options.length > 1 ? (
+        <div className="space-y-1.5 bg-slate-950/90 p-2 rounded-xl border border-slate-800">
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+            Pilih Desain Kartu ID ({cardResolution.options.length} Tersedia):
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {cardResolution.options.map((opt) => {
+              const isSelected = opt.key === activeCardOption.key;
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => setSelectedTemplateKey(opt.key)}
+                  className={`flex-1 min-w-[110px] py-1.5 px-2.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer truncate ${
+                    isSelected
+                      ? 'bg-sky-600 text-white shadow-xs'
+                      : 'bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800'
+                  }`}
+                  title={opt.label}
+                >
+                  {opt.shortLabel}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : activeCardOption.isWorkshop ? (
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-sky-500/15 border border-sky-500/30 text-[11px] text-sky-200">
+          <span className="font-semibold">Desain Kartu Workshop:</span>
+          <span className="font-extrabold text-white truncate">{activeCardOption.shortLabel}</span>
+        </div>
+      ) : null}
+
       {/* Preview Mode Switcher */}
       <div className="flex items-center justify-between gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
         <button
@@ -518,10 +570,10 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
           style={{ containerType: 'inline-size' }}
           className="relative w-full max-w-[300px] mx-auto aspect-[760/1080] rounded-2xl overflow-hidden border border-slate-700 bg-white shadow-xl select-none"
         >
-          {info.customIdentityCardUrl ? (
+          {activeTemplateUrl ? (
             <img
-              src={info.customIdentityCardUrl}
-              alt="Template Kartu Identitas"
+              src={activeTemplateUrl}
+              alt={`Template Kartu Identitas ${activeCardOption.label}`}
               className="absolute inset-0 w-full h-full object-cover"
             />
           ) : (
@@ -542,7 +594,7 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
           {layout.showEventHeader && (
             <div
               className={`absolute top-0 inset-x-0 h-[20.4%] px-[5%] flex items-center gap-[3%] ${
-                info.customIdentityCardUrl ? 'bg-slate-950/70' : ''
+                activeTemplateUrl ? 'bg-slate-950/70' : ''
               }`}
             >
               {info.logoUrl && !logoLoadFailed && (
@@ -570,7 +622,7 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
             </div>
           )}
 
-          {info.customIdentityCardUrl && layout.showContentBackdrop && (
+          {activeTemplateUrl && layout.showContentBackdrop && (
             <div
               className="absolute left-[3.5%] right-[3.5%] rounded-[3cqw] bg-white/90 border border-slate-200/90"
               style={{
@@ -703,9 +755,9 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
         <div 
         className="rounded-2xl overflow-hidden border border-slate-700/90 shadow-lg relative"
         style={
-          info.customIdentityCardUrl
+          activeTemplateUrl
             ? {
-                backgroundImage: `url(${info.customIdentityCardUrl})`,
+                backgroundImage: `url(${activeTemplateUrl})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
               }
@@ -714,7 +766,7 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
               }
         }
       >
-        {info.customIdentityCardUrl && (
+        {activeTemplateUrl && (
           <div className="absolute inset-0 bg-slate-950/25 pointer-events-none" />
         )}
 
@@ -722,13 +774,13 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
           {/* Top Event Header Band */}
           <div
             style={
-              !info.customIdentityCardUrl
+              !activeTemplateUrl
                 ? {
                     background: `linear-gradient(135deg, #020617 0%, ${palette.primaryHex || '#059669'} 140%)`,
                   }
                 : undefined
             }
-            className={`px-4 py-3 border-b ${info.customIdentityCardUrl ? 'border-white/20 bg-slate-950/45' : 'border-white/10'} flex items-center justify-between gap-3`}
+            className={`px-4 py-3 border-b ${activeTemplateUrl ? 'border-white/20 bg-slate-950/45' : 'border-white/10'} flex items-center justify-between gap-3`}
           >
             <div className="flex items-center gap-2.5 min-w-0">
               {info.logoUrl && !logoLoadFailed ? (
@@ -763,7 +815,7 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
           </div>
 
           {/* Credential Body: Identity Details + Embedded QR Code */}
-          <div className={`p-4 flex flex-col sm:flex-row sm:items-stretch gap-4 ${info.customIdentityCardUrl ? 'bg-slate-950/35' : 'bg-gradient-to-br from-slate-900 via-slate-950 to-slate-950'}`}>
+          <div className={`p-4 flex flex-col sm:flex-row sm:items-stretch gap-4 ${activeTemplateUrl ? 'bg-slate-950/35' : 'bg-gradient-to-br from-slate-900 via-slate-950 to-slate-950'}`}>
           {/* Left Identity Info */}
           <div className="flex-1 min-w-0 flex flex-col justify-between space-y-3">
             <div>

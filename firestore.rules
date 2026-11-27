@@ -73,8 +73,9 @@ service cloud.firestore {
         data.keys().hasOnly([
           'title', 'subtitle', 'theme', 'location', 'venueAddress', 'city',
           'dateString', 'dates', 'organizer', 'accreditation', 'logoUrl',
-          'customIdentityCardUrl', 'identityCardLayout', 'themeColor', 'contactEmail',
-          'contactPhone', 'websiteUrl', 'enableQrAttendance', 'isPublished', 'updatedAt', 'updatedBy'
+          'customIdentityCardUrl', 'identityCardLayout', 'workshopRundownPdfs',
+          'themeColor', 'contactEmail', 'contactPhone', 'websiteUrl',
+          'enableQrAttendance', 'isPublished', 'updatedAt', 'updatedBy'
         ]) &&
         data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
         data.location is string && data.location.size() >= 1 && data.location.size() <= 250 &&
@@ -91,6 +92,7 @@ service cloud.firestore {
         isValidOptionalString(data, 'logoUrl', 500000) &&
         isValidOptionalString(data, 'customIdentityCardUrl', 500000) &&
         (!( 'identityCardLayout' in data ) || (data.identityCardLayout is map && data.identityCardLayout.size() <= 12)) &&
+        (!( 'workshopRundownPdfs' in data ) || (data.workshopRundownPdfs is map && data.workshopRundownPdfs.size() <= 15)) &&
         (!( 'themeColor' in data ) || data.themeColor in [
           'medical-navy', 'gold-amber', 'cyan-teal', 'emerald-green', 'crimson-ruby', 'royal-indigo'
         ]) &&
@@ -98,6 +100,25 @@ service cloud.firestore {
         isValidOptionalString(data, 'contactPhone', 60) &&
         isValidOptionalString(data, 'websiteUrl', 300) &&
         (!( 'enableQrAttendance' in data ) || data.enableQrAttendance is bool) &&
+        isValidOptionalString(data, 'updatedBy', 128);
+    }
+
+    function isValidIdentityCardTemplate(data) {
+      return data.keys().hasAll([
+          'id', 'workshopKey', 'workshopLabel', 'templateUrl', 'isPublished', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'workshopKey', 'workshopLabel', 'templateUrl', 'layout',
+          'isPublished', 'updatedAt', 'updatedBy'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.workshopKey) &&
+        data.workshopKey.size() <= 120 &&
+        data.workshopLabel is string && data.workshopLabel.size() >= 1 && data.workshopLabel.size() <= 200 &&
+        data.templateUrl is string && data.templateUrl.size() <= 500000 &&
+        (!( 'layout' in data ) || (data.layout is map && data.layout.size() <= 12)) &&
+        data.isPublished is bool &&
+        data.updatedAt is timestamp && data.updatedAt == request.time &&
         isValidOptionalString(data, 'updatedBy', 128);
     }
 
@@ -419,6 +440,17 @@ service cloud.firestore {
       allow list: if existing().isPublished == true || isAdmin();
       allow create, update: if isAdmin() && isValidId(docId) && isValidEventInfo(incoming());
       allow delete: if isAdmin() && isValidId(docId);
+    }
+
+    match /identity_card_templates/{templateId} {
+      allow get: if isValidId(templateId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isAdmin();
+      allow create, update: if isAdmin() &&
+        isValidId(templateId) &&
+        isValidIdentityCardTemplate(incoming()) &&
+        incoming().id == templateId &&
+        incoming().workshopKey == templateId;
+      allow delete: if isAdmin() && isValidId(templateId);
     }
 
     match /sessions/{sessionId} {

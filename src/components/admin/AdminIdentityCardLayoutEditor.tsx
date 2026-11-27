@@ -37,6 +37,9 @@ type EditableFieldKey =
 interface AdminIdentityCardLayoutEditorProps {
   eventInfo: SymposiumInfo;
   layout?: IdentityCardLayoutConfig;
+  templateUrlOverride?: string;
+  templateLabel?: string;
+  sampleTicketLabel?: string;
   onChangeLayout: (nextLayout: IdentityCardLayoutConfig, saveImmediately?: boolean) => void;
   onShowToast: (msg: string) => void;
 }
@@ -63,11 +66,18 @@ const TEXT_COLOR_SWATCHES = [
 export const AdminIdentityCardLayoutEditor: React.FC<AdminIdentityCardLayoutEditorProps> = ({
   eventInfo,
   layout: propLayout,
+  templateUrlOverride,
+  templateLabel,
+  sampleTicketLabel,
   onChangeLayout,
   onShowToast,
 }) => {
   const layout = normalizeIdentityCardLayout(propLayout);
   const palette = getThemePalette(eventInfo);
+  const activeTemplateUrl =
+    templateUrlOverride !== undefined
+      ? templateUrlOverride
+      : eventInfo.customIdentityCardUrl || '';
   const [selectedField, setSelectedField] = useState<EditableFieldKey>('name');
   const [sampleQrUrl, setSampleQrUrl] = useState<string>('');
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -165,7 +175,7 @@ export const AdminIdentityCardLayoutEditor: React.FC<AdminIdentityCardLayoutEdit
       case 'institution':
         return 'RS Hewan Pendidikan';
       case 'roleTicket':
-        return 'Peserta · Simposium Full Pass';
+        return sampleTicketLabel ? `Peserta · ${sampleTicketLabel}` : 'Peserta · Simposium Full Pass';
     }
   };
 
@@ -185,7 +195,10 @@ export const AdminIdentityCardLayoutEditor: React.FC<AdminIdentityCardLayoutEdit
         <div>
           <h4 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
             <LayoutTemplate className="w-4 h-4 text-sky-400" />
-            <span>Atur Posisi Field pada Template Kartu ID</span>
+            <span>
+              Atur Posisi Field pada Template Kartu ID
+              {templateLabel ? ` — ${templateLabel}` : ''}
+            </span>
           </h4>
           <p className="text-[11px] text-slate-400 mt-0.5">
             Geser (drag &amp; drop) langsung Nama, ID_Registrant, QR Code, atau field lainnya di atas pratinjau kartu, lalu klik Simpan Posisi.
@@ -253,10 +266,10 @@ export const AdminIdentityCardLayoutEditor: React.FC<AdminIdentityCardLayoutEdit
             className="relative w-full max-w-[300px] aspect-[760/1080] rounded-2xl overflow-hidden border-2 border-slate-700 bg-white shadow-2xl select-none touch-none"
           >
             {/* Background: Uploaded Template or Default Theme Card */}
-            {eventInfo.customIdentityCardUrl ? (
+            {activeTemplateUrl ? (
               <img
-                src={eventInfo.customIdentityCardUrl}
-                alt="Template Kartu ID"
+                src={activeTemplateUrl}
+                alt={templateLabel ? `Template ${templateLabel}` : 'Template Kartu ID'}
                 className="absolute inset-0 w-full h-full object-cover pointer-events-none"
               />
             ) : (
@@ -278,7 +291,7 @@ export const AdminIdentityCardLayoutEditor: React.FC<AdminIdentityCardLayoutEdit
             {layout.showEventHeader && (
               <div
                 className={`absolute top-0 inset-x-0 h-[20.4%] px-[5%] flex items-center gap-[3%] pointer-events-none ${
-                  eventInfo.customIdentityCardUrl ? 'bg-slate-950/70' : ''
+                  activeTemplateUrl ? 'bg-slate-950/70' : ''
                 }`}
               >
                 {eventInfo.logoUrl && (

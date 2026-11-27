@@ -1,16 +1,27 @@
-import React, { useState } from 'react';
-import { 
-  Stethoscope, 
-  Calendar, 
-  Clock, 
-  MapPin, 
-  Search,
-  Filter,
-  RotateCcw
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Stethoscope,
+  MapPin,
+  FileText,
+  Download,
+  ExternalLink,
+  CheckCircle2,
+  Calendar,
 } from 'lucide-react';
-import { Session, Speaker, SymposiumInfo } from '../types';
-import { SESSIONS_DATA, SYMPOSIUM_INFO } from '../data/symposiumData';
-import { SessionCard } from './SessionCard';
+import { Session, Speaker, SymposiumInfo, WorkshopRundownPdf } from '../types';
+import { SYMPOSIUM_INFO } from '../data/symposiumData';
+import {
+  getWorkshopCardSlots,
+  WorkshopCardSlot,
+} from '../utils/workshopCardTemplates';
+import {
+  base64ToPdfBlob,
+  buildExternalPdfUrls,
+  formatPdfFileSize,
+  getPdfMaterialLocal,
+} from '../utils/presentationPdfStorage';
+import { fetchPdfMaterialBlobFromFirestore } from '../services/firestoreSyncService';
+import { PdfViewer } from './PdfViewer';
 
 interface WorkshopScheduleViewProps {
   sessions?: Session[];
@@ -22,237 +33,330 @@ interface WorkshopScheduleViewProps {
 
 export const WorkshopScheduleView: React.FC<WorkshopScheduleViewProps> = ({
   sessions,
-  onSelectSession,
-  onSelectSpeaker,
   onOpenVenue,
-  eventInfo
+  eventInfo,
 }) => {
   const info = eventInfo || SYMPOSIUM_INFO;
-  const [selectedRoom, setSelectedRoom] = useState<string>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const rundownMap: Record<string, WorkshopRundownPdf> = info.workshopRundownPdfs || {};
 
-  const sourceSessions = sessions && sessions.length > 0 ? sessions : SESSIONS_DATA;
-  const workshops = React.useMemo(() => {
-    return sourceSessions
-      .filter(s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.includes('Workshop'))
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
-  }, [sourceSessions]);
+  const workshopSlots = useMemo<WorkshopCardSlot[]>(() => {
+    const base = getWorkshopCardSlots(sessions, info.workshopIdentityCardTemplates);
+    const map = new Map<string, WorkshopCardSlot>();
+    base.forEach((slot) => map.set(slot.workshopKey, slot));
 
-  const availableRooms = React.useMemo(() => {
-    return Array.from(new Set(workshops.map(w => w.room)));
-  }, [workshops]);
-
-  const availableCategories = React.useMemo(() => {
-    return Array.from(new Set(workshops.map(w => w.category)));
-  }, [workshops]);
-
-  const filteredWorkshops = workshops.filter(session => {
-    if (selectedRoom !== 'all' && session.room !== selectedRoom) {
-      return false;
-    }
-
-    if (selectedCategory !== 'all' && session.category !== selectedCategory) {
-      return false;
-    }
-
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = session.title.toLowerCase().includes(q);
-      const matchTime = session.timeString.toLowerCase().includes(q);
-      const matchRoom = session.room.toLowerCase().includes(q);
-      const matchCategory = session.category.toLowerCase().includes(q);
-      const matchSpeaker = session.speakers.some(sp =>
-        sp.name.toLowerCase().includes(q) ||
-        sp.specialty.toLowerCase().includes(q) ||
-        sp.institution.toLowerCase().includes(q)
-      );
-      const matchAbstract =
-        session.abstract.background.toLowerCase().includes(q) ||
-        session.abstract.clinicalUpdates.some(u => u.toLowerCase().includes(q));
-
-      if (!matchTitle && !matchTime && !matchRoom && !matchCategory && !matchSpeaker && !matchAbstract) {
-        return false;
+    Object.values(rundownMap).forEach((pdf) => {
+      if (!pdf?.workshopKey) return;
+      if (!map.has(pdf.workshopKey)) {
+        map.set(pdf.workshopKey, {
+          workshopKey: pdf.workshopKey,
+          workshopLabel: pdf.workshopLabel || pdf.workshopKey,
+          shortLabel: pdf.workshopLabel || pdf.workshopKey,
+          sessionCount: 0,
+        });
       }
-    }
+    });
 
-    return true;
+    return Array.from(map.values());
+  }, [sessions, info.workshopIdentityCardTemplates, rundownMap]);
+
+  const [selectedWorkshopKey, setSelectedWorkshopKey] = useState<string>(() => {
+    const firstWithPdf = workshopSlots.find((s) => Boolean(rundownMap[s.workshopKey]));
+    return firstWithPdf?.workshopKey || workshopSlots[0]?.workshopKey || '';
   });
 
+  useEffect(() => {
+    if (
+      workshopSlots.length > 0 &&
+      !workshopSlots.some((s) => s.workshopKey === selectedWorkshopKey)
+    ) {
+      const firstWithPdf = workshopSlots.find((s) => Boolean(rundownMap[s.workshopKey]));
+      setSelectedWorkshopKey(firstWithPdf?.workshopKey || workshopSlots[0].workshopKey);
+    }
+  }, [workshopSlots, selectedWorkshopKey, rundownMap]);
+
+  const activeSlot =
+    workshopSlots.find((s) => s.workshopKey === selectedWorkshopKey) || workshopSlots[0] || null;
+  const activePdf = activeSlot ? rundownMap[activeSlot.workshopKey] || null : null;
+
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [blobPreviewUrl, setBlobPreviewUrl] = useState<string | null>(null);
+  const [externalUrls, setExternalUrls] = useState<{
+    previewUrl: string;
+    downloadUrl: string;
+  } | null>(null);
+  const [isLoadingPdf, setIsLoadingPdf] = useState<boolean>(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrlToRevoke: string | null = null;
+
+    setPdfBlob(null);
+    setBlobPreviewUrl(null);
+    setExternalUrls(null);
+    setPdfError(null);
+    setIsLoadingPdf(false);
+
+    if (!activePdf) {
+      return () => {};
+    }
+
+    if (activePdf.externalUrl) {
+      setExternalUrls(buildExternalPdfUrls(activePdf.externalUrl));
+      return () => {};
+    }
+
+    const loadRundownPdf = async () => {
+      setIsLoadingPdf(true);
+      try {
+        let blob: Blob | null = null;
+        const localRec = await getPdfMaterialLocal(activePdf.materialId);
+        if (localRec?.base64Data) {
+          blob = base64ToPdfBlob(localRec.base64Data, activePdf.mimeType);
+        } else if (activePdf.chunkCount > 0) {
+          blob = await fetchPdfMaterialBlobFromFirestore(
+            activePdf.materialId,
+            activePdf.chunkCount,
+            activePdf.fileName,
+            activePdf.mimeType
+          );
+        }
+
+        if (cancelled) return;
+        if (!blob) {
+          setPdfError(
+            'File rundown PDF belum tersedia di perangkat ini atau belum disinkronkan ke Cloud oleh panitia.'
+          );
+          return;
+        }
+
+        objectUrlToRevoke = URL.createObjectURL(blob);
+        setPdfBlob(blob);
+        setBlobPreviewUrl(objectUrlToRevoke);
+      } catch (err: any) {
+        if (!cancelled) {
+          setPdfError(err?.message || 'Gagal memuat file rundown jadwal PDF.');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingPdf(false);
+        }
+      }
+    };
+
+    loadRundownPdf();
+
+    return () => {
+      cancelled = true;
+      if (objectUrlToRevoke) {
+        URL.revokeObjectURL(objectUrlToRevoke);
+      }
+    };
+  }, [
+    activePdf?.materialId,
+    activePdf?.externalUrl,
+    activePdf?.chunkCount,
+    activePdf?.fileName,
+    activePdf?.mimeType,
+  ]);
+
+  const activeDownloadUrl = blobPreviewUrl || externalUrls?.downloadUrl || null;
+  const otherSlotsWithPdf = workshopSlots.filter(
+    (s) => s.workshopKey !== activeSlot?.workshopKey && Boolean(rundownMap[s.workshopKey])
+  );
+
   return (
-    <div className="max-w-6xl mx-auto p-2.5 sm:p-4 space-y-3">
-      
-      {/* Top Banner - Like Symposium Schedule */}
-      <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-950 text-white rounded-xl p-3 sm:p-4 border border-emerald-800/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+    <div className="max-w-6xl mx-auto p-2.5 sm:p-4 space-y-3.5">
+      {/* Top Banner */}
+      <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-950 text-white rounded-xl p-3.5 sm:p-4 border border-emerald-800/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center space-x-1.5 text-emerald-300 text-[11px] font-bold uppercase tracking-wider mb-0.5">
             <Stethoscope className="w-3.5 h-3.5" />
-            <span>Jadwal Workshop</span>
+            <span>Jadwal &amp; Rundown Workshop (PDF)</span>
           </div>
-          <h2 className="text-sm sm:text-base font-black text-white">
-            {info.dates?.workshop || workshops[0]?.date || 'Sabtu, 28 November 2026'} • {info.location}
+          <h2 className="text-sm sm:text-base font-black text-white flex items-center gap-1.5">
+            <Calendar className="w-4 h-4 text-emerald-300 shrink-0" />
+            <span>
+              {info.dates?.workshop || '28 November 2026'} • {info.location}
+            </span>
           </h2>
           <p className="text-xs text-emerald-100/80 mt-0.5">
-            Workshop Versus - MASS Hunt (08:00 - 17:00 WIB) & Workshop Vet Nurse (09:00 - 17:00 WIB)
+            Pilih jenis workshop di bawah untuk melihat dan mengunduh file rundown jadwal resmi dalam format PDF.
           </p>
         </div>
 
-        {/* Track / Room Switcher Toggle (Like Symposium Day Switcher) */}
-        <div className="bg-white/10 p-1 rounded-xl border border-white/10 flex flex-wrap items-center gap-1 self-start md:self-auto shrink-0">
-          <button
-            type="button"
-            onClick={() => setSelectedRoom('all')}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-              selectedRoom === 'all'
-                ? 'bg-emerald-500 text-slate-950 shadow-xs font-black'
-                : 'text-slate-200 hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <span>Semua Sesi</span>
-            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-              selectedRoom === 'all' ? 'bg-slate-950 text-emerald-300' : 'bg-white/20 text-slate-200'
-            }`}>
-              {workshops.length}
-            </span>
-          </button>
+        <button
+          type="button"
+          onClick={onOpenVenue}
+          className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/15 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0 cursor-pointer"
+        >
+          <MapPin className="w-3.5 h-3.5 text-rose-300" />
+          <span>Peta Ruangan</span>
+        </button>
+      </div>
 
-          {availableRooms.map(roomName => {
-            const count = workshops.filter(w => w.room === roomName).length;
-            const isActive = selectedRoom === roomName;
-            return (
-              <button
-                key={roomName}
-                type="button"
-                onClick={() => setSelectedRoom(roomName)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
-                  isActive
-                    ? 'bg-emerald-500 text-slate-950 shadow-xs font-black'
-                    : 'text-slate-200 hover:text-white hover:bg-white/10'
+      {/* Workshop Switcher Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        {workshopSlots.map((slot, idx) => {
+          const isSelected = activeSlot?.workshopKey === slot.workshopKey;
+          const slotPdf = rundownMap[slot.workshopKey];
+
+          return (
+            <button
+              key={slot.workshopKey}
+              type="button"
+              onClick={() => setSelectedWorkshopKey(slot.workshopKey)}
+              className={`text-left p-3.5 rounded-xl border transition-all flex items-start justify-between gap-3 cursor-pointer ${
+                isSelected
+                  ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20 shadow-xs'
+                  : 'bg-white border-slate-200 hover:border-emerald-300 hover:bg-slate-50/70'
+              }`}
+            >
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${
+                      isSelected
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    Workshop {idx + 1}
+                  </span>
+                  {slot.roomLabel && (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                      <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                      {slot.roomLabel}
+                    </span>
+                  )}
+                </div>
+
+                <h3
+                  className={`text-xs sm:text-sm font-extrabold leading-snug ${
+                    isSelected ? 'text-emerald-950' : 'text-slate-900'
+                  }`}
+                >
+                  {slot.workshopLabel}
+                </h3>
+
+                <div className="text-[11px]">
+                  {slotPdf ? (
+                    <span className="inline-flex items-center gap-1 font-bold text-emerald-700">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate max-w-[220px]">{slotPdf.fileName}</span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 font-medium">
+                      File rundown PDF belum diunggah
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div
+                className={`p-2 rounded-xl shrink-0 ${
+                  slotPdf
+                    ? isSelected
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-emerald-100 text-emerald-700'
+                    : 'bg-slate-100 text-slate-400'
                 }`}
               >
-                <MapPin className="w-3 h-3" />
-                <span>{roomName}</span>
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
-                  isActive ? 'bg-slate-950 text-emerald-300' : 'bg-white/20 text-slate-200'
-                }`}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                <FileText className="w-4 h-4" />
+              </div>
+            </button>
+          );
+        })}
       </div>
 
-      {/* Filter Toolbar (Like Symposium FilterSection) */}
-      <div className="bg-white rounded-xl border border-slate-200/90 p-3 shadow-2xs space-y-2.5">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
-          {/* Search Input */}
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari sesi workshop berdasarkan jam (cth: 08:30), judul sesi, ruangan, atau instruktur..."
-              className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-all"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-            {/* Category Filter */}
-            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
-              <Filter className="w-3.5 h-3.5 text-slate-400" />
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
-              >
-                <option value="all">Semua Track Workshop</option>
-                {availableCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+      {/* Selected Workshop Rundown PDF Panel */}
+      {activeSlot && activePdf ? (
+        <div className="bg-white rounded-2xl border border-slate-200/90 p-3 sm:p-4 shadow-2xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
+            <div className="min-w-0">
+              <h3 className="text-sm sm:text-base font-extrabold text-slate-900 truncate">
+                {activePdf.title || `Rundown ${activeSlot.workshopLabel}`}
+              </h3>
+              <p className="text-xs text-slate-500 truncate mt-0.5">
+                {activePdf.fileName} •{' '}
+                <strong className="text-slate-700">
+                  {activePdf.externalUrl
+                    ? 'Tautan PDF Eksternal'
+                    : formatPdfFileSize(activePdf.fileSize)}
+                </strong>
+                {activeSlot.roomLabel ? ` • ${activeSlot.roomLabel}` : ''}
+              </p>
             </div>
 
-            <button
-              type="button"
-              onClick={onOpenVenue}
-              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
-            >
-              <MapPin className="w-3.5 h-3.5 text-rose-500" />
-              <span>Peta Ruangan</span>
-            </button>
-
-            {(selectedRoom !== 'all' || selectedCategory !== 'all' || searchQuery !== '') && (
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedRoom('all');
-                  setSelectedCategory('all');
-                  setSearchQuery('');
-                }}
-                className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                <RotateCcw className="w-3 h-3" />
-                <span>Reset</span>
-              </button>
-            )}
+            {activeDownloadUrl &&
+              (activePdf.externalUrl ? (
+                <a
+                  href={activeDownloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors shrink-0"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Buka / Unduh Rundown PDF</span>
+                </a>
+              ) : (
+                <a
+                  href={activeDownloadUrl}
+                  download={activePdf.fileName}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-xs transition-colors shrink-0"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Unduh Rundown PDF</span>
+                </a>
+              ))}
           </div>
-        </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-100 text-[11px] text-slate-500">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-bold text-slate-700">Track Ruangan:</span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold">
-              <Clock className="w-3 h-3 text-amber-600" />
-              Antareja Room: Workshop Versus (08:00 - 17:00 WIB)
-            </span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-violet-50 text-violet-800 border border-violet-200 font-semibold">
-              <Clock className="w-3 h-3 text-violet-600" />
-              Wisanggeni Room: Workshop Vet Nurse (09:00 - 17:00 WIB)
-            </span>
-          </div>
-          <span className="font-bold text-emerald-700">
-            Menampilkan {filteredWorkshops.length} Sesi Workshop
-          </span>
-        </div>
-      </div>
-
-      {/* Workshop Sessions List - Using SessionCard just like SymposiumScheduleView */}
-      {filteredWorkshops.length === 0 ? (
-        <div className="bg-white rounded-2xl p-8 text-center border border-slate-200 my-4 space-y-3">
-          <Search className="w-10 h-10 text-slate-300 mx-auto" />
-          <h3 className="text-sm font-bold text-slate-700">
-            Tidak Ada Sesi Workshop Ditemukan
-          </h3>
-          <p className="text-xs text-slate-500 max-w-xs mx-auto">
-            Cobalah mengubah kata kunci pencarian atau menyetel ulang filter ruangan dan track workshop.
-          </p>
-          <button
-            onClick={() => {
-              setSelectedRoom('all');
-              setSelectedCategory('all');
-              setSearchQuery('');
-            }}
-            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-          >
-            Reset Semua Filter
-          </button>
+          <PdfViewer
+            blob={pdfBlob}
+            blobUrl={blobPreviewUrl}
+            externalPreviewUrl={externalUrls?.previewUrl || null}
+            externalDownloadUrl={externalUrls?.downloadUrl || null}
+            title={activePdf.title || `Rundown ${activeSlot.workshopLabel}`}
+            fileName={activePdf.fileName}
+            isLoading={isLoadingPdf}
+            error={pdfError}
+          />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
-          {filteredWorkshops.map(session => (
-            <SessionCard
-              key={session.id}
-              session={session}
-              onSelectSession={onSelectSession}
-              onSelectSpeaker={onSelectSpeaker}
-            />
-          ))}
+        <div className="bg-white rounded-2xl border border-dashed border-slate-300 px-6 py-12 text-center flex flex-col items-center justify-center space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400">
+            <FileText className="w-7 h-7" />
+          </div>
+          <div className="space-y-1 max-w-md">
+            <h3 className="text-sm sm:text-base font-extrabold text-slate-800">
+              File Rundown Jadwal PDF Belum Diunggah
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">
+              Panitia belum mengunggah file rundown jadwal PDF untuk{' '}
+              <strong className="text-slate-700">
+                {activeSlot?.workshopLabel || 'workshop ini'}
+              </strong>
+              . Silakan periksa kembali secara berkala atau hubungi panitia.
+            </p>
+          </div>
+
+          {otherSlotsWithPdf.length > 0 && (
+            <div className="pt-1 flex flex-wrap items-center justify-center gap-2">
+              {otherSlotsWithPdf.map((slot) => (
+                <button
+                  key={slot.workshopKey}
+                  type="button"
+                  onClick={() => setSelectedWorkshopKey(slot.workshopKey)}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-colors"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Lihat Rundown {slot.shortLabel}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
-
     </div>
   );
 };
-

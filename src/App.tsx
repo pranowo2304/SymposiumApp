@@ -706,24 +706,48 @@ export default function App() {
         if (hasDirtyLocalEventInfo) {
           return;
         }
-        const mergedInfo: SymposiumInfo = {
-          ...SYMPOSIUM_INFO,
-          ...info,
-          dates: {
-            ...SYMPOSIUM_INFO.dates,
-            ...(info.dates || {}),
-            workshop:
-              !info.dates?.workshop || info.dates.workshop === 'Sabtu, 28 November 2026'
-                ? '28 November 2026'
-                : info.dates.workshop,
-            munasSymposium:
-              info.dates?.munasSymposium || '29 November 2026 - 1 Desember 2026',
-          },
-        };
-        setEventInfo(mergedInfo);
+        setEventInfo((prev) => {
+          const mergedInfo: SymposiumInfo = {
+            ...SYMPOSIUM_INFO,
+            ...info,
+            workshopIdentityCardTemplates:
+              info.workshopIdentityCardTemplates ?? prev.workshopIdentityCardTemplates,
+            dates: {
+              ...SYMPOSIUM_INFO.dates,
+              ...(info.dates || {}),
+              workshop:
+                !info.dates?.workshop || info.dates.workshop === 'Sabtu, 28 November 2026'
+                  ? '28 November 2026'
+                  : info.dates.workshop,
+              munasSymposium:
+                info.dates?.munasSymposium || '29 November 2026 - 1 Desember 2026',
+            },
+          };
+          try {
+            localStorage.setItem('simposium_event_info_custom', JSON.stringify(mergedInfo));
+          } catch {}
+          return mergedInfo;
+        });
+      },
+      onWorkshopCardTemplates: (cloudTemplates) => {
+        let hasDirtyLocalEventInfo = false;
         try {
-          localStorage.setItem('simposium_event_info_custom', JSON.stringify(mergedInfo));
+          hasDirtyLocalEventInfo =
+            localStorage.getItem('simposium_event_info_dirty_local_v1') === 'true';
         } catch {}
+        if (hasDirtyLocalEventInfo) {
+          return;
+        }
+        setEventInfo((prev) => {
+          const mergedInfo: SymposiumInfo = {
+            ...prev,
+            workshopIdentityCardTemplates: cloudTemplates,
+          };
+          try {
+            localStorage.setItem('simposium_event_info_custom', JSON.stringify(mergedInfo));
+          } catch {}
+          return mergedInfo;
+        });
       },
       onSessions: (cloudSessions) => {
         setSessions(cloudSessions);

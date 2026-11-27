@@ -50,6 +50,7 @@ import { AdminBroadcastManager } from './admin/AdminBroadcastManager';
 import { AdminAnalyticsDashboard } from './admin/AdminAnalyticsDashboard';
 import { AdminAiPdfScheduleExtractor } from './admin/AdminAiPdfScheduleExtractor';
 import { AdminPresentationMaterialsEditor } from './admin/AdminPresentationMaterialsEditor';
+import { AdminWorkshopRundownUploader } from './admin/AdminWorkshopRundownUploader';
 import { 
   MUNAS_SESSIONS, 
   MUNAS_SPEAKERS, 
@@ -1365,6 +1366,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         {activeAdminTab === 'event' && (
           <AdminEventSettings
             eventInfo={eventInfo}
+            sessions={sessions}
             onSaveEventInfo={onSaveEventInfo}
             onShowToast={showToast}
             isCloudAdmin={isCloudAdmin}
@@ -1657,15 +1659,25 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         {/* SECTION 3: JADWAL WORKSHOP (SESI & JAM SEPERTI SYMPOSIUM) */}
         {/* ------------------------------------------------------------- */}
         {activeAdminTab === 'workshop' && (
-          <div className="space-y-4">
+          <div className="space-y-6">
+            {/* Upload & Manajemen File PDF Rundown Jadwal Masing-Masing Workshop */}
+            <AdminWorkshopRundownUploader
+              eventInfo={eventInfo}
+              sessions={sessions}
+              onSaveEventInfo={onSaveEventInfo}
+              onShowToast={showToast}
+              isCloudAdmin={isCloudAdmin}
+              onCloudAdminSignIn={onCloudAdminSignIn}
+            />
+
             <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-black text-white flex items-center gap-2">
+                <h2 className="text-base font-black text-white flex items-center gap-2">
                   <Stethoscope className="w-5 h-5 text-emerald-400" />
-                  Manajemen Jadwal Sesi & Jam Workshop (Hands-On)
+                  Data Master Sesi & Materi Workshop (Opsional)
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Input dan kelola setiap sesi workshop beserta jam mulai–selesai per sesi, alokasi ruangan, moderator, instruktur, dan kuota peserta (seperti jadwal Symposium).
+                  Halaman publik <strong>Jadwal Workshop</strong> kini menampilkan file <strong>PDF Rundown</strong> yang diunggah di atas. Daftar sesi di bawah tetap dapat digunakan sebagai referensi kategori tiket workshop & unggah materi presentasi.
                 </p>
               </div>
 

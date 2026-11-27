@@ -87,6 +87,26 @@ export interface IdentityCardLayoutConfig {
   qrCode: IdentityCardQrConfig;
 }
 
+export interface WorkshopIdentityCardTemplate {
+  workshopKey: string;
+  workshopLabel: string;
+  templateUrl: string;
+  layout?: IdentityCardLayoutConfig;
+}
+
+export interface WorkshopRundownPdf {
+  workshopKey: string;
+  workshopLabel: string;
+  materialId: string;
+  title: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  chunkCount: number;
+  externalUrl?: string;
+  uploadedAt: string;
+}
+
 export interface SymposiumInfo {
   title: string;
   subtitle: string;
@@ -113,6 +133,8 @@ export interface SymposiumInfo {
   enableQrAttendance?: boolean;
   customIdentityCardUrl?: string;
   identityCardLayout?: IdentityCardLayoutConfig;
+  workshopIdentityCardTemplates?: Record<string, WorkshopIdentityCardTemplate>;
+  workshopRundownPdfs?: Record<string, WorkshopRundownPdf>;
 }
 
 export interface Participant {

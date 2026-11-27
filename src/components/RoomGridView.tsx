@@ -16,7 +16,7 @@ export const RoomGridView: React.FC<RoomGridViewProps> = ({
   onSelectSession,
   onSelectSpeaker
 }) => {
-  const sourceSessions = sessions && sessions.length > 0 ? sessions : SESSIONS_DATA;
+  const sourceSessions = sessions !== undefined ? sessions : SESSIONS_DATA;
 
   const availableDays = React.useMemo(() => {
     const orderPriority = ['Workshop (28 Nov)', 'Pre-Congress', 'Hari I', 'Hari II', 'Hari III'];

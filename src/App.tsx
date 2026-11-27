@@ -62,6 +62,37 @@ import { Sparkles, Lock } from 'lucide-react';
 
 const TAB_ORDER: MainTabType[] = TAB_HASH_ORDER;
 
+const DIRTY_LOCAL_KEYS = {
+  eventInfo: 'simposium_event_info_dirty_local_v1',
+  sessions: 'simposium_sessions_dirty_local_v1',
+  speakers: 'simposium_speakers_dirty_local_v1',
+  exhibitors: 'simposium_exhibitors_dirty_local_v1',
+  rooms: 'simposium_rooms_dirty_local_v1',
+  participants: 'simposium_participants_dirty_local_v1',
+} as const;
+
+type DirtyCollectionKey = keyof typeof DIRTY_LOCAL_KEYS;
+
+function isDirtyLocal(key: DirtyCollectionKey): boolean {
+  try {
+    return localStorage.getItem(DIRTY_LOCAL_KEYS[key]) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function setDirtyLocal(key: DirtyCollectionKey): void {
+  try {
+    localStorage.setItem(DIRTY_LOCAL_KEYS[key], 'true');
+  } catch {}
+}
+
+function clearDirtyLocal(key: DirtyCollectionKey): void {
+  try {
+    localStorage.removeItem(DIRTY_LOCAL_KEYS[key]);
+  } catch {}
+}
+
 const tabSlideVariants = {
   enter: (direction: number) => ({
     x: direction > 0 ? 8 : -8,
@@ -230,11 +261,13 @@ export default function App() {
   const [speakers, setSpeakers] = useState<Speaker[]>(() => {
     try {
       const saved = localStorage.getItem('simposium_speakers_custom');
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        const isOldDemo = parsed.some((s: any) => s.id === 's1' && s.name?.includes('Bambang Sutrisno'));
-        if (!isOldDemo && parsed.length > 0) {
-          return parsed.map(({ talkTitle, ...rest }: any) => rest);
+        if (Array.isArray(parsed)) {
+          const isOldDemo = parsed.some((s: any) => s.id === 's1' && s.name?.includes('Bambang Sutrisno'));
+          if (!isOldDemo) {
+            return parsed.map(({ talkTitle, ...rest }: any) => rest);
+          }
         }
       }
       return Object.values(SPEAKERS_DATABASE);
@@ -246,34 +279,36 @@ export default function App() {
   const [sessions, setSessions] = useState<Session[]>(() => {
     try {
       const saved = localStorage.getItem('simposium_sessions_custom');
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        const isOldDemo = parsed.some((s: any) => s.id === 'session-101' || s.title?.includes('SINDROM KORONER AKUT'));
-        if (!isOldDemo && parsed.length > 0) {
-          const storedWorkshops = parsed.filter(
-            (s: Session) => s.type === 'Workshop Hands-On' || s.category?.includes('Workshop') || s.day?.includes('Workshop')
-          );
-          const hasOldMonolithicWorkshop = storedWorkshops.some(
-            (s: Session) => (s.id === 'ws-versus-01' && s.endTime === '17:00') || (s.id === 'ws-vetnurse-02' && s.startTime === '09:00' && s.endTime === '17:00')
-          );
+        if (Array.isArray(parsed)) {
+          const isOldDemo = parsed.some((s: any) => s.id === 'session-101' || s.title?.includes('SINDROM KORONER AKUT'));
+          if (!isOldDemo) {
+            const storedWorkshops = parsed.filter(
+              (s: Session) => s.type === 'Workshop Hands-On' || s.category?.includes('Workshop') || s.day?.includes('Workshop')
+            );
+            const hasOldMonolithicWorkshop = storedWorkshops.some(
+              (s: Session) => (s.id === 'ws-versus-01' && s.endTime === '17:00') || (s.id === 'ws-vetnurse-02' && s.startTime === '09:00' && s.endTime === '17:00')
+            );
 
-          if (hasOldMonolithicWorkshop || storedWorkshops.length < 6) {
-            const nonWorkshops = parsed.filter(
-              (s: Session) => s.type !== 'Workshop Hands-On' && !s.category?.includes('Workshop') && !s.day?.includes('Workshop')
-            );
-            const defaultWorkshops = SESSIONS_DATA.filter(
-              (s: Session) => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.includes('Workshop')
-            );
-            const merged = [...defaultWorkshops, ...nonWorkshops];
-            try {
-              localStorage.setItem('simposium_sessions_custom', JSON.stringify(merged));
-            } catch (e) {
-              console.error(e);
+            if (hasOldMonolithicWorkshop) {
+              const nonWorkshops = parsed.filter(
+                (s: Session) => s.type !== 'Workshop Hands-On' && !s.category?.includes('Workshop') && !s.day?.includes('Workshop')
+              );
+              const defaultWorkshops = SESSIONS_DATA.filter(
+                (s: Session) => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.includes('Workshop')
+              );
+              const merged = [...defaultWorkshops, ...nonWorkshops];
+              try {
+                localStorage.setItem('simposium_sessions_custom', JSON.stringify(merged));
+              } catch (e) {
+                console.error(e);
+              }
+              return merged;
             }
-            return merged;
-          }
 
-          return parsed;
+            return parsed;
+          }
         }
       }
       return SESSIONS_DATA;
@@ -285,7 +320,11 @@ export default function App() {
   const [exhibitors, setExhibitors] = useState<Exhibitor[]>(() => {
     try {
       const saved = localStorage.getItem('simposium_exhibitors_custom');
-      return saved ? JSON.parse(saved) : EXHIBITORS_DATA;
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+      return EXHIBITORS_DATA;
     } catch (e) {
       return EXHIBITORS_DATA;
     }
@@ -302,31 +341,14 @@ export default function App() {
     };
     try {
       const saved = localStorage.getItem('simposium_rooms_custom');
-      if (saved) {
-        const parsed = dedupeRooms(JSON.parse(saved));
-        const isOldDemo = parsed.some((r: any) => r.id === 'Ruang Sulawesi' || r.name === 'Ruang Sulawesi');
-        if (!isOldDemo && parsed.length > 0) {
-          const hasAntareja = parsed.some((r: any) => r.name === 'Antareja Room' || r.id === 'Antareja Room');
-          const hasWisanggeni = parsed.some((r: any) => r.name === 'Wisanggeni Room' || r.id === 'Wisanggeni Room');
-          if (hasAntareja && hasWisanggeni) {
+      if (saved !== null) {
+        const rawParsed = JSON.parse(saved);
+        if (Array.isArray(rawParsed)) {
+          const parsed = dedupeRooms(rawParsed);
+          const isOldDemo = parsed.some((r: any) => r.id === 'Ruang Sulawesi' || r.name === 'Ruang Sulawesi');
+          if (!isOldDemo) {
             return parsed;
           }
-          const roomsToAdd: Room[] = [];
-          if (!hasAntareja) {
-            const r1 = DEFAULT_ROOMS_DATA.find(r => r.id === 'Antareja Room');
-            if (r1) roomsToAdd.push(r1);
-          }
-          if (!hasWisanggeni) {
-            const r2 = DEFAULT_ROOMS_DATA.find(r => r.id === 'Wisanggeni Room');
-            if (r2) roomsToAdd.push(r2);
-          }
-          const mergedRooms = dedupeRooms([...roomsToAdd, ...parsed]);
-          try {
-            localStorage.setItem('simposium_rooms_custom', JSON.stringify(mergedRooms));
-          } catch (e) {
-            console.error(e);
-          }
-          return mergedRooms;
         }
       }
       return DEFAULT_ROOMS_DATA;
@@ -372,6 +394,33 @@ export default function App() {
     syncAppIconWithEventLogo(eventInfo);
   }, [eventInfo]);
 
+  // Tracks active in-flight Firestore mutations per collection so intermediate onSnapshot echoes
+  // never roll back rapid deletions or edits before the cloud batch finishes committing.
+  const inFlightCloudSyncRef = useRef<Record<'sessions' | 'speakers' | 'exhibitors' | 'rooms', number>>({
+    sessions: 0,
+    speakers: 0,
+    exhibitors: 0,
+    rooms: 0,
+  });
+
+  const runTrackedCatalogSync = (
+    key: 'sessions' | 'speakers' | 'exhibitors' | 'rooms',
+    syncFn: () => Promise<void>,
+    errorToast: string
+  ) => {
+    clearDirtyLocal(key);
+    inFlightCloudSyncRef.current[key] += 1;
+    syncFn()
+      .catch((err) => {
+        console.error(`Firestore ${key} sync failed:`, err);
+        setDirtyLocal(key);
+        showToast(errorToast);
+      })
+      .finally(() => {
+        inFlightCloudSyncRef.current[key] = Math.max(0, inFlightCloudSyncRef.current[key] - 1);
+      });
+  };
+
   const handleSaveEventInfo = (newEventInfo: SymposiumInfo) => {
     setEventInfo(newEventInfo);
     try {
@@ -385,17 +434,14 @@ export default function App() {
       showToast('Peringatan: Ukuran data terlalu besar untuk penyimpanan lokal browser.');
     }
     if (isCloudAdmin) {
-      try {
-        localStorage.removeItem('simposium_event_info_dirty_local_v1');
-      } catch {}
+      clearDirtyLocal('eventInfo');
       saveEventInfoToFirestore(newEventInfo, firebaseUser?.uid).catch((err) => {
         console.error('Firestore eventInfo sync failed:', err);
+        setDirtyLocal('eventInfo');
         showToast('Gagal menyimpan pengaturan event ke Cloud Database.');
       });
     } else {
-      try {
-        localStorage.setItem('simposium_event_info_dirty_local_v1', 'true');
-      } catch {}
+      setDirtyLocal('eventInfo');
     }
   };
 
@@ -407,7 +453,7 @@ export default function App() {
       console.error(e);
     }
 
-    // Automatically propagate speaker photo/details update to sessions
+    // Automatically propagate speaker photo/details update to sessions only if changed
     const updatedSessions = sessions.map(session => ({
       ...session,
       speakers: (session.speakers || []).map(sessSp => {
@@ -417,20 +463,34 @@ export default function App() {
         return masterSp ? { ...sessSp, ...masterSp, photoUrl: masterSp.photoUrl || sessSp.photoUrl } : sessSp;
       })
     }));
-    setSessions(updatedSessions);
-    try {
-      localStorage.setItem('simposium_sessions_custom', JSON.stringify(updatedSessions));
-    } catch (e) {
-      console.error(e);
+    const sessionsChanged = JSON.stringify(updatedSessions) !== JSON.stringify(sessions);
+    if (sessionsChanged) {
+      setSessions(updatedSessions);
+      try {
+        localStorage.setItem('simposium_sessions_custom', JSON.stringify(updatedSessions));
+      } catch (e) {
+        console.error(e);
+      }
     }
 
     if (isCloudAdmin) {
-      syncSpeakersToFirestore(newSpeakers).catch((err) =>
-        console.error('Firestore speakers sync failed:', err)
+      runTrackedCatalogSync(
+        'speakers',
+        () => syncSpeakersToFirestore(newSpeakers),
+        'Data pembicara tersimpan lokal, namun gagal sinkron ke Cloud Database.'
       );
-      syncSessionsToFirestore(updatedSessions).catch((err) =>
-        console.error('Firestore sessions sync failed:', err)
-      );
+      if (sessionsChanged) {
+        runTrackedCatalogSync(
+          'sessions',
+          () => syncSessionsToFirestore(updatedSessions),
+          'Jadwal sesi tersimpan lokal, namun gagal sinkron ke Cloud Database.'
+        );
+      }
+    } else {
+      setDirtyLocal('speakers');
+      if (sessionsChanged) {
+        setDirtyLocal('sessions');
+      }
     }
   };
 
@@ -442,9 +502,13 @@ export default function App() {
       console.error(e);
     }
     if (isCloudAdmin) {
-      syncSessionsToFirestore(newSessions).catch((err) =>
-        console.error('Firestore sessions sync failed:', err)
+      runTrackedCatalogSync(
+        'sessions',
+        () => syncSessionsToFirestore(newSessions),
+        'Perubahan jadwal tersimpan lokal, namun gagal sinkron ke Cloud Database.'
       );
+    } else {
+      setDirtyLocal('sessions');
     }
   };
 
@@ -456,9 +520,13 @@ export default function App() {
       console.error(e);
     }
     if (isCloudAdmin) {
-      syncExhibitorsToFirestore(newExhibitors).catch((err) =>
-        console.error('Firestore exhibitors sync failed:', err)
+      runTrackedCatalogSync(
+        'exhibitors',
+        () => syncExhibitorsToFirestore(newExhibitors),
+        'Perubahan data pameran tersimpan lokal, namun gagal sinkron ke Cloud Database.'
       );
+    } else {
+      setDirtyLocal('exhibitors');
     }
   };
 
@@ -470,9 +538,13 @@ export default function App() {
       console.error(e);
     }
     if (isCloudAdmin) {
-      syncRoomsToFirestore(newRooms).catch((err) =>
-        console.error('Firestore rooms sync failed:', err)
+      runTrackedCatalogSync(
+        'rooms',
+        () => syncRoomsToFirestore(newRooms),
+        'Perubahan data ruangan tersimpan lokal, namun gagal sinkron ke Cloud Database.'
       );
+    } else {
+      setDirtyLocal('rooms');
     }
   };
 
@@ -494,6 +566,11 @@ export default function App() {
       console.error(e);
     }
     if (isCloudAdmin) {
+      clearDirtyLocal('eventInfo');
+      clearDirtyLocal('sessions');
+      clearDirtyLocal('speakers');
+      clearDirtyLocal('exhibitors');
+      clearDirtyLocal('rooms');
       setIsCloudSyncing(true);
       Promise.all([
         saveEventInfoToFirestore(SYMPOSIUM_INFO, firebaseUser?.uid),
@@ -504,6 +581,12 @@ export default function App() {
       ])
         .catch((err) => console.error('Firestore reset sync failed:', err))
         .finally(() => setIsCloudSyncing(false));
+    } else {
+      setDirtyLocal('eventInfo');
+      setDirtyLocal('sessions');
+      setDirtyLocal('speakers');
+      setDirtyLocal('exhibitors');
+      setDirtyLocal('rooms');
     }
   };
 
@@ -663,22 +746,61 @@ export default function App() {
               adminUid: user.uid,
             });
             if (didSeed) {
-              try {
-                localStorage.removeItem('simposium_event_info_dirty_local_v1');
-              } catch {}
+              clearDirtyLocal('eventInfo');
+              clearDirtyLocal('sessions');
+              clearDirtyLocal('speakers');
+              clearDirtyLocal('exhibitors');
+              clearDirtyLocal('rooms');
               showToast('Database Cloud Firestore berhasil diinisialisasi!');
             } else {
-              let hasDirtyEventInfo = false;
-              try {
-                hasDirtyEventInfo =
-                  localStorage.getItem('simposium_event_info_dirty_local_v1') === 'true';
-              } catch {}
-              if (hasDirtyEventInfo) {
+              const syncedLabels: string[] = [];
+              if (isDirtyLocal('eventInfo')) {
                 await saveEventInfoToFirestore(latestCatalogRef.current.eventInfo, user.uid);
+                clearDirtyLocal('eventInfo');
+                syncedLabels.push('Pengaturan Event');
+              }
+              if (isDirtyLocal('sessions')) {
+                inFlightCloudSyncRef.current.sessions += 1;
                 try {
-                  localStorage.removeItem('simposium_event_info_dirty_local_v1');
-                } catch {}
-                showToast('Pengaturan event & template kartu lokal disinkronkan ke Cloud!');
+                  await syncSessionsToFirestore(latestCatalogRef.current.sessions);
+                  clearDirtyLocal('sessions');
+                  syncedLabels.push('Jadwal');
+                } finally {
+                  inFlightCloudSyncRef.current.sessions = Math.max(0, inFlightCloudSyncRef.current.sessions - 1);
+                }
+              }
+              if (isDirtyLocal('speakers')) {
+                inFlightCloudSyncRef.current.speakers += 1;
+                try {
+                  await syncSpeakersToFirestore(latestCatalogRef.current.speakers);
+                  clearDirtyLocal('speakers');
+                  syncedLabels.push('Pembicara');
+                } finally {
+                  inFlightCloudSyncRef.current.speakers = Math.max(0, inFlightCloudSyncRef.current.speakers - 1);
+                }
+              }
+              if (isDirtyLocal('exhibitors')) {
+                inFlightCloudSyncRef.current.exhibitors += 1;
+                try {
+                  await syncExhibitorsToFirestore(latestCatalogRef.current.exhibitors);
+                  clearDirtyLocal('exhibitors');
+                  syncedLabels.push('Pameran');
+                } finally {
+                  inFlightCloudSyncRef.current.exhibitors = Math.max(0, inFlightCloudSyncRef.current.exhibitors - 1);
+                }
+              }
+              if (isDirtyLocal('rooms')) {
+                inFlightCloudSyncRef.current.rooms += 1;
+                try {
+                  await syncRoomsToFirestore(latestCatalogRef.current.rooms);
+                  clearDirtyLocal('rooms');
+                  syncedLabels.push('Ruangan');
+                } finally {
+                  inFlightCloudSyncRef.current.rooms = Math.max(0, inFlightCloudSyncRef.current.rooms - 1);
+                }
+              }
+              if (syncedLabels.length > 0) {
+                showToast(`Perubahan lokal (${syncedLabels.join(', ')}) disinkronkan ke Cloud!`);
               }
             }
           } finally {
@@ -698,12 +820,7 @@ export default function App() {
   useEffect(() => {
     const unsubscribeCatalog = subscribePublicCatalog({
       onEventInfo: (info) => {
-        let hasDirtyLocalEventInfo = false;
-        try {
-          hasDirtyLocalEventInfo =
-            localStorage.getItem('simposium_event_info_dirty_local_v1') === 'true';
-        } catch {}
-        if (hasDirtyLocalEventInfo) {
+        if (isDirtyLocal('eventInfo')) {
           return;
         }
         setEventInfo((prev) => {
@@ -730,12 +847,7 @@ export default function App() {
         });
       },
       onWorkshopCardTemplates: (cloudTemplates) => {
-        let hasDirtyLocalEventInfo = false;
-        try {
-          hasDirtyLocalEventInfo =
-            localStorage.getItem('simposium_event_info_dirty_local_v1') === 'true';
-        } catch {}
-        if (hasDirtyLocalEventInfo) {
+        if (isDirtyLocal('eventInfo')) {
           return;
         }
         setEventInfo((prev) => {
@@ -750,24 +862,36 @@ export default function App() {
         });
       },
       onSessions: (cloudSessions) => {
+        if (isDirtyLocal('sessions') || inFlightCloudSyncRef.current.sessions > 0) {
+          return;
+        }
         setSessions(cloudSessions);
         try {
           localStorage.setItem('simposium_sessions_custom', JSON.stringify(cloudSessions));
         } catch {}
       },
       onSpeakers: (cloudSpeakers) => {
+        if (isDirtyLocal('speakers') || inFlightCloudSyncRef.current.speakers > 0) {
+          return;
+        }
         setSpeakers(cloudSpeakers);
         try {
           localStorage.setItem('simposium_speakers_custom', JSON.stringify(cloudSpeakers));
         } catch {}
       },
       onExhibitors: (cloudExhibitors) => {
+        if (isDirtyLocal('exhibitors') || inFlightCloudSyncRef.current.exhibitors > 0) {
+          return;
+        }
         setExhibitors(cloudExhibitors);
         try {
           localStorage.setItem('simposium_exhibitors_custom', JSON.stringify(cloudExhibitors));
         } catch {}
       },
       onRooms: (cloudRooms) => {
+        if (isDirtyLocal('rooms') || inFlightCloudSyncRef.current.rooms > 0) {
+          return;
+        }
         setRooms(cloudRooms);
         try {
           localStorage.setItem('simposium_rooms_custom', JSON.stringify(cloudRooms));
@@ -964,6 +1088,12 @@ export default function App() {
         syncRoomsToFirestore(rooms),
         syncParticipantsToFirestore(participants),
       ]);
+      clearDirtyLocal('eventInfo');
+      clearDirtyLocal('sessions');
+      clearDirtyLocal('speakers');
+      clearDirtyLocal('exhibitors');
+      clearDirtyLocal('rooms');
+      clearDirtyLocal('participants');
       showToast('Seluruh data berhasil disinkronkan ke Cloud Database!');
     } catch (err) {
       console.error('Force cloud sync failed:', err);
@@ -978,22 +1108,57 @@ export default function App() {
       const user = await signInWithGoogle();
       const { isAdmin } = await ensureUserProfileAndCheckAdmin(user);
       if (isAdmin) {
-        let hasDirtyEventInfo = false;
-        try {
-          hasDirtyEventInfo =
-            localStorage.getItem('simposium_event_info_dirty_local_v1') === 'true';
-        } catch {}
-        if (hasDirtyEventInfo) {
+        const syncedLabels: string[] = [];
+        if (isDirtyLocal('eventInfo')) {
           await saveEventInfoToFirestore(latestCatalogRef.current.eventInfo, user.uid);
+          clearDirtyLocal('eventInfo');
+          syncedLabels.push('Pengaturan Event');
+        }
+        if (isDirtyLocal('sessions')) {
+          inFlightCloudSyncRef.current.sessions += 1;
           try {
-            localStorage.removeItem('simposium_event_info_dirty_local_v1');
-          } catch {}
+            await syncSessionsToFirestore(latestCatalogRef.current.sessions);
+            clearDirtyLocal('sessions');
+            syncedLabels.push('Jadwal');
+          } finally {
+            inFlightCloudSyncRef.current.sessions = Math.max(0, inFlightCloudSyncRef.current.sessions - 1);
+          }
+        }
+        if (isDirtyLocal('speakers')) {
+          inFlightCloudSyncRef.current.speakers += 1;
+          try {
+            await syncSpeakersToFirestore(latestCatalogRef.current.speakers);
+            clearDirtyLocal('speakers');
+            syncedLabels.push('Pembicara');
+          } finally {
+            inFlightCloudSyncRef.current.speakers = Math.max(0, inFlightCloudSyncRef.current.speakers - 1);
+          }
+        }
+        if (isDirtyLocal('exhibitors')) {
+          inFlightCloudSyncRef.current.exhibitors += 1;
+          try {
+            await syncExhibitorsToFirestore(latestCatalogRef.current.exhibitors);
+            clearDirtyLocal('exhibitors');
+            syncedLabels.push('Pameran');
+          } finally {
+            inFlightCloudSyncRef.current.exhibitors = Math.max(0, inFlightCloudSyncRef.current.exhibitors - 1);
+          }
+        }
+        if (isDirtyLocal('rooms')) {
+          inFlightCloudSyncRef.current.rooms += 1;
+          try {
+            await syncRoomsToFirestore(latestCatalogRef.current.rooms);
+            clearDirtyLocal('rooms');
+            syncedLabels.push('Ruangan');
+          } finally {
+            inFlightCloudSyncRef.current.rooms = Math.max(0, inFlightCloudSyncRef.current.rooms - 1);
+          }
         }
         setIsCloudAdmin(true);
         setIsAdminAuthenticated(true);
         showToast(
-          hasDirtyEventInfo
-            ? `Terhubung ke Cloud Database & template kartu ID tersinkron (${user.email})`
+          syncedLabels.length > 0
+            ? `Terhubung ke Cloud & perubahan lokal (${syncedLabels.join(', ')}) tersinkron (${user.email})`
             : `Terhubung ke Cloud Database sebagai ${user.email}`
         );
       } else {

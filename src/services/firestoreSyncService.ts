@@ -198,16 +198,23 @@ function sanitizeSessionPayload(session: Session) {
     : 'Plenary Session';
 
   const speakers = Array.isArray(session.speakers)
-    ? session.speakers.slice(0, 20).map((sp) => ({
-        id: clampStr(sp.id, 128, `sp_${Date.now()}`),
-        name: clampStr(sp.name, 200),
-        title: clampStr(sp.title, 200),
-        institution: clampStr(sp.institution, 250),
-        photoUrl: clampStr(sp.photoUrl, 500000),
-        bio: clampStr(sp.bio, 3000),
-        specialty: clampStr(sp.specialty, 200),
-        talkTitle: clampStr(sp.talkTitle, 300),
-      }))
+    ? session.speakers.slice(0, 20).map((sp) => {
+        const rawPhoto = clampStr(sp.photoUrl, 500000);
+        // Keep embedded speaker photo compact so multi-speaker sessions never exceed Firestore's 1 MiB doc limit.
+        // Full photos live in /speakers/{id} and are joined automatically on display.
+        const safeEmbeddedPhoto =
+          rawPhoto.startsWith('data:') && rawPhoto.length > 60000 ? '' : rawPhoto;
+        return {
+          id: clampStr(sp.id, 128, `sp_${Date.now()}`),
+          name: clampStr(sp.name, 200),
+          title: clampStr(sp.title, 200),
+          institution: clampStr(sp.institution, 250),
+          photoUrl: safeEmbeddedPhoto,
+          bio: clampStr(sp.bio, 3000),
+          specialty: clampStr(sp.specialty, 200),
+          talkTitle: clampStr(sp.talkTitle, 300),
+        };
+      })
     : [];
 
   const rundown = Array.isArray(session.rundown)
@@ -241,15 +248,20 @@ function sanitizeSessionPayload(session: Session) {
       }))
     : [];
 
+  const rawStart = clampStr(session.startTime, 10, '08:00');
+  const rawEnd = clampStr(session.endTime, 10, '09:00');
+  const safeStartTime = rawStart.length >= 4 ? rawStart : '08:00';
+  const safeEndTime = rawEnd.length >= 4 ? rawEnd : '09:00';
+
   return {
     docId,
     data: {
       id: clampStr(session.id || docId, 128),
       day: clampStr(session.day, 80, 'Hari I'),
       date: clampStr(session.date, 100, '-'),
-      startTime: clampStr(session.startTime, 10, '08:00'),
-      endTime: clampStr(session.endTime, 10, '09:00'),
-      timeString: clampStr(session.timeString, 50, '08:00 - 09:00 WIB'),
+      startTime: safeStartTime,
+      endTime: safeEndTime,
+      timeString: clampStr(session.timeString, 50, `${safeStartTime} - ${safeEndTime} WIB`),
       title: clampStr(session.title, 300, 'Sesi Simposium'),
       category: clampStr(session.category, 120, 'Umum'),
       type: sessionType,
@@ -692,11 +704,42 @@ export function subscribePublicCatalog(callbacks: {
 }): () => void {
   const unsubscribers: Unsubscribe[] = [];
 
+  // Track whether the Cloud catalog has been initialized (event_info/main exists).
+  // Once initialized, an empty collection snapshot is authoritative (e.g. admin deleted all items)
+  // and must propagate `[]` instead of keeping stale cached/demo entries.
+  let isCatalogSeeded = false;
+  let pendingEmptySessions = false;
+  let pendingEmptySpeakers = false;
+  let pendingEmptyExhibitors = false;
+  let pendingEmptyRooms = false;
+
+  const markCatalogSeeded = () => {
+    if (isCatalogSeeded) return;
+    isCatalogSeeded = true;
+    if (pendingEmptySessions) {
+      pendingEmptySessions = false;
+      callbacks.onSessions([]);
+    }
+    if (pendingEmptySpeakers) {
+      pendingEmptySpeakers = false;
+      callbacks.onSpeakers([]);
+    }
+    if (pendingEmptyExhibitors) {
+      pendingEmptyExhibitors = false;
+      callbacks.onExhibitors([]);
+    }
+    if (pendingEmptyRooms) {
+      pendingEmptyRooms = false;
+      callbacks.onRooms([]);
+    }
+  };
+
   unsubscribers.push(
     onSnapshot(
       query(collection(db, 'event_info'), where('isPublished', '==', true)),
       (snapshot) => {
         if (!snapshot.empty) {
+          markCatalogSeeded();
           const mainDoc = snapshot.docs.find((d) => d.id === 'main') || snapshot.docs[0];
           const docData = mainDoc.data() as any;
           const { isPublished, updatedAt, updatedBy, ...rest } = docData;
@@ -737,11 +780,16 @@ export function subscribePublicCatalog(callbacks: {
       query(collection(db, 'sessions'), where('isPublished', '==', true)),
       (snapshot) => {
         if (!snapshot.empty) {
+          pendingEmptySessions = false;
           const list = snapshot.docs.map((d) => {
             const { isPublished, updatedAt, ...rest } = d.data() as any;
             return rest as Session;
           });
           callbacks.onSessions(list);
+        } else if (isCatalogSeeded) {
+          callbacks.onSessions([]);
+        } else {
+          pendingEmptySessions = true;
         }
       },
       (error) => handleFirestoreError(error, OperationType.LIST, 'sessions')
@@ -753,11 +801,16 @@ export function subscribePublicCatalog(callbacks: {
       query(collection(db, 'speakers'), where('isPublished', '==', true)),
       (snapshot) => {
         if (!snapshot.empty) {
+          pendingEmptySpeakers = false;
           const list = snapshot.docs.map((d) => {
             const { isPublished, updatedAt, ...rest } = d.data() as any;
             return rest as Speaker;
           });
           callbacks.onSpeakers(list);
+        } else if (isCatalogSeeded) {
+          callbacks.onSpeakers([]);
+        } else {
+          pendingEmptySpeakers = true;
         }
       },
       (error) => handleFirestoreError(error, OperationType.LIST, 'speakers')
@@ -769,11 +822,16 @@ export function subscribePublicCatalog(callbacks: {
       query(collection(db, 'exhibitors'), where('isPublished', '==', true)),
       (snapshot) => {
         if (!snapshot.empty) {
+          pendingEmptyExhibitors = false;
           const list = snapshot.docs.map((d) => {
             const { isPublished, updatedAt, ...rest } = d.data() as any;
             return rest as Exhibitor;
           });
           callbacks.onExhibitors(list);
+        } else if (isCatalogSeeded) {
+          callbacks.onExhibitors([]);
+        } else {
+          pendingEmptyExhibitors = true;
         }
       },
       (error) => handleFirestoreError(error, OperationType.LIST, 'exhibitors')
@@ -785,11 +843,16 @@ export function subscribePublicCatalog(callbacks: {
       query(collection(db, 'rooms'), where('isPublished', '==', true)),
       (snapshot) => {
         if (!snapshot.empty) {
+          pendingEmptyRooms = false;
           const list = snapshot.docs.map((d) => {
             const { isPublished, updatedAt, ...rest } = d.data() as any;
             return rest as Room;
           });
           callbacks.onRooms(list);
+        } else if (isCatalogSeeded) {
+          callbacks.onRooms([]);
+        } else {
+          pendingEmptyRooms = true;
         }
       },
       (error) => handleFirestoreError(error, OperationType.LIST, 'rooms')
@@ -955,7 +1018,18 @@ export async function saveEventInfoToFirestore(info: SymposiumInfo, adminUid?: s
   }
 }
 
-async function syncCollectionDocs<T>(
+// Per-collection sequential sync queue with latest-state coalescing.
+// Prevents concurrent rapid deletes/edits from racing and resurrecting deleted documents.
+const activeCollectionSyncs = new Set<string>();
+const pendingCollectionSyncTasks = new Map<
+  string,
+  {
+    run: () => Promise<void>;
+    resolvers: Array<{ resolve: () => void; reject: (err: unknown) => void }>;
+  }
+>();
+
+async function executeSyncCollectionDocs<T>(
   collectionName: string,
   items: T[],
   serializer: (item: T) => { docId: string; data: Record<string, any> }
@@ -969,21 +1043,74 @@ async function syncCollectionDocs<T>(
   }
 
   const targetIds = new Set<string>();
-  const ops: Array<{ type: 'set' | 'delete'; ref: ReturnType<typeof doc>; data?: any }> = [];
+  const setOps: Array<{ type: 'set'; ref: ReturnType<typeof doc>; data: any }> = [];
 
   for (const item of items) {
     const { docId, data } = serializer(item);
     targetIds.add(docId);
-    ops.push({ type: 'set', ref: doc(db, collectionName, docId), data });
+    setOps.push({ type: 'set', ref: doc(db, collectionName, docId), data });
   }
 
+  const deleteOps: Array<{ type: 'delete'; ref: ReturnType<typeof doc> }> = [];
   for (const oldId of existingIds) {
     if (!targetIds.has(oldId)) {
-      ops.push({ type: 'delete', ref: doc(db, collectionName, oldId) });
+      deleteOps.push({ type: 'delete', ref: doc(db, collectionName, oldId) });
     }
   }
 
-  await commitBatchOps(ops, collectionName);
+  // Commit deletions independently first so removed docs are always deleted even if a later set op encounters an issue.
+  if (deleteOps.length > 0) {
+    await commitBatchOps(deleteOps, `${collectionName}/delete`);
+  }
+  if (setOps.length > 0) {
+    await commitBatchOps(setOps, collectionName);
+  }
+}
+
+function syncCollectionDocs<T>(
+  collectionName: string,
+  items: T[],
+  serializer: (item: T) => { docId: string; data: Record<string, any> }
+): Promise<void> {
+  const snapshotCopy = [...items];
+
+  return new Promise<void>((resolve, reject) => {
+    const existingPending = pendingCollectionSyncTasks.get(collectionName);
+    if (existingPending) {
+      // Coalesce: replace pending snapshot with the newest array so older states never overwrite newer deletions.
+      existingPending.run = () => executeSyncCollectionDocs(collectionName, snapshotCopy, serializer);
+      existingPending.resolvers.push({ resolve, reject });
+    } else {
+      pendingCollectionSyncTasks.set(collectionName, {
+        run: () => executeSyncCollectionDocs(collectionName, snapshotCopy, serializer),
+        resolvers: [{ resolve, reject }],
+      });
+    }
+
+    if (activeCollectionSyncs.has(collectionName)) {
+      return;
+    }
+
+    const drainQueue = async () => {
+      activeCollectionSyncs.add(collectionName);
+      try {
+        while (pendingCollectionSyncTasks.has(collectionName)) {
+          const nextTask = pendingCollectionSyncTasks.get(collectionName)!;
+          pendingCollectionSyncTasks.delete(collectionName);
+          try {
+            await nextTask.run();
+            nextTask.resolvers.forEach((r) => r.resolve());
+          } catch (err) {
+            nextTask.resolvers.forEach((r) => r.reject(err));
+          }
+        }
+      } finally {
+        activeCollectionSyncs.delete(collectionName);
+      }
+    };
+
+    void drainQueue();
+  });
 }
 
 export async function syncSessionsToFirestore(sessions: Session[]): Promise<void> {

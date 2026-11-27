@@ -14,7 +14,7 @@ export const SpeakerDirectory: React.FC<SpeakerDirectoryProps> = ({
 }) => {
   const [search, setSearch] = useState('');
 
-  const allSpeakers = speakers && speakers.length > 0 ? speakers : Object.values(SPEAKERS_DATABASE);
+  const allSpeakers = speakers !== undefined ? speakers : Object.values(SPEAKERS_DATABASE);
 
   const filteredSpeakers = allSpeakers.filter(sp =>
     sp.name.toLowerCase().includes(search.toLowerCase()) ||

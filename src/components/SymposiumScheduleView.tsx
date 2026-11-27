@@ -26,7 +26,7 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
   const info = eventInfo || SYMPOSIUM_INFO;
   const palette = getThemePalette(info);
 
-  const allSessions = sessions && sessions.length > 0 ? sessions : SESSIONS_DATA;
+  const allSessions = sessions !== undefined ? sessions : SESSIONS_DATA;
   const sourceSessions = React.useMemo(() => {
     return allSessions.filter(
       s =>

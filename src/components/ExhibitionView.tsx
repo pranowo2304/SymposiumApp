@@ -38,7 +38,7 @@ export const ExhibitionView: React.FC<ExhibitionViewProps> = ({
     'Rumah Sakit & Lab'
   ];
 
-  const sourceExhibitors = exhibitors && exhibitors.length > 0 ? exhibitors : EXHIBITORS_DATA;
+  const sourceExhibitors = exhibitors !== undefined ? exhibitors : EXHIBITORS_DATA;
 
   const filteredExhibitors = sourceExhibitors.filter((ex) => {
     const matchesCat = selectedCategory === 'Semua Kategori' || ex.category === selectedCategory;
@@ -75,7 +75,7 @@ export const ExhibitionView: React.FC<ExhibitionViewProps> = ({
 
           <div className="bg-amber-500/20 border border-amber-400/30 rounded-xl p-3 text-center shrink-0">
             <span className="text-[10px] text-amber-300 uppercase font-extrabold block">Partisipan Industri</span>
-            <span className="text-xl font-black text-white">{EXHIBITORS_DATA.length} Booth</span>
+            <span className="text-xl font-black text-white">{sourceExhibitors.length} Booth</span>
             <span className="text-[10px] text-amber-200 block">4 Zona Terintegrasi</span>
           </div>
         </div>

@@ -1266,9 +1266,6 @@ export default function App() {
       return (
         <InteractiveVenueMap
           rooms={rooms}
-          sessions={displaySessions}
-          onSelectSession={(s) => handleOpenSession(s, 'abstract')}
-          onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
           eventInfo={eventInfo}
         />
       );

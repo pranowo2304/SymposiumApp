@@ -1,27 +1,18 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { 
-  Compass, 
-  Layers, 
-  Users, 
-  Clock, 
-  Info, 
-  ChevronRight, 
-  Search, 
-  Sparkles, 
-  Calendar, 
-  ZoomIn, 
-  ZoomOut, 
-  RotateCcw, 
-  Radio, 
-  Maximize2, 
-  Minimize2, 
-  Move, 
-  Activity, 
-  MapPin, 
-  Volume2, 
-  SlidersHorizontal,
-  CheckCircle2,
-  AlertCircle,
+import {
+  Compass,
+  Layers,
+  Users,
+  Info,
+  Search,
+  Sparkles,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  Maximize2,
+  Minimize2,
+  Move,
+  MapPin,
   PanelRightClose,
   PanelRightOpen,
   ArrowUp,
@@ -32,7 +23,7 @@ import {
   RefreshCw,
   X
 } from 'lucide-react';
-import { SESSIONS_DATA, SYMPOSIUM_INFO } from '../data/symposiumData';
+import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { DEFAULT_ROOMS_DATA } from '../data/roomsData';
 import { Session, Speaker, Room, SymposiumInfo } from '../types';
 import { getThemePalette } from '../utils/themeColors';
@@ -48,7 +39,7 @@ import {
 interface InteractiveVenueMapProps {
   rooms?: Room[];
   sessions?: Session[];
-  onSelectSession: (session: Session) => void;
+  onSelectSession?: (session: Session) => void;
   onSelectSpeaker?: (speaker: Speaker) => void;
   eventInfo?: SymposiumInfo;
 }
@@ -304,21 +295,8 @@ const FLOOR_ROOM_POLYGONS: Record<string, RoomGeoPolygon[]> = {
   ]
 };
 
-// Helper: check if session is happening at a given time or simulation
-function parseMinutes(timeStr: string): number {
-  if (!timeStr) return 0;
-  const parts = timeStr.trim().split(':');
-  if (parts.length < 2) return 0;
-  const h = parseInt(parts[0], 10) || 0;
-  const m = parseInt(parts[1], 10) || 0;
-  return h * 60 + m;
-}
-
 export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
   rooms,
-  sessions,
-  onSelectSession,
-  onSelectSpeaker,
   eventInfo
 }) => {
   // Offline Cache Snapshot & Connectivity State
@@ -349,12 +327,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     });
   }, [rooms, cachedSnapshot]);
 
-  const currentSessions = useMemo(() => {
-    if (sessions && sessions.length > 0) return sessions;
-    if (cachedSnapshot?.sessions && cachedSnapshot.sessions.length > 0) return cachedSnapshot.sessions;
-    return SESSIONS_DATA;
-  }, [sessions, cachedSnapshot]);
-
   const activeFloorPolygonsMap = useMemo(() => {
     if (!isOnline && cachedSnapshot?.floorPolygons && Object.keys(cachedSnapshot.floorPolygons).length > 0) {
       return cachedSnapshot.floorPolygons;
@@ -375,20 +347,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     return list.length > 0 ? [...list, 'Semua'] : ['Ground Floor', 'Lantai 1', 'Semua'];
   }, [currentRooms]);
 
-  const availableVenueDays = useMemo(() => {
-    const orderPriority = ['Pre-Congress', 'Hari I', 'Hari II', 'Hari III'];
-    const uniqueDays = Array.from(new Set<string>(currentSessions.map(s => s.day).filter(Boolean)));
-    const sortedDays = uniqueDays.sort((a: string, b: string) => {
-      const idxA = orderPriority.indexOf(a);
-      const idxB = orderPriority.indexOf(b);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return a.localeCompare(b);
-    });
-    return sortedDays;
-  }, [currentSessions]);
-
   const savedUIState = useMemo(() => loadVenueMapUIState(), []);
 
   // Floor Selection & Smooth Transition Animation States
@@ -407,13 +365,7 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     }
     return currentRooms[0]?.id || 'Antareja Room';
   });
-  const [popupRoomId, setPopupRoomId] = useState<string | null>(null);
-  const [popupTimingFilter, setPopupTimingFilter] = useState<'all' | 'ongoing' | 'upcoming'>('all');
   const [mapSearchQuery, setMapSearchQuery] = useState<string>('');
-  const [selectedDayFilter, setSelectedDayFilter] = useState<string>(() => {
-    return savedUIState?.selectedDayFilter || 'Semua';
-  });
-  const [roomSessionTimingFilter, setRoomSessionTimingFilter] = useState<'all' | 'ongoing' | 'upcoming'>('all');
 
   // Listen to online/offline connectivity changes & hydrate from Cache Storage API on mount
   useEffect(() => {
@@ -435,13 +387,13 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     };
   }, []);
 
-  // Automatically cache the venue map data (rooms, sessions, floor polygons, eventInfo) for offline access
+  // Automatically cache the venue map data (rooms, floor polygons, eventInfo) for offline access
   const handleManualSyncOfflineCache = useCallback(async () => {
     setIsSyncingCache(true);
     try {
       const result = await saveVenueMapToCache(
         currentRooms,
-        currentSessions,
+        [],
         FLOOR_ROOM_POLYGONS,
         info
       );
@@ -451,11 +403,11 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     } finally {
       setTimeout(() => setIsSyncingCache(false), 350);
     }
-  }, [currentRooms, currentSessions, info]);
+  }, [currentRooms, info]);
 
   useEffect(() => {
     let isMounted = true;
-    saveVenueMapToCache(currentRooms, currentSessions, FLOOR_ROOM_POLYGONS, info).then(res => {
+    saveVenueMapToCache(currentRooms, [], FLOOR_ROOM_POLYGONS, info).then(res => {
       if (isMounted && res.success) {
         setLastCachedAt(res.cachedAt);
       }
@@ -463,42 +415,16 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentRooms, currentSessions, info]);
+  }, [currentRooms, info]);
 
-  // Persist user's active floor, pin, and day filter for seamless offline navigation
+  // Persist user's active floor and pin for seamless offline navigation
   useEffect(() => {
     saveVenueMapUIState({
       selectedFloor,
       activePinId,
-      selectedDayFilter,
+      selectedDayFilter: 'Semua',
     });
-  }, [selectedFloor, activePinId, selectedDayFilter]);
-
-  // Interactive Live Session Simulation Filter
-  // Allows the user to select or simulate specific time slots to see rooms actively holding sessions
-  const [simulatedTimeSlot, setSimulatedTimeSlot] = useState<string>('09:00'); // Default morning active session
-  const [isLiveClockMode, setIsLiveClockMode] = useState<boolean>(false);
-  const [currentTimeMinutes, setCurrentTimeMinutes] = useState<number>(() => {
-    const now = new Date();
-    return now.getHours() * 60 + now.getMinutes();
-  });
-
-  // Keep live time ticking when live mode is active
-  useEffect(() => {
-    if (!isLiveClockMode) return;
-    const update = () => {
-      const now = new Date();
-      setCurrentTimeMinutes(now.getHours() * 60 + now.getMinutes());
-    };
-    update();
-    const timer = setInterval(update, 10000);
-    return () => clearInterval(timer);
-  }, [isLiveClockMode]);
-
-  const activeComparisonMinutes = useMemo(() => {
-    if (isLiveClockMode) return currentTimeMinutes;
-    return parseMinutes(simulatedTimeSlot);
-  }, [isLiveClockMode, currentTimeMinutes, simulatedTimeSlot]);
+  }, [selectedFloor, activePinId]);
 
   // Smooth Zoom & Pan Engine State
   const [zoomLevel, setZoomLevel] = useState<number>(1);
@@ -697,38 +623,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     touchStartRef.current.dist = undefined;
   };
 
-  // Determine which rooms currently have an ongoing session
-  const roomOngoingSessionsMap = useMemo(() => {
-    const map = new Map<string, Session>();
-    const effectiveDay = selectedDayFilter === 'Semua' ? 'Hari I' : selectedDayFilter;
-
-    currentSessions.forEach(session => {
-      // Check day filter
-      if (session.day !== effectiveDay) {
-        return;
-      }
-
-      const start = parseMinutes(session.startTime);
-      const end = parseMinutes(session.endTime);
-
-      if (start > 0 && end > 0 && activeComparisonMinutes >= start && activeComparisonMinutes < end) {
-        // Match room
-        const matchedRoom = currentRooms.find(r => {
-          const rName = r.name.toLowerCase();
-          const rId = r.id.toLowerCase();
-          const sRoom = session.room.toLowerCase();
-          return sRoom.includes(rName) || rName.includes(sRoom) || sRoom.includes(rId) || rId.includes(sRoom);
-        });
-
-        if (matchedRoom) {
-          map.set(matchedRoom.id, session);
-        }
-      }
-    });
-
-    return map;
-  }, [currentSessions, currentRooms, selectedDayFilter, activeComparisonMinutes]);
-
   // Filter pins based on floor and search
   const filteredPins = useMemo(() => {
     return currentRooms.filter(pin => {
@@ -748,50 +642,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
   const activePin = useMemo(() => {
     return currentRooms.find(p => p.id === activePinId) || currentRooms[0] || DEFAULT_ROOMS_DATA[0];
   }, [currentRooms, activePinId]);
-
-  // Universal helper to retrieve sessions scheduled in any specific room
-  const getSessionsForRoom = useCallback((roomId: string, timing: 'all' | 'ongoing' | 'upcoming' = 'all') => {
-    const pin = currentRooms.find(r => r.id === roomId);
-    const pinNameClean = (pin?.name || roomId).toLowerCase();
-
-    return currentSessions.filter(s => {
-      const sessionRoomClean = s.room.toLowerCase();
-      const isMatch = sessionRoomClean.includes(pinNameClean) || pinNameClean.includes(sessionRoomClean);
-
-      if (!isMatch) return false;
-      if (selectedDayFilter !== 'Semua' && s.day !== selectedDayFilter) return false;
-
-      if (timing !== 'all') {
-        const startMin = parseMinutes(s.startTime);
-        const endMin = parseMinutes(s.endTime);
-        const isOngoing = activeComparisonMinutes >= startMin && activeComparisonMinutes <= endMin;
-        const isUpcoming = startMin > activeComparisonMinutes;
-
-        if (timing === 'ongoing' && !isOngoing) return false;
-        if (timing === 'upcoming' && !isUpcoming) return false;
-      }
-
-      return true;
-    });
-  }, [currentRooms, currentSessions, selectedDayFilter, activeComparisonMinutes]);
-
-  // Total session count map per room (useful for pins badge indicator)
-  const roomSessionCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    currentRooms.forEach(room => {
-      const list = getSessionsForRoom(room.id, 'all');
-      counts[room.id] = list.length;
-    });
-    return counts;
-  }, [currentRooms, getSessionsForRoom]);
-
-  // Sessions for the active pin
-  const roomSessions = useMemo(() => {
-    return getSessionsForRoom(activePin.id, roomSessionTimingFilter);
-  }, [activePin.id, roomSessionTimingFilter, getSessionsForRoom]);
-
-  // Active session in selected room right now (if any)
-  const currentOngoingInActivePin = roomOngoingSessionsMap.get(activePin.id);
 
   // Active polygons for current floor (deduplicated by roomId)
   const currentFloorPolygons = useMemo(() => {
@@ -814,11 +664,9 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     });
   }, [selectedFloor, availableFloors, activeFloorPolygonsMap]);
 
-  // Direct Interactive Pin Click Handler (pops up session schedule directly on canvas)
+  // Direct Interactive Pin Click Handler
   const handlePinClick = useCallback((pinId: string) => {
     setActivePinId(pinId);
-    setPopupRoomId(pinId);
-    setPopupTimingFilter('all');
 
     const pin = currentRooms.find(r => r.id === pinId);
     if (pin) {
@@ -832,33 +680,14 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     }
   }, [currentRooms, selectedFloor, handleSelectFloor]);
 
-  // Data for the active interactive popup
-  const popupRoom = useMemo(() => {
-    if (!popupRoomId) return null;
-    return currentRooms.find(r => r.id === popupRoomId) || null;
-  }, [currentRooms, popupRoomId]);
-
-  const popupSessions = useMemo(() => {
-    if (!popupRoomId) return [];
-    return getSessionsForRoom(popupRoomId, popupTimingFilter);
-  }, [popupRoomId, popupTimingFilter, getSessionsForRoom]);
-
-  const popupOngoingSession = useMemo(() => {
-    if (!popupRoomId) return undefined;
-    return roomOngoingSessionsMap.get(popupRoomId);
-  }, [popupRoomId, roomOngoingSessionsMap]);
-
   // Center view on specific room
   const handleFocusRoom = (pinId: string) => {
     setActivePinId(pinId);
-    setPopupRoomId(pinId);
     const pin = currentRooms.find(r => r.id === pinId);
     if (pin) {
       if (selectedFloor !== 'Semua' && pin.floor !== selectedFloor) {
         handleSelectFloor(pin.floor);
       }
-      // Calculate target offset to bring pin to center
-      // x: percentage 0-100 -> center is 50
       const offsetX = (50 - pin.x) * 3;
       const offsetY = (50 - pin.y) * 3;
       setPanOffset({ x: offsetX, y: offsetY });
@@ -877,7 +706,7 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
           <div className="flex items-center justify-between pb-2.5 border-b border-slate-800">
             <div className="flex items-center gap-2">
               <Info className="w-4 h-4 text-sky-400" />
-              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">Detail Ruangan & Jadwal</span>
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">Informasi Ruangan</span>
             </div>
             <button
               onClick={() => setShowDetailInFullscreen(false)}
@@ -895,25 +724,13 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
             <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${activePin.badgeBg}`}>
               {activePin.floor} • {activePin.type.toUpperCase()}
             </span>
-
-            {/* Ongoing Status Indicator Badge */}
-            {currentOngoingInActivePin ? (
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 text-[10px] font-black flex items-center gap-1.5 animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>SESI SEDANG BERLANGSUNG</span>
-              </span>
-            ) : (
-              <span className="text-[10px] text-slate-400 font-medium">
-                Tidak ada sesi aktif saat ini
-              </span>
-            )}
           </div>
 
           <div className="flex items-start justify-between gap-2">
             <h3 className="text-lg sm:text-xl font-black text-white leading-tight">
               {activePin.name}
             </h3>
-            
+
             {activePin.type !== 'facility' && (
               <div className="text-right shrink-0">
                 <span className="text-[10px] font-bold text-slate-400 uppercase block">Kapasitas</span>
@@ -925,42 +742,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
             )}
           </div>
         </div>
-
-        {/* LIVE ONGOING SESSION HIGHLIGHT CARD (IF ACTIVE) */}
-        {currentOngoingInActivePin && (
-          <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-950 via-slate-900 to-emerald-950 border-2 border-emerald-500/60 shadow-lg space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1 text-emerald-400 font-black text-[11px] uppercase tracking-wider">
-                <Activity className="w-4 h-4 animate-pulse text-emerald-400" />
-                <span>Sesi Sedang Berlangsung Sekarang</span>
-              </span>
-              <span className="px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-black text-[10px]">
-                {currentOngoingInActivePin.timeString}
-              </span>
-            </div>
-
-            <h4 className="text-xs sm:text-sm font-black text-white leading-snug">
-              {currentOngoingInActivePin.title}
-            </h4>
-
-            <div className="text-xs text-slate-300">
-              <span className="text-slate-400">Moderator:</span> {currentOngoingInActivePin.moderator || '-'}
-            </div>
-
-            <div className="pt-1 flex items-center justify-between">
-              <span className="text-[10px] text-emerald-300 font-semibold">
-                Kategori: {currentOngoingInActivePin.category}
-              </span>
-              <button
-                onClick={() => onSelectSession(currentOngoingInActivePin)}
-                className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg text-xs font-black transition-colors flex items-center gap-1 cursor-pointer"
-              >
-                <span>Buka Detail Sesi</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Room Description */}
         <p className="text-xs text-slate-300 leading-relaxed">
@@ -984,129 +765,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
             ))}
           </div>
         </div>
-
-        {/* Agenda/Sessions Scheduled in this Room */}
-        <div className="space-y-2.5 pt-3 border-t border-slate-800">
-          <div className="flex items-center justify-between">
-            <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center">
-              <Calendar className="w-3.5 h-3.5 mr-1 text-sky-400" />
-              Agenda di Ruangan Ini:
-            </h4>
-
-            {/* Day Filter inside info box */}
-            <div className="flex items-center flex-wrap gap-1 text-[10px] font-bold">
-              <button
-                onClick={() => setSelectedDayFilter('Semua')}
-                className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
-                  selectedDayFilter === 'Semua' ? 'bg-sky-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Semua
-              </button>
-              {availableVenueDays.map(d => (
-                <button
-                  key={d}
-                  onClick={() => setSelectedDayFilter(d)}
-                  className={`px-2 py-0.5 rounded transition-colors cursor-pointer ${
-                    selectedDayFilter === d ? 'bg-sky-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {d}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 1-Click Room Session Timing Filter (Semua, Sedang Berlangsung / Live, Akan Datang) */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-950/70 rounded-lg border border-slate-800 text-[11px]">
-            <button
-              onClick={() => setRoomSessionTimingFilter('all')}
-              className={`flex-1 py-1 px-2 rounded-md font-bold text-center transition-all cursor-pointer ${
-                roomSessionTimingFilter === 'all'
-                  ? 'bg-slate-700 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Semua
-            </button>
-            <button
-              onClick={() => setRoomSessionTimingFilter('ongoing')}
-              className={`flex-1 py-1 px-2 rounded-md font-bold text-center transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                roomSessionTimingFilter === 'ongoing'
-                  ? 'bg-emerald-600 text-white shadow-sm font-black'
-                  : 'text-emerald-400 hover:text-emerald-300'
-              }`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Sedang Live</span>
-            </button>
-            <button
-              onClick={() => setRoomSessionTimingFilter('upcoming')}
-              className={`flex-1 py-1 px-2 rounded-md font-bold text-center transition-all cursor-pointer ${
-                roomSessionTimingFilter === 'upcoming'
-                  ? 'bg-sky-600 text-white shadow-sm font-black'
-                  : 'text-sky-400 hover:text-sky-300'
-              }`}
-            >
-              Akan Datang
-            </button>
-          </div>
-
-          {roomSessions.length === 0 ? (
-            <div className="p-4 bg-slate-800/60 rounded-xl text-center text-slate-400 text-xs border border-slate-700/60">
-              {activePin.type === 'facility' 
-                ? "Area fasilitas umum tidak memiliki agenda ceramah simposium."
-                : roomSessionTimingFilter === 'ongoing'
-                ? "Tidak ada sesi yang sedang berlangsung di ruangan ini pada jam yang dipilih."
-                : roomSessionTimingFilter === 'upcoming'
-                ? "Tidak ada sesi yang akan datang di ruangan ini untuk jadwal hari ini."
-                : "Tidak ada agenda simposium terjadwal untuk filter yang dipilih."
-              }
-            </div>
-          ) : (
-            <div className={`space-y-2 ${isSidebar ? 'max-h-[300px]' : 'max-h-[220px]'} overflow-y-auto pr-1`}>
-              {roomSessions.map(sess => {
-                const isCurrent = currentOngoingInActivePin?.id === sess.id;
-
-                return (
-                  <div
-                    key={sess.id}
-                    onClick={() => onSelectSession(sess)}
-                    className={`p-3 rounded-xl border transition-all cursor-pointer group ${
-                      isCurrent
-                        ? 'bg-emerald-950/40 border-emerald-500 text-white shadow-sm'
-                        : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700 text-slate-200'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold mb-1">
-                      <span className={`px-1.5 py-0.2 rounded font-black ${
-                        isCurrent ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-200'
-                      }`}>
-                        {isCurrent ? 'SEDANG LIVE' : sess.day}
-                      </span>
-                      <span className="flex items-center text-slate-300 font-mono">
-                        <Clock className="w-3 h-3 mr-1 text-sky-400" />
-                        {sess.timeString}
-                      </span>
-                    </div>
-
-                    <h5 className="text-xs font-bold text-white group-hover:text-sky-300 line-clamp-2">
-                      {sess.title}
-                    </h5>
-
-                    <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
-                      <span>{sess.type}</span>
-                      <span className="text-sky-400 font-bold group-hover:underline flex items-center">
-                        Detail Sesi <ChevronRight className="w-3 h-3 ml-0.5" />
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
       </div>
 
       {/* Bottom Info Footer */}
@@ -1202,11 +860,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
             preserveAspectRatio="none"
           >
             <defs>
-              {/* Active room glow filter */}
-              <filter id="liveGlow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="1.5" result="blur" />
-                <feComposite in="SourceGraphic" in2="blur" operator="over" />
-              </filter>
               {/* Selected room beacon glow filter */}
               <filter id="selectedGlow" x="-30%" y="-30%" width="160%" height="160%">
                 <feGaussianBlur stdDeviation="2" result="blur" />
@@ -1218,9 +871,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                   <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
-              <pattern id="diagonalHatch" width="4" height="4" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-                <line x1="0" y1="0" x2="0" y2="4" stroke="#0ea5e9" strokeWidth="0.8" opacity="0.15" />
-              </pattern>
             </defs>
 
             {/* Outer Building Perimeter Wall */}
@@ -1238,10 +888,9 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
             <line x1="6" y1="50" x2="94" y2="50" stroke="#334155" strokeWidth="0.6" strokeDasharray="1.5 1.5" />
             <line x1="50" y1="8" x2="50" y2="92" stroke="#334155" strokeWidth="0.6" strokeDasharray="1.5 1.5" />
 
-            {/* Room Boundary Polygons with Dynamic Ongoing & Selected Highlights */}
+            {/* Room Boundary Polygons with Selected Highlights */}
             {currentFloorPolygons.map((poly) => {
-              const isOngoing = roomOngoingSessionsMap.has(poly.roomId);
-              const isSelected = activePinId === poly.roomId || popupRoomId === poly.roomId;
+              const isSelected = activePinId === poly.roomId;
 
               return (
                 <g 
@@ -1262,12 +911,10 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                     className={`transition-all duration-300 ${
                       isSelected
                         ? 'stroke-sky-300 fill-sky-500/35 group-hover/polygon:fill-sky-500/45'
-                        : isOngoing
-                        ? 'stroke-emerald-400 fill-emerald-950/40 group-hover/polygon:fill-emerald-900/60'
                         : 'stroke-slate-700 fill-slate-800/30 group-hover/polygon:stroke-sky-400 group-hover/polygon:fill-slate-800/70'
                     }`}
-                    strokeWidth={isSelected ? '2' : isOngoing ? '1.4' : '0.7'}
-                    filter={isSelected ? 'url(#selectedGlow)' : isOngoing ? 'url(#liveGlow)' : undefined}
+                    strokeWidth={isSelected ? '2' : '0.7'}
+                    filter={isSelected ? 'url(#selectedGlow)' : undefined}
                   />
 
                   {/* Pulsating dashed highlight outline for selected room on blueprint */}
@@ -1281,19 +928,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                       className="stroke-sky-300 fill-none stroke-[1.3] animate-pulse pointer-events-none"
                       strokeDasharray="2.5 1.5"
                       filter="url(#selectedGlow)"
-                    />
-                  )}
-
-                  {/* Pattern fill for ongoing session rooms */}
-                  {isOngoing && !isSelected && (
-                    <rect
-                      x={poly.x}
-                      y={poly.y}
-                      width={poly.width}
-                      height={poly.height}
-                      rx="2"
-                      fill="url(#diagonalHatch)"
-                      className="pointer-events-none"
                     />
                   )}
 
@@ -1315,12 +949,10 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                     className={`text-[2.1px] font-bold select-none pointer-events-none ${
                       isSelected
                         ? 'fill-sky-300 font-black'
-                        : isOngoing
-                        ? 'fill-emerald-400 font-black'
                         : 'fill-sky-400/80 group-hover/polygon:fill-sky-300'
                     }`}
                   >
-                    {isSelected ? '★ RUANGAN AKTIF' : isOngoing ? '● LIVE SEKARANG' : 'Ketuk untuk sesi'}
+                    {isSelected ? '★ RUANGAN TERPILIH' : 'Ketuk untuk info ruangan'}
                   </text>
 
                   {/* Entry Door Mark */}
@@ -1329,7 +961,7 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                       cx={poly.entryDoor.x}
                       cy={poly.entryDoor.y}
                       r={isSelected ? '1.5' : '1.2'}
-                      className={isSelected ? 'fill-sky-300' : isOngoing ? 'fill-emerald-400' : 'fill-sky-400'}
+                      className={isSelected ? 'fill-sky-300' : 'fill-sky-400'}
                     />
                   )}
                 </g>
@@ -1345,10 +977,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
           {/* Interactive Room Pins Overlay */}
           {filteredPins.map((pin) => {
             const isSelected = activePinId === pin.id;
-            const isPopup = popupRoomId === pin.id;
-            const ongoingSession = roomOngoingSessionsMap.get(pin.id);
-            const isOngoing = Boolean(ongoingSession);
-            const sessionCount = roomSessionCounts[pin.id] || 0;
 
             return (
               <div
@@ -1359,10 +987,10 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                 }}
                 style={{ top: `${pin.y}%`, left: `${pin.x}%` }}
                 className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all duration-300 z-20 group/pin"
-                title={`${pin.name} - Ketuk untuk melihat daftar sesi`}
+                title={`${pin.name} - Ketuk untuk melihat informasi ruangan`}
               >
                 {/* Luminous Pulsing Sonar / Radar Waves when selected */}
-                {(isSelected || isPopup) && (
+                {isSelected && (
                   <>
                     <span className="absolute -inset-7 rounded-full bg-sky-400/20 animate-ping pointer-events-none duration-1000" />
                     <span className="absolute -inset-4 rounded-full border-2 border-sky-400/70 animate-pulse pointer-events-none" />
@@ -1370,16 +998,8 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                   </>
                 )}
 
-                {/* Glowing Ping Ripple Effect for Ongoing Session (if not selected) */}
-                {isOngoing && !isSelected && !isPopup && (
-                  <>
-                    <span className="absolute -inset-3 rounded-full bg-emerald-500/40 animate-ping pointer-events-none" />
-                    <span className="absolute -inset-1 rounded-full bg-emerald-400/30 animate-pulse pointer-events-none" />
-                  </>
-                )}
-
                 {/* Floating Pin Location Beacon Badge with Bounce Animation */}
-                {(isSelected || isPopup) && (
+                {isSelected && (
                   <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-30 animate-bounce">
                     <div className="px-2 py-0.5 rounded-full bg-gradient-to-r from-sky-400 via-sky-300 to-blue-500 text-slate-950 font-black text-[9px] shadow-lg shadow-sky-500/60 flex items-center gap-1 uppercase tracking-wider whitespace-nowrap border border-white">
                       <Sparkles className="w-2.5 h-2.5 text-slate-950 fill-slate-950" />
@@ -1392,20 +1012,16 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                 {/* Pin Card Element */}
                 <div 
                   className={`relative px-2.5 py-1.5 rounded-xl border flex items-center space-x-1.5 shadow-xl transition-all duration-300 backdrop-blur-sm ${
-                    isSelected || isPopup
+                    isSelected
                       ? 'bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 text-white border-2 border-white scale-120 ring-4 ring-sky-400/80 shadow-[0_0_25px_rgba(56,189,248,0.85)] z-30 font-bold'
-                      : isOngoing
-                      ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white border-emerald-300 scale-105 ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-900 shadow-emerald-500/40'
                       : 'bg-slate-900/90 text-slate-200 border-slate-700 hover:bg-slate-800 hover:scale-105 hover:border-slate-500'
                   }`}
                 >
                   {/* Status / Category Dot */}
                   <span 
                     className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                      isSelected || isPopup
+                      isSelected
                         ? 'bg-white ring-2 ring-sky-300 animate-pulse'
-                        : isOngoing
-                        ? 'bg-emerald-300 animate-pulse'
                         : pin.color
                     }`} 
                   />
@@ -1415,25 +1031,20 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                     {pin.shortName}
                   </span>
 
-                  {/* Live Badge or Session Count Badge */}
-                  {isOngoing ? (
-                    <span className="text-[9px] px-1.5 py-0.2 bg-emerald-950/80 text-emerald-200 border border-emerald-400/50 rounded-full font-black uppercase tracking-wider animate-pulse flex items-center gap-0.5">
-                      <span className="w-1 h-1 rounded-full bg-emerald-300"></span>
-                      LIVE
-                    </span>
-                  ) : pin.type !== 'facility' ? (
+                  {/* Capacity Badge */}
+                  {pin.type !== 'facility' && pin.capacity > 0 && (
                     <span className={`text-[9px] px-1.5 py-0.2 rounded-md font-mono font-bold ${
-                      isSelected || isPopup
+                      isSelected
                         ? 'bg-white/20 text-white border border-white/40'
                         : 'bg-sky-950/80 text-sky-300 border border-sky-700/50'
                     }`}>
-                      {sessionCount > 0 ? `${sessionCount} Sesi` : `${pin.capacity} K`}
+                      {pin.capacity} K
                     </span>
-                  ) : null}
+                  )}
                 </div>
 
                 {/* Little downward pointer for active pin */}
-                {(isPopup || isSelected) && (
+                {isSelected && (
                   <div className="w-0 h-0 border-x-5 border-x-transparent border-t-5 border-t-sky-300 mx-auto -mt-0.5 pointer-events-none drop-shadow-[0_2px_4px_rgba(56,189,248,0.9)]" />
                 )}
               </div>
@@ -1442,173 +1053,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
         </div>
 
       </div>
-
-      {/* Interactive Direct Room Sessions Popover Overlay */}
-      {popupRoom && (
-        <div 
-          onClick={(e) => e.stopPropagation()}
-          className="absolute bottom-3 left-3 right-3 sm:left-auto sm:right-3 sm:max-w-md w-auto sm:w-[410px] bg-slate-900/95 backdrop-blur-xl rounded-2xl border-2 border-sky-500/70 shadow-2xl z-40 p-3.5 sm:p-4 text-white animate-in fade-in slide-in-from-bottom-2 select-text"
-        >
-          {/* Popover Header */}
-          <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-800">
-            <div className="flex items-start gap-2 min-w-0">
-              <div className="p-1.5 rounded-lg bg-sky-500/20 text-sky-400 shrink-0 mt-0.5 border border-sky-500/30">
-                <MapPin className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className={`px-1.5 py-0.2 rounded text-[10px] font-black uppercase tracking-wider ${popupRoom.badgeBg || 'bg-slate-700 text-white'}`}>
-                    {popupRoom.floor}
-                  </span>
-                  {popupRoom.capacity ? (
-                    <span className="text-[10px] font-bold text-slate-400 flex items-center">
-                      <Users className="w-3 h-3 mr-0.5 text-sky-400" />
-                      {popupRoom.capacity} Kursi
-                    </span>
-                  ) : null}
-                  {popupOngoingSession && (
-                    <span className="px-1.5 py-0.2 rounded-full bg-emerald-500 text-slate-950 text-[9px] font-black animate-pulse flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
-                      LIVE SEKARANG
-                    </span>
-                  )}
-                </div>
-                <h4 className="text-sm sm:text-base font-black text-white truncate leading-snug mt-0.5">
-                  {popupRoom.name}
-                </h4>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setPopupRoomId(null)}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer shrink-0"
-              title="Tutup jendela sesi"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Ongoing Session Spotlight Card (if active) */}
-          {popupOngoingSession && (
-            <div className="mt-2.5 p-2.5 rounded-xl bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 border border-emerald-500/60 shadow-md">
-              <div className="flex items-center justify-between text-[10px] mb-1 font-bold">
-                <span className="text-emerald-400 flex items-center gap-1">
-                  <Activity className="w-3 h-3 animate-pulse" />
-                  <span>Sesi Sedang Berlangsung:</span>
-                </span>
-                <span className="px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-300 font-mono">
-                  {popupOngoingSession.timeString}
-                </span>
-              </div>
-              <p className="text-xs font-black text-white line-clamp-1">
-                {popupOngoingSession.title}
-              </p>
-              <div className="mt-1 flex items-center justify-between">
-                <span className="text-[10px] text-slate-300 truncate max-w-[200px]">
-                  {popupOngoingSession.moderator ? `Mod: ${popupOngoingSession.moderator}` : popupOngoingSession.category}
-                </span>
-                <button
-                  onClick={() => onSelectSession(popupOngoingSession)}
-                  className="px-2 py-0.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded text-[11px] font-black transition-colors flex items-center gap-0.5 cursor-pointer shrink-0"
-                >
-                  <span>Buka Sesi</span>
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Filter Bar for Popover Session List */}
-          <div className="mt-2.5 flex items-center justify-between gap-1.5">
-            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-300">
-              <Calendar className="w-3 h-3 text-sky-400" />
-              <span>Daftar Sesi ({popupSessions.length}):</span>
-            </div>
-
-            <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[10px]">
-              {(['all', 'ongoing', 'upcoming'] as const).map(mode => (
-                <button
-                  key={mode}
-                  onClick={() => setPopupTimingFilter(mode)}
-                  className={`px-2 py-0.5 rounded font-bold transition-all cursor-pointer ${
-                    popupTimingFilter === mode
-                      ? 'bg-sky-500 text-slate-950 font-black'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {mode === 'all' ? 'Semua' : mode === 'ongoing' ? 'Live' : 'Mendatang'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Scrollable List of Sessions in Selected Room */}
-          <div className="mt-2 max-h-48 overflow-y-auto space-y-1.5 pr-1">
-            {popupSessions.length === 0 ? (
-              <div className="py-3 px-2 text-center text-xs text-slate-400 bg-slate-950/60 rounded-xl border border-slate-800">
-                {popupRoom.type === 'facility'
-                  ? 'Area fasilitas umum tidak memiliki agenda ceramah simposium.'
-                  : 'Tidak ada sesi untuk filter jadwal yang dipilih.'}
-              </div>
-            ) : (
-              popupSessions.map((session) => {
-                const isOngoing = popupOngoingSession?.id === session.id;
-                return (
-                  <div
-                    key={session.id}
-                    onClick={() => onSelectSession(session)}
-                    className={`p-2.5 rounded-xl border transition-all cursor-pointer group flex flex-col gap-1 ${
-                      isOngoing
-                        ? 'bg-emerald-950/40 border-emerald-500/70 hover:bg-emerald-950/60'
-                        : 'bg-slate-800/80 hover:bg-slate-800 border-slate-700/80 hover:border-sky-500/50'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-[10px]">
-                      <span className="font-mono text-sky-300 font-bold flex items-center gap-1">
-                        <Clock className="w-3 h-3 text-sky-400" />
-                        {session.timeString}
-                      </span>
-                      <span className={`px-1.5 py-0.2 rounded font-black text-[9px] ${
-                        isOngoing ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-300'
-                      }`}>
-                        {isOngoing ? 'SEDANG LIVE' : session.category}
-                      </span>
-                    </div>
-
-                    <h5 className="text-xs font-bold text-white group-hover:text-sky-300 line-clamp-2 leading-tight">
-                      {session.title}
-                    </h5>
-
-                    <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
-                      <span className="truncate max-w-[220px]">
-                        {session.moderator ? `Mod: ${session.moderator}` : session.type}
-                      </span>
-                      <span className="text-sky-400 font-bold group-hover:underline flex items-center shrink-0">
-                        Lihat Detail <ChevronRight className="w-3 h-3 ml-0.5" />
-                      </span>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          {/* Popover Footer Action */}
-          <div className="mt-2.5 pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-            <button
-              onClick={() => handleFocusRoom(popupRoom.id)}
-              className="text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              <MapPin className="w-3 h-3" />
-              <span>Pusatkan Kamera</span>
-            </button>
-
-            <span className="text-[10px] text-slate-500">
-              Ketuk sesi untuk detail lengkap
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* Smooth Zoom Controls Floating Widget in Map Viewport */}
       <div className="absolute top-3 right-3 flex flex-col items-center bg-slate-900/90 backdrop-blur-md p-1 rounded-xl border border-slate-700/80 shadow-lg space-y-1 z-30">
@@ -1651,14 +1095,8 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
       </div>
 
       {/* Bottom Legend Overlay */}
-      <div className={`absolute bottom-2.5 left-2.5 right-2.5 bg-slate-900/95 backdrop-blur-md p-2 rounded-xl border border-slate-800 text-[10px] text-slate-300 flex flex-wrap items-center justify-between gap-2 z-30 shadow-md transition-all ${
-        popupRoom ? 'hidden md:flex md:right-[430px]' : 'flex'
-      }`}>
+      <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-slate-900/95 backdrop-blur-md p-2 rounded-xl border border-slate-800 text-[10px] text-slate-300 flex flex-wrap items-center justify-between gap-2 z-30 shadow-md transition-all">
         <div className="flex items-center space-x-3 flex-wrap">
-          <span className="flex items-center font-bold text-emerald-400">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 mr-1 animate-ping" />
-            Sesi Sedang Berlangsung (LIVE)
-          </span>
           <span className="flex items-center">
             <span className="w-2 h-2 rounded-full bg-rose-500 mr-1" /> Ballroom Pleno
           </span>
@@ -1670,7 +1108,7 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
           </span>
         </div>
         <div className="text-sky-400 font-medium hidden sm:inline">
-          *Ketuk pin / ruangan untuk melihat daftar sesi langsung
+          *Ketuk pin / ruangan untuk melihat informasi ruangan
         </div>
       </div>
 
@@ -1682,39 +1120,23 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     <div className="pt-2">
       <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
         <span>Daftar Ruangan {selectedFloor}:</span>
-        <span className="text-[10px] text-sky-400 lowercase">klik pin/ruangan untuk melihat jadwal</span>
+        <span className="text-[10px] text-sky-400 lowercase">klik ruangan untuk menyorot lokasi pada denah</span>
       </div>
       <div className="flex flex-wrap gap-1.5 max-h-20 sm:max-h-24 overflow-y-auto pr-1">
-        {filteredPins.map(pin => {
-          const isOngoing = roomOngoingSessionsMap.has(pin.id);
-          const isPopup = popupRoomId === pin.id;
-          const count = roomSessionCounts[pin.id] || 0;
-          return (
-            <button
-              key={pin.id}
-              onClick={() => handlePinClick(pin.id)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
-                isPopup || activePinId === pin.id
-                  ? 'bg-sky-500 text-slate-950 border-sky-400 font-black shadow-md'
-                  : isOngoing
-                  ? 'bg-emerald-950/70 text-emerald-300 border-emerald-500/60 hover:bg-emerald-900'
-                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${isOngoing ? 'bg-emerald-400 animate-pulse' : pin.color}`} />
-              <span>{pin.name}</span>
-              {isOngoing ? (
-                <span className="text-[9px] px-1 bg-emerald-500 text-slate-950 rounded font-black">
-                  LIVE
-                </span>
-              ) : count > 0 ? (
-                <span className="text-[9px] px-1 bg-slate-900/60 text-slate-300 rounded font-mono">
-                  {count}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
+        {filteredPins.map(pin => (
+          <button
+            key={pin.id}
+            onClick={() => handlePinClick(pin.id)}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1.5 cursor-pointer ${
+              activePinId === pin.id
+                ? 'bg-sky-500 text-slate-950 border-sky-400 font-black shadow-md'
+                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full ${pin.color}`} />
+            <span>{pin.name}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -1753,7 +1175,7 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
             </div>
           </div>
 
-          {/* Center: Floor Switcher, Day Filter & Search */}
+          {/* Center: Floor Switcher & Search */}
           <div className="flex items-center gap-2 flex-1 justify-center max-w-xl">
             {/* Floor Switcher */}
             <div className="flex flex-wrap items-center bg-slate-950 p-1 rounded-lg border border-slate-800 shrink-0">
@@ -1768,21 +1190,6 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                   }`}
                 >
                   {fl}
-                </button>
-              ))}
-            </div>
-
-            {/* Day selection */}
-            <div className="hidden md:flex items-center bg-slate-950 rounded-lg p-1 border border-slate-800 text-xs shrink-0">
-              {(['Hari I', 'Hari II'] as const).map((day) => (
-                <button
-                  key={day}
-                  onClick={() => setSelectedDayFilter(day)}
-                  className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                    selectedDayFilter === day ? 'bg-sky-400 text-slate-950 font-black' : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  {day}
                 </button>
               ))}
             </div>
@@ -1916,7 +1323,7 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
             )}
           </div>
           <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
-            Denah Ruangan & Highlight Sesi Berlangsung
+            Denah Ruangan & Lokasi Venue
           </h2>
         </div>
 
@@ -1951,89 +1358,11 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
         </div>
       </div>
 
-      {/* Live Time Simulator & Session Filter Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 sm:p-4 text-white shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        
-        {/* Left: Ongoing Sessions Count Indicator */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex items-center justify-center">
-            <span className="w-3 h-3 rounded-full bg-emerald-500 animate-ping absolute"></span>
-            <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-          </div>
-          <div>
-            <div className="text-xs font-black text-white flex items-center gap-1.5">
-              <span>Status Live Session:</span>
-              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold">
-                {roomOngoingSessionsMap.size} Ruangan Sedang Berlangsung
-              </span>
-            </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              Ruangan aktif ditandai dengan outline hijau menyala, ripple visual, dan badge 'LIVE'.
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Interactive Timeline / Time Simulator Controls */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Day selection */}
-          <div className="flex items-center bg-slate-800 rounded-lg p-1 border border-slate-700 text-xs">
-            {(['Hari I', 'Hari II'] as const).map((day) => (
-              <button
-                key={day}
-                onClick={() => setSelectedDayFilter(day)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
-                  selectedDayFilter === day ? 'bg-sky-500 text-slate-950 font-black' : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {day}
-              </button>
-            ))}
-          </div>
-
-          {/* Time Preset Picker */}
-          <div className="flex items-center gap-1.5 bg-slate-800 rounded-lg px-2.5 py-1.5 border border-slate-700">
-            <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-            <span className="text-[11px] text-slate-400 font-medium">Jam Sesi:</span>
-            <select
-              value={simulatedTimeSlot}
-              onChange={(e) => {
-                setSimulatedTimeSlot(e.target.value);
-                setIsLiveClockMode(false);
-              }}
-              disabled={isLiveClockMode}
-              className="bg-slate-900 border border-slate-700 text-white text-xs rounded px-2 py-0.5 font-mono focus:outline-none focus:border-sky-400"
-            >
-              <option value="08:30">08:30 WIB (Plenary Pagi)</option>
-              <option value="09:00">09:00 WIB (Simposium Paralel)</option>
-              <option value="10:45">10:45 WIB (Sesi Siang)</option>
-              <option value="13:30">13:30 WIB (Workshop Siang)</option>
-              <option value="15:30">15:30 WIB (Diskusi Panel Sore)</option>
-              <option value="17:00">17:00 WIB (Selesai)</option>
-            </select>
-          </div>
-
-          {/* Realtime Clock Toggle */}
-          <button
-            onClick={() => setIsLiveClockMode(!isLiveClockMode)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 cursor-pointer ${
-              isLiveClockMode
-                ? 'bg-emerald-600 text-white border-emerald-400 shadow-sm'
-                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-            }`}
-            title="Gunakan jam aktual perangkat Anda saat ini"
-          >
-            <Radio className={`w-3.5 h-3.5 ${isLiveClockMode ? 'animate-pulse text-white' : 'text-slate-400'}`} />
-            <span>{isLiveClockMode ? 'Waktu Riil Aktif' : 'Gunakan Jam Riil'}</span>
-          </button>
-        </div>
-
-      </div>
-
-      {/* Main Grid: Interactive Map Stage (7 cols) + Room Detail Panel (5 cols) */}
+      {/* Main Grid: Interactive Map Stage (8 cols) + Room Info Panel (4 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         
-        {/* Map Stage Canvas (7 Columns) */}
-        <div className="lg:col-span-7 bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-col space-y-3 relative">
+        {/* Map Stage Canvas (8 Columns) */}
+        <div className="lg:col-span-8 bg-slate-900 rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-col space-y-3 relative">
           
           {/* Controls Bar Above Map */}
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pb-2 border-b border-slate-800">
@@ -2088,8 +1417,8 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
 
         </div>
 
-        {/* Selected Room Details Panel (5 Columns) */}
-        <div className="lg:col-span-5 bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-5 shadow-xl flex flex-col justify-between space-y-4 text-white">
+        {/* Selected Room Info Panel (4 Columns) */}
+        <div className="lg:col-span-4 bg-slate-900 rounded-2xl border border-slate-800 p-4 sm:p-5 shadow-xl flex flex-col justify-between space-y-4 text-white">
           {renderRoomDetailsCard(false)}
         </div>
 

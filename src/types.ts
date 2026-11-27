@@ -58,6 +58,35 @@ export interface Session {
   presentationMaterials?: PresentationMaterial[];
 }
 
+export interface IdentityCardFieldConfig {
+  visible: boolean;
+  x: number;
+  y: number;
+  fontSize: number;
+  color: string;
+  align: 'left' | 'center' | 'right';
+}
+
+export interface IdentityCardQrConfig {
+  visible: boolean;
+  x: number;
+  y: number;
+  size: number;
+  showFrame: boolean;
+  showCaption: boolean;
+}
+
+export interface IdentityCardLayoutConfig {
+  showEventHeader: boolean;
+  showContentBackdrop: boolean;
+  name: IdentityCardFieldConfig;
+  title: IdentityCardFieldConfig;
+  institution: IdentityCardFieldConfig;
+  roleTicket: IdentityCardFieldConfig;
+  idRegistrant: IdentityCardFieldConfig;
+  qrCode: IdentityCardQrConfig;
+}
+
 export interface SymposiumInfo {
   title: string;
   subtitle: string;
@@ -83,6 +112,7 @@ export interface SymposiumInfo {
   websiteUrl?: string;
   enableQrAttendance?: boolean;
   customIdentityCardUrl?: string;
+  identityCardLayout?: IdentityCardLayoutConfig;
 }
 
 export interface Participant {

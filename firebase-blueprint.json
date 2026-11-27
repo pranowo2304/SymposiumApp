@@ -16,6 +16,8 @@
         "organizer": { "type": "string", "maxLength": 250 },
         "accreditation": { "type": "string", "maxLength": 200 },
         "logoUrl": { "type": "string", "maxLength": 100000 },
+        "customIdentityCardUrl": { "type": "string", "maxLength": 500000 },
+        "identityCardLayout": { "type": "object", "description": "Field positions, font sizes, colors, and visibility for participant ID cards." },
         "themeColor": {
           "type": "string",
           "enum": ["medical-navy", "gold-amber", "cyan-teal", "emerald-green", "crimson-ruby", "royal-indigo"]

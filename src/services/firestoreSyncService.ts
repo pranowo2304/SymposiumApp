@@ -35,6 +35,7 @@ import {
   savePdfMaterialLocal,
   splitBase64IntoChunks,
 } from '../utils/presentationPdfStorage';
+import { normalizeIdentityCardLayout } from '../utils/identityCardLayout';
 
 const BOOTSTRAP_ADMIN_EMAIL = 'pranowo.tfc@gmail.com';
 
@@ -116,6 +117,8 @@ function sanitizeEventInfoPayload(info: SymposiumInfo, updatedBy?: string) {
     organizer: clampStr(info.organizer, 250, 'Panitia Simposium'),
     accreditation: clampStr(info.accreditation, 200),
     logoUrl: clampStr(info.logoUrl, 500000),
+    customIdentityCardUrl: clampStr(info.customIdentityCardUrl, 500000),
+    identityCardLayout: normalizeIdentityCardLayout(info.identityCardLayout),
     themeColor,
     contactEmail: clampStr(info.contactEmail, 160),
     contactPhone: clampStr(info.contactPhone, 60),

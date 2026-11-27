@@ -23,7 +23,7 @@ import {
   LogIn,
   QrCode,
 } from 'lucide-react';
-import { Participant, SymposiumInfo } from '../../types';
+import { Participant, Session, SymposiumInfo } from '../../types';
 import { ParticipantIdentityCard } from '../ParticipantIdentityCard';
 import {
   saveStoredParticipants,
@@ -36,6 +36,10 @@ import {
   importParticipantsWithMapping,
   type ParticipantMappingTarget,
 } from '../../data/participantData';
+import {
+  buildTicketPassOptionGroups,
+  describeTicketAccessSummary,
+} from '../../utils/materialAccess';
 
 interface AdminParticipantsManagerProps {
   participants: Participant[];
@@ -44,6 +48,7 @@ interface AdminParticipantsManagerProps {
   onSetActiveParticipant: (participant: Participant) => void;
   onShowToast: (msg: string) => void;
   eventInfo?: SymposiumInfo;
+  sessions?: Session[];
   isCloudAdmin?: boolean;
   isCloudSyncing?: boolean;
   onForceCloudSync?: () => void;
@@ -57,13 +62,6 @@ const DEFAULT_ROLE_OPTIONS = [
   'Mahasiswa Kedokteran',
   'Panitia',
   'Peserta',
-];
-
-const DEFAULT_TICKET_OPTIONS = [
-  'All-Access (Simposium + Workshop)',
-  'Simposium Full Pass',
-  'Workshop Only',
-  'VIP / Speaker',
 ];
 
 const MAPPING_OPTIONS: Array<{ value: ParticipantMappingTarget; label: string }> = [
@@ -88,6 +86,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
   onSetActiveParticipant,
   onShowToast,
   eventInfo,
+  sessions,
   isCloudAdmin = false,
   isCloudSyncing = false,
   onForceCloudSync,
@@ -151,13 +150,29 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
     return Array.from(set);
   }, [participants]);
 
-  const availableTickets = useMemo(() => {
-    const set = new Set<string>(DEFAULT_TICKET_OPTIONS);
+  const ticketPassGroups = useMemo(
+    () => buildTicketPassOptionGroups(sessions),
+    [sessions]
+  );
+
+  const customImportedTickets = useMemo(() => {
+    const presetSet = new Set<string>(ticketPassGroups.all);
+    const extras = new Set<string>();
     participants.forEach((p) => {
-      if (p.ticketType?.trim()) set.add(p.ticketType.trim());
+      const t = p.ticketType?.trim();
+      if (t && !presetSet.has(t)) extras.add(t);
     });
-    return Array.from(set);
-  }, [participants]);
+    return Array.from(extras);
+  }, [participants, ticketPassGroups]);
+
+  const availableTickets = useMemo(() => {
+    return [...ticketPassGroups.all, ...customImportedTickets];
+  }, [ticketPassGroups, customImportedTickets]);
+
+  const ticketAccessPreview = useMemo(
+    () => describeTicketAccessSummary(formTicketType, sessions),
+    [formTicketType, sessions]
+  );
 
   // Filter participants (including customFields search)
   const filteredParticipants = participants.filter((p) => {
@@ -822,11 +837,40 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
             className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-hidden focus:border-blue-500"
           >
             <option value="all">Semua Jenis Tiket</option>
-            {availableTickets.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
+            <optgroup label="Tiket Umum">
+              {ticketPassGroups.general.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </optgroup>
+            {ticketPassGroups.workshopOnly.length > 0 && (
+              <optgroup label="Tiket Pass Khusus Workshop">
+                {ticketPassGroups.workshopOnly.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {ticketPassGroups.symposiumAndWorkshop.length > 0 && (
+              <optgroup label="Paket Simposium + Workshop">
+                {ticketPassGroups.symposiumAndWorkshop.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {customImportedTickets.length > 0 && (
+              <optgroup label="Tiket Lainnya (Hasil Impor)">
+                {customImportedTickets.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
       </div>
@@ -1200,21 +1244,74 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-300 font-bold mb-1">Jenis Tiket:</label>
+              <div className="space-y-2">
+                <label className="block text-slate-300 font-bold">
+                  Jenis Tiket / Pass (Termasuk Pass per Jenis Workshop):
+                </label>
+                <select
+                  value={availableTickets.includes(formTicketType) ? formTicketType : '__custom__'}
+                  onChange={(e) => {
+                    if (e.target.value !== '__custom__') {
+                      setFormTicketType(e.target.value);
+                    }
+                  }}
+                  className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-hidden focus:border-blue-500"
+                >
+                  <optgroup label="Tiket Umum">
+                    {ticketPassGroups.general.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </optgroup>
+                  {ticketPassGroups.workshopOnly.length > 0 && (
+                    <optgroup label="Tiket Pass Khusus Jenis Workshop">
+                      {ticketPassGroups.workshopOnly.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {ticketPassGroups.symposiumAndWorkshop.length > 0 && (
+                    <optgroup label="Paket Simposium + Jenis Workshop">
+                      {ticketPassGroups.symposiumAndWorkshop.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {customImportedTickets.length > 0 && (
+                    <optgroup label="Tiket Lainnya">
+                      {customImportedTickets.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <option value="__custom__">Ketik Kustom Manual...</option>
+                </select>
+
                 <input
                   type="text"
                   list="participant-ticket-presets"
                   value={formTicketType}
                   onChange={(e) => setFormTicketType(e.target.value)}
-                  placeholder="Simposium Full Pass / Workshop / lainnya"
-                  className="w-full p-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-hidden focus:border-blue-500"
+                  maxLength={120}
+                  placeholder="Atau ketik nama tiket / pass khusus..."
+                  className="w-full p-2.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-white text-xs focus:outline-hidden focus:border-blue-500"
                 />
                 <datalist id="participant-ticket-presets">
                   {availableTickets.map((t) => (
                     <option key={t} value={t} />
                   ))}
                 </datalist>
+
+                <p className="text-[11px] text-emerald-300/90 bg-emerald-950/40 border border-emerald-500/30 rounded-lg px-2.5 py-1.5">
+                  {ticketAccessPreview}
+                </p>
               </div>
 
               {/* Extra / Custom Fields Section */}

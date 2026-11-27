@@ -381,12 +381,21 @@ export default function App() {
       }
       syncAppIconWithEventLogo(newEventInfo);
     } catch (e) {
-      console.error(e);
+      console.error('Failed saving event info locally:', e);
+      showToast('Peringatan: Ukuran data terlalu besar untuk penyimpanan lokal browser.');
     }
     if (isCloudAdmin) {
-      saveEventInfoToFirestore(newEventInfo, firebaseUser?.uid).catch((err) =>
-        console.error('Firestore eventInfo sync failed:', err)
-      );
+      try {
+        localStorage.removeItem('simposium_event_info_dirty_local_v1');
+      } catch {}
+      saveEventInfoToFirestore(newEventInfo, firebaseUser?.uid).catch((err) => {
+        console.error('Firestore eventInfo sync failed:', err);
+        showToast('Gagal menyimpan pengaturan event ke Cloud Database.');
+      });
+    } else {
+      try {
+        localStorage.setItem('simposium_event_info_dirty_local_v1', 'true');
+      } catch {}
     }
   };
 
@@ -654,7 +663,23 @@ export default function App() {
               adminUid: user.uid,
             });
             if (didSeed) {
+              try {
+                localStorage.removeItem('simposium_event_info_dirty_local_v1');
+              } catch {}
               showToast('Database Cloud Firestore berhasil diinisialisasi!');
+            } else {
+              let hasDirtyEventInfo = false;
+              try {
+                hasDirtyEventInfo =
+                  localStorage.getItem('simposium_event_info_dirty_local_v1') === 'true';
+              } catch {}
+              if (hasDirtyEventInfo) {
+                await saveEventInfoToFirestore(latestCatalogRef.current.eventInfo, user.uid);
+                try {
+                  localStorage.removeItem('simposium_event_info_dirty_local_v1');
+                } catch {}
+                showToast('Pengaturan event & template kartu lokal disinkronkan ke Cloud!');
+              }
             }
           } finally {
             setIsCloudSyncing(false);
@@ -673,6 +698,14 @@ export default function App() {
   useEffect(() => {
     const unsubscribeCatalog = subscribePublicCatalog({
       onEventInfo: (info) => {
+        let hasDirtyLocalEventInfo = false;
+        try {
+          hasDirtyLocalEventInfo =
+            localStorage.getItem('simposium_event_info_dirty_local_v1') === 'true';
+        } catch {}
+        if (hasDirtyLocalEventInfo) {
+          return;
+        }
         const mergedInfo: SymposiumInfo = {
           ...SYMPOSIUM_INFO,
           ...info,
@@ -921,9 +954,24 @@ export default function App() {
       const user = await signInWithGoogle();
       const { isAdmin } = await ensureUserProfileAndCheckAdmin(user);
       if (isAdmin) {
+        let hasDirtyEventInfo = false;
+        try {
+          hasDirtyEventInfo =
+            localStorage.getItem('simposium_event_info_dirty_local_v1') === 'true';
+        } catch {}
+        if (hasDirtyEventInfo) {
+          await saveEventInfoToFirestore(latestCatalogRef.current.eventInfo, user.uid);
+          try {
+            localStorage.removeItem('simposium_event_info_dirty_local_v1');
+          } catch {}
+        }
         setIsCloudAdmin(true);
         setIsAdminAuthenticated(true);
-        showToast(`Terhubung ke Cloud Database sebagai ${user.email}`);
+        showToast(
+          hasDirtyEventInfo
+            ? `Terhubung ke Cloud Database & template kartu ID tersinkron (${user.email})`
+            : `Terhubung ke Cloud Database sebagai ${user.email}`
+        );
       } else {
         await signOutFirebase();
         showToast(`Akun ${user.email} belum terdaftar sebagai Administrator.`);
@@ -1305,10 +1353,15 @@ export default function App() {
           {selectedSession && (
             <SessionDetailModal
               session={displaySessions.find(s => s.id === selectedSession.id) || selectedSession}
+              allSessions={displaySessions}
               onClose={() => setSelectedSession(null)}
               onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
               initialTab={selectedSessionTab}
               eventInfo={eventInfo}
+              currentUser={currentUser}
+              isParticipantLoggedIn={isParticipantLoggedIn}
+              isAdminAuthenticated={isAdminAuthenticated || isCloudAdmin}
+              onRequestLogin={() => setIsParticipantLoginModalOpen(true)}
             />
           )}
         </AnimatePresence>

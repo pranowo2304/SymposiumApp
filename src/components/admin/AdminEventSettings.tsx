@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Building, 
   Calendar, 
@@ -21,16 +21,99 @@ import {
   AlertCircle,
   Palette,
   QrCode,
-  Settings
+  Settings,
+  Cloud
 } from 'lucide-react';
 import { SymposiumInfo } from '../../types';
 import { SYMPOSIUM_INFO } from '../../data/symposiumData';
 import { COLOR_PALETTES, LogoPaletteType } from '../../utils/themeColors';
+import { normalizeIdentityCardLayout } from '../../utils/identityCardLayout';
+import { AdminIdentityCardLayoutEditor } from './AdminIdentityCardLayoutEditor';
 
 interface AdminEventSettingsProps {
   eventInfo: SymposiumInfo;
   onSaveEventInfo: (info: SymposiumInfo) => void;
   onShowToast: (msg: string) => void;
+  isCloudAdmin?: boolean;
+  onCloudAdminSignIn?: () => void;
+}
+
+const MAX_CARD_TEMPLATE_CHARS = 350000;
+
+async function compressIdentityCardTemplate(file: File): Promise<string> {
+  const rawDataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string) || '');
+    reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
+    reader.readAsDataURL(file);
+  });
+
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    return rawDataUrl;
+  }
+
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Format gambar tidak dapat dimuat.'));
+    image.src = rawDataUrl;
+  });
+
+  const maxW = 900;
+  const maxH = 1280;
+  const scale = Math.min(1, maxW / (img.naturalWidth || maxW), maxH / (img.naturalHeight || maxH));
+  const targetW = Math.max(1, Math.round((img.naturalWidth || 760) * scale));
+  const targetH = Math.max(1, Math.round((img.naturalHeight || 1080) * scale));
+
+  // If original is already compact and within dimensions, return directly
+  if (rawDataUrl.length <= MAX_CARD_TEMPLATE_CHARS && scale === 1) {
+    return rawDataUrl;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = targetW;
+  canvas.height = targetH;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    return rawDataUrl;
+  }
+
+  ctx.drawImage(img, 0, 0, targetW, targetH);
+
+  // Preserve PNG if it stays compact (keeps transparency if any)
+  if (file.type === 'image/png') {
+    const pngAttempt = canvas.toDataURL('image/png');
+    if (pngAttempt.length <= MAX_CARD_TEMPLATE_CHARS) {
+      return pngAttempt;
+    }
+  }
+
+  // Otherwise compress smoothly as WebP / JPEG under MAX_CARD_TEMPLATE_CHARS
+  const mimeCandidates = ['image/webp', 'image/jpeg'];
+  const qualities = [0.88, 0.78, 0.68, 0.56, 0.45];
+
+  for (const mime of mimeCandidates) {
+    for (const q of qualities) {
+      const attempt = canvas.toDataURL(mime, q);
+      if (attempt.startsWith(`data:${mime}`) && attempt.length <= MAX_CARD_TEMPLATE_CHARS) {
+        return attempt;
+      }
+    }
+  }
+
+  // Fallback: downscale further and encode as JPEG
+  const fallbackCanvas = document.createElement('canvas');
+  fallbackCanvas.width = Math.max(1, Math.round(targetW * 0.65));
+  fallbackCanvas.height = Math.max(1, Math.round(targetH * 0.65));
+  const fctx = fallbackCanvas.getContext('2d');
+  if (fctx) {
+    fctx.fillStyle = '#0f172a';
+    fctx.fillRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
+    fctx.drawImage(img, 0, 0, fallbackCanvas.width, fallbackCanvas.height);
+    return fallbackCanvas.toDataURL('image/jpeg', 0.72);
+  }
+
+  return canvas.toDataURL('image/jpeg', 0.6);
 }
 
 // Medical & Symposium Logo Presets for quick selection
@@ -82,39 +165,51 @@ export const EVENT_LOGO_PRESETS = [
 export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
   eventInfo,
   onSaveEventInfo,
-  onShowToast
+  onShowToast,
+  isCloudAdmin = false,
+  onCloudAdminSignIn,
 }) => {
-  const [formData, setFormData] = useState<SymposiumInfo>(() => ({
-    title: eventInfo.title || '',
-    subtitle: eventInfo.subtitle || '',
-    theme: eventInfo.theme || '',
-    location: eventInfo.location || '',
-    venueAddress: eventInfo.venueAddress || '',
-    city: eventInfo.city || 'Jakarta Pusat, DKI Jakarta',
+  const buildFormFromEventInfo = (info: SymposiumInfo): SymposiumInfo => ({
+    title: info.title || '',
+    subtitle: info.subtitle || '',
+    theme: info.theme || '',
+    location: info.location || '',
+    venueAddress: info.venueAddress || '',
+    city: info.city || 'Jakarta Pusat, DKI Jakarta',
     dates: {
       workshop:
-        !eventInfo.dates?.workshop || eventInfo.dates.workshop === 'Sabtu, 28 November 2026'
+        !info.dates?.workshop || info.dates.workshop === 'Sabtu, 28 November 2026'
           ? '28 November 2026'
-          : eventInfo.dates.workshop,
-      munasSymposium: eventInfo.dates?.munasSymposium || '29 November 2026 - 1 Desember 2026',
-      day1: eventInfo.dates?.day1 || 'Minggu, 29 November 2026',
-      day2: eventInfo.dates?.day2 || 'Senin, 30 November 2026',
-      day3: eventInfo.dates?.day3 || 'Selasa, 1 Desember 2026',
+          : info.dates.workshop,
+      munasSymposium: info.dates?.munasSymposium || '29 November 2026 - 1 Desember 2026',
+      day1: info.dates?.day1 || 'Minggu, 29 November 2026',
+      day2: info.dates?.day2 || 'Senin, 30 November 2026',
+      day3: info.dates?.day3 || 'Selasa, 1 Desember 2026',
     },
-    dateString: eventInfo.dateString || '28 November - 1 Desember 2026',
-    logoUrl: eventInfo.logoUrl || '',
-    themeColor: eventInfo.themeColor || 'emerald-green',
-    organizer: eventInfo.organizer || 'Asosiasi Dokter Hewan Praktisi Hewan Kecil Indonesia (ADHPHKI) & PB PDHI',
-    accreditation: eventInfo.accreditation || '32 SKP PB PDHI (Perhimpunan Dokter Hewan Indonesia)',
-    contactEmail: eventInfo.contactEmail || 'sekretariat@adhphki.org',
-    contactPhone: eventInfo.contactPhone || '+62 811-2345-6789',
-    websiteUrl: eventInfo.websiteUrl || 'https://kivnahk-munas.adhphki.org',
-    customIdentityCardUrl: eventInfo.customIdentityCardUrl || '',
+    dateString: info.dateString || '28 November - 1 Desember 2026',
+    logoUrl: info.logoUrl || '',
+    themeColor: info.themeColor || 'emerald-green',
+    organizer: info.organizer || 'Asosiasi Dokter Hewan Praktisi Hewan Kecil Indonesia (ADHPHKI) & PB PDHI',
+    accreditation: info.accreditation || '32 SKP PB PDHI (Perhimpunan Dokter Hewan Indonesia)',
+    contactEmail: info.contactEmail || 'sekretariat@adhphki.org',
+    contactPhone: info.contactPhone || '+62 811-2345-6789',
+    websiteUrl: info.websiteUrl || 'https://kivnahk-munas.adhphki.org',
+    customIdentityCardUrl: info.customIdentityCardUrl || '',
+    identityCardLayout: normalizeIdentityCardLayout(info.identityCardLayout),
     enableQrAttendance: false
-  }));
+  });
 
+  const [formData, setFormData] = useState<SymposiumInfo>(() => buildFormFromEventInfo(eventInfo));
   const [hasChanges, setHasChanges] = useState<boolean>(false);
+  const [isCompressingCardTemplate, setIsCompressingCardTemplate] = useState<boolean>(false);
   const [logoInputType, setLogoInputType] = useState<'preset' | 'upload' | 'url'>('preset');
+
+  // Keep form synchronized when eventInfo loads/updates from Firestore if no unsaved draft edits exist
+  useEffect(() => {
+    if (!hasChanges) {
+      setFormData(buildFormFromEventInfo(eventInfo));
+    }
+  }, [eventInfo, hasChanges]);
 
   const handleChange = (field: keyof SymposiumInfo, value: any) => {
     setFormData(prev => ({
@@ -202,6 +297,7 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
       contactPhone: SYMPOSIUM_INFO.contactPhone || '+62 811-2345-6789',
       websiteUrl: SYMPOSIUM_INFO.websiteUrl || 'https://kivnahk-munas.adhphki.org',
       customIdentityCardUrl: SYMPOSIUM_INFO.customIdentityCardUrl || '',
+      identityCardLayout: normalizeIdentityCardLayout(SYMPOSIUM_INFO.identityCardLayout),
       enableQrAttendance: false
     });
     setHasChanges(true);
@@ -847,28 +943,37 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
                   type="file"
                   id="custom-card-file-input"
                   accept="image/*"
-                  onChange={(e) => {
+                  disabled={isCompressingCardTemplate}
+                  onChange={async (e) => {
                     const file = e.target.files?.[0];
+                    e.target.value = '';
                     if (!file) return;
                     if (!file.type.startsWith('image/')) {
-                      onShowToast('Mohon pilih file gambar kartu.');
+                      onShowToast('Mohon pilih file gambar kartu (PNG, JPG, WebP).');
                       return;
                     }
-                    if (file.size > 3 * 1024 * 1024) {
-                      onShowToast('Ukuran file maksimal 3 MB.');
+                    if (file.size > 10 * 1024 * 1024) {
+                      onShowToast('Ukuran file maksimal 10 MB.');
                       return;
                     }
-                    const reader = new FileReader();
-                    reader.onload = (uploadEvent) => {
-                      const res = uploadEvent.target?.result as string;
-                      const updated = { ...formData, customIdentityCardUrl: res };
+                    setIsCompressingCardTemplate(true);
+                    try {
+                      const compressedDataUrl = await compressIdentityCardTemplate(file);
+                      const updated = { ...formData, customIdentityCardUrl: compressedDataUrl };
                       setFormData(updated);
                       setHasChanges(false);
                       onSaveEventInfo(updated);
-                      onShowToast('Template desain kartu identitas berhasil diunggah dan diterapkan!');
-                    };
-                    reader.readAsDataURL(file);
-                    e.target.value = '';
+                      onShowToast(
+                        isCloudAdmin
+                          ? 'Template kartu identitas berhasil disimpan ke Cloud & diterapkan!'
+                          : 'Template kartu identitas berhasil disimpan & diterapkan di browser ini!'
+                      );
+                    } catch (err) {
+                      console.error('Failed processing ID card template:', err);
+                      onShowToast('Gagal memproses gambar template kartu identitas.');
+                    } finally {
+                      setIsCompressingCardTemplate(false);
+                    }
                   }}
                   className="hidden"
                 />
@@ -880,47 +985,91 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
                     <Upload className="w-4 h-4" />
                   </div>
                   <span className="text-xs font-bold text-white block">
-                    {formData.customIdentityCardUrl ? 'Ganti Template Kartu ID' : 'Klik untuk Unggah Gambar Template Kartu ID'}
+                    {isCompressingCardTemplate
+                      ? 'Mengoptimalkan & menyimpan template...'
+                      : formData.customIdentityCardUrl
+                        ? 'Ganti Template Kartu ID'
+                        : 'Klik untuk Unggah Gambar Template Kartu ID'}
                   </span>
                   <span className="text-[10px] text-slate-400 block">
-                    Disarankan rasio vertikal (misal 760 x 1080 px)
+                    Disarankan rasio vertikal (misal 760 x 1080 px) · Otomatis dikompres agar tersimpan di Cloud
                   </span>
                 </label>
               </div>
 
               {formData.customIdentityCardUrl && (
-                <div className="flex items-center justify-between bg-slate-950 p-3 rounded-xl border border-slate-800 gap-3">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <img
-                      src={formData.customIdentityCardUrl}
-                      alt="Template Kartu ID Peserta"
-                      className="w-12 h-16 rounded-lg object-cover bg-slate-900 border border-emerald-500/50 shrink-0"
-                    />
-                    <div className="min-w-0">
-                      <span className="text-xs font-bold text-emerald-300 block truncate">
-                        Template Kartu ID Khusus Aktif
-                      </span>
-                      <span className="text-[10px] text-slate-400 block truncate">
-                        Akan diterapkan pada cetakan / unduhan PNG kartu identitas peserta
-                      </span>
+                <div className="space-y-2.5 bg-slate-950 p-3 rounded-xl border border-slate-800">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <img
+                        src={formData.customIdentityCardUrl}
+                        alt="Template Kartu ID Peserta"
+                        className="w-12 h-16 rounded-lg object-cover bg-slate-900 border border-emerald-500/50 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-emerald-300 block truncate">
+                          Template Kartu ID Khusus Aktif
+                        </span>
+                        <span className="text-[10px] text-slate-400 block">
+                          {isCloudAdmin
+                            ? 'Tersimpan di Cloud Firestore & lokal — langsung diterapkan pada kartu peserta.'
+                            : 'Tersimpan di browser ini. Hubungkan Google Admin agar tersinkron ke semua peserta.'}
+                        </span>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = { ...formData, customIdentityCardUrl: '' };
+                        setFormData(updated);
+                        setHasChanges(false);
+                        onSaveEventInfo(updated);
+                        onShowToast('Template kartu ID khusus dihapus. Menggunakan desain bawaan.');
+                      }}
+                      className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1 border border-rose-500/20 shrink-0 cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Hapus Template</span>
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const updated = { ...formData, customIdentityCardUrl: '' };
-                      setFormData(updated);
-                      setHasChanges(false);
-                      onSaveEventInfo(updated);
-                      onShowToast('Template kartu ID khusus dihapus. Menggunakan desain bawaan.');
-                    }}
-                    className="px-2.5 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1 border border-rose-500/20 shrink-0 cursor-pointer"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                    <span>Hapus Template</span>
-                  </button>
+
+                  {!isCloudAdmin && onCloudAdminSignIn && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+                      <span className="text-[11px] text-amber-300 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>Sinkronisasi Cloud belum aktif — peserta di perangkat lain belum melihat template ini.</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={onCloudAdminSignIn}
+                        className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
+                      >
+                        <Cloud className="w-3.5 h-3.5" />
+                        <span>Sinkronkan ke Cloud</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
+
+              <AdminIdentityCardLayoutEditor
+                eventInfo={formData}
+                layout={formData.identityCardLayout}
+                onChangeLayout={(nextLayout, saveImmediately) => {
+                  const updated: SymposiumInfo = {
+                    ...formData,
+                    identityCardLayout: nextLayout,
+                  };
+                  setFormData(updated);
+                  if (saveImmediately) {
+                    setHasChanges(false);
+                    onSaveEventInfo(updated);
+                  } else {
+                    setHasChanges(true);
+                  }
+                }}
+                onShowToast={onShowToast}
+              />
             </div>
 
           </div>

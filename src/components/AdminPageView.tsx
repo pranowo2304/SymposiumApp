@@ -1367,6 +1367,8 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
             eventInfo={eventInfo}
             onSaveEventInfo={onSaveEventInfo}
             onShowToast={showToast}
+            isCloudAdmin={isCloudAdmin}
+            onCloudAdminSignIn={onCloudAdminSignIn}
           />
         )}
 
@@ -1381,6 +1383,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
             onSetActiveParticipant={onSetActiveParticipant}
             onShowToast={showToast}
             eventInfo={eventInfo}
+            sessions={sessions}
             isCloudAdmin={isCloudAdmin}
             isCloudSyncing={isCloudSyncing}
             onForceCloudSync={onForceCloudSync}

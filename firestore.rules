@@ -73,8 +73,8 @@ service cloud.firestore {
         data.keys().hasOnly([
           'title', 'subtitle', 'theme', 'location', 'venueAddress', 'city',
           'dateString', 'dates', 'organizer', 'accreditation', 'logoUrl',
-          'themeColor', 'contactEmail', 'contactPhone', 'websiteUrl',
-          'enableQrAttendance', 'isPublished', 'updatedAt', 'updatedBy'
+          'customIdentityCardUrl', 'identityCardLayout', 'themeColor', 'contactEmail',
+          'contactPhone', 'websiteUrl', 'enableQrAttendance', 'isPublished', 'updatedAt', 'updatedBy'
         ]) &&
         data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
         data.location is string && data.location.size() >= 1 && data.location.size() <= 250 &&
@@ -89,6 +89,8 @@ service cloud.firestore {
         (!( 'dates' in data ) || data.dates is map) &&
         isValidOptionalString(data, 'accreditation', 200) &&
         isValidOptionalString(data, 'logoUrl', 500000) &&
+        isValidOptionalString(data, 'customIdentityCardUrl', 500000) &&
+        (!( 'identityCardLayout' in data ) || (data.identityCardLayout is map && data.identityCardLayout.size() <= 12)) &&
         (!( 'themeColor' in data ) || data.themeColor in [
           'medical-navy', 'gold-amber', 'cyan-teal', 'emerald-green', 'crimson-ruby', 'royal-indigo'
         ]) &&

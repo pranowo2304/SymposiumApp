@@ -87,12 +87,25 @@ const DIRTY_LOCAL_KEYS = {
 
 type DirtyCollectionKey = keyof typeof DIRTY_LOCAL_KEYS;
 
+const DIRTY_COLLECTION_LABELS: Record<DirtyCollectionKey, string> = {
+  eventInfo: 'Logo & Pengaturan Event',
+  sessions: 'Jadwal Sesi',
+  speakers: 'Pembicara',
+  exhibitors: 'Pameran',
+  rooms: 'Ruangan',
+  participants: 'Data Peserta',
+};
+
 function isDirtyLocal(key: DirtyCollectionKey): boolean {
   try {
     return localStorage.getItem(DIRTY_LOCAL_KEYS[key]) === 'true';
   } catch {
     return false;
   }
+}
+
+function getDirtyCollections(): DirtyCollectionKey[] {
+  return (Object.keys(DIRTY_LOCAL_KEYS) as DirtyCollectionKey[]).filter((key) => isDirtyLocal(key));
 }
 
 function setDirtyLocal(key: DirtyCollectionKey): void {
@@ -157,6 +170,36 @@ export default function App() {
   const [authReady, setAuthReady] = useState<boolean>(false);
   const [isCloudAdmin, setIsCloudAdmin] = useState<boolean>(false);
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
+  const [unsyncedCollections, setUnsyncedCollections] = useState<DirtyCollectionKey[]>(() =>
+    getDirtyCollections()
+  );
+  const [cloudSyncError, setCloudSyncError] = useState<string | null>(null);
+  const [lastCloudSyncedAt, setLastCloudSyncedAt] = useState<string | null>(null);
+
+  const refreshUnsyncedCollections = () => {
+    setUnsyncedCollections(getDirtyCollections());
+  };
+
+  const markDirtyAndRefresh = (key: DirtyCollectionKey) => {
+    setDirtyLocal(key);
+    refreshUnsyncedCollections();
+  };
+
+  const clearDirtyAndRefresh = (key: DirtyCollectionKey) => {
+    clearDirtyLocal(key);
+    refreshUnsyncedCollections();
+  };
+
+  const markCloudSyncSuccess = () => {
+    setCloudSyncError(null);
+    setLastCloudSyncedAt(
+      new Date().toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    );
+  };
 
   // Admin Authentication State — always starts locked so entering Admin Page requires login
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
@@ -433,17 +476,23 @@ export default function App() {
     errorToast: string
   ) => {
     if (isCloudWriteQuotaExhausted()) {
-      setDirtyLocal(key);
+      markDirtyAndRefresh(key);
+      setCloudSyncError(QUOTA_EXCEEDED_TOAST);
       showToast(QUOTA_EXCEEDED_TOAST);
       return;
     }
-    clearDirtyLocal(key);
+    clearDirtyAndRefresh(key);
     inFlightCloudSyncRef.current[key] += 1;
     syncFn()
+      .then(() => {
+        markCloudSyncSuccess();
+      })
       .catch((err) => {
         console.error(`Firestore ${key} sync failed:`, err);
-        setDirtyLocal(key);
-        showToast(isFirestoreQuotaError(err) ? QUOTA_EXCEEDED_TOAST : errorToast);
+        markDirtyAndRefresh(key);
+        const msg = isFirestoreQuotaError(err) ? QUOTA_EXCEEDED_TOAST : errorToast;
+        setCloudSyncError(msg);
+        showToast(msg);
       })
       .finally(() => {
         inFlightCloudSyncRef.current[key] = Math.max(0, inFlightCloudSyncRef.current[key] - 1);
@@ -468,20 +517,29 @@ export default function App() {
       showToast('Peringatan: Ukuran data terlalu besar untuk penyimpanan lokal browser.');
     }
     if (isCloudAdmin && !isCloudWriteQuotaExhausted()) {
-      clearDirtyLocal('eventInfo');
-      saveEventInfoToFirestore(newEventInfo, firebaseUser?.uid).catch((err) => {
-        console.error('Firestore eventInfo sync failed:', err);
-        setDirtyLocal('eventInfo');
-        showToast(
-          isFirestoreQuotaError(err)
+      clearDirtyAndRefresh('eventInfo');
+      saveEventInfoToFirestore(newEventInfo, firebaseUser?.uid)
+        .then(() => {
+          markCloudSyncSuccess();
+        })
+        .catch((err) => {
+          console.error('Firestore eventInfo sync failed:', err);
+          markDirtyAndRefresh('eventInfo');
+          const msg = isFirestoreQuotaError(err)
             ? QUOTA_EXCEEDED_TOAST
-            : 'Gagal menyimpan pengaturan event ke Cloud Database.'
-        );
-      });
+            : 'Gagal menyimpan pengaturan event & logo ke Cloud Database.';
+          setCloudSyncError(msg);
+          showToast(msg);
+        });
     } else {
-      setDirtyLocal('eventInfo');
+      markDirtyAndRefresh('eventInfo');
       if (isCloudAdmin && isCloudWriteQuotaExhausted()) {
+        setCloudSyncError(QUOTA_EXCEEDED_TOAST);
         showToast(QUOTA_EXCEEDED_TOAST);
+      } else {
+        const msg = 'Perubahan belum terkirim ke Cloud. Silakan hubungkan akun Google Admin.';
+        setCloudSyncError(msg);
+        showToast(msg);
       }
     }
   };
@@ -528,10 +586,11 @@ export default function App() {
         );
       }
     } else {
-      setDirtyLocal('speakers');
+      markDirtyAndRefresh('speakers');
       if (sessionsChanged) {
-        setDirtyLocal('sessions');
+        markDirtyAndRefresh('sessions');
       }
+      setCloudSyncError('Perubahan pembicara belum terkirim ke Cloud. Silakan hubungkan akun Google Admin.');
     }
   };
 
@@ -550,7 +609,8 @@ export default function App() {
         'Perubahan jadwal tersimpan lokal, namun gagal sinkron ke Cloud Database.'
       );
     } else {
-      setDirtyLocal('sessions');
+      markDirtyAndRefresh('sessions');
+      setCloudSyncError('Perubahan jadwal belum terkirim ke Cloud. Silakan hubungkan akun Google Admin.');
     }
   };
 
@@ -568,7 +628,8 @@ export default function App() {
         'Perubahan data pameran tersimpan lokal, namun gagal sinkron ke Cloud Database.'
       );
     } else {
-      setDirtyLocal('exhibitors');
+      markDirtyAndRefresh('exhibitors');
+      setCloudSyncError('Perubahan pameran belum terkirim ke Cloud. Silakan hubungkan akun Google Admin.');
     }
   };
 
@@ -586,7 +647,8 @@ export default function App() {
         'Perubahan data ruangan tersimpan lokal, namun gagal sinkron ke Cloud Database.'
       );
     } else {
-      setDirtyLocal('rooms');
+      markDirtyAndRefresh('rooms');
+      setCloudSyncError('Perubahan ruangan belum terkirim ke Cloud. Silakan hubungkan akun Google Admin.');
     }
   };
 
@@ -608,11 +670,11 @@ export default function App() {
       console.error(e);
     }
     if (isCloudAdmin) {
-      clearDirtyLocal('eventInfo');
-      clearDirtyLocal('sessions');
-      clearDirtyLocal('speakers');
-      clearDirtyLocal('exhibitors');
-      clearDirtyLocal('rooms');
+      clearDirtyAndRefresh('eventInfo');
+      clearDirtyAndRefresh('sessions');
+      clearDirtyAndRefresh('speakers');
+      clearDirtyAndRefresh('exhibitors');
+      clearDirtyAndRefresh('rooms');
       setIsCloudSyncing(true);
       Promise.all([
         saveEventInfoToFirestore(SYMPOSIUM_INFO, firebaseUser?.uid),
@@ -621,14 +683,18 @@ export default function App() {
         syncExhibitorsToFirestore(EXHIBITORS_DATA),
         syncRoomsToFirestore(DEFAULT_ROOMS_DATA),
       ])
-        .catch((err) => console.error('Firestore reset sync failed:', err))
+        .then(() => markCloudSyncSuccess())
+        .catch((err) => {
+          console.error('Firestore reset sync failed:', err);
+          setCloudSyncError('Sebagian data reset gagal disinkronkan ke Cloud.');
+        })
         .finally(() => setIsCloudSyncing(false));
     } else {
-      setDirtyLocal('eventInfo');
-      setDirtyLocal('sessions');
-      setDirtyLocal('speakers');
-      setDirtyLocal('exhibitors');
-      setDirtyLocal('rooms');
+      markDirtyAndRefresh('eventInfo');
+      markDirtyAndRefresh('sessions');
+      markDirtyAndRefresh('speakers');
+      markDirtyAndRefresh('exhibitors');
+      markDirtyAndRefresh('rooms');
     }
   };
 
@@ -643,7 +709,8 @@ export default function App() {
         'Data peserta tersimpan lokal, namun gagal sinkron ke Cloud Database.'
       );
     } else {
-      setDirtyLocal('participants');
+      markDirtyAndRefresh('participants');
+      setCloudSyncError('Data peserta belum terkirim ke Cloud. Silakan hubungkan akun Google Admin.');
     }
   };
 
@@ -765,6 +832,7 @@ export default function App() {
 
       if (!user) {
         setIsCloudAdmin(false);
+        setIsAdminAuthenticated(false);
         return;
       }
 
@@ -778,6 +846,8 @@ export default function App() {
             setActiveTab('admin');
           }
           if (isCloudWriteQuotaExhausted()) {
+            setCloudSyncError(QUOTA_EXCEEDED_TOAST);
+            refreshUnsyncedCollections();
             return;
           }
           setIsCloudSyncing(true);
@@ -787,24 +857,25 @@ export default function App() {
               adminUid: user.uid,
             });
             if (didSeed) {
-              clearDirtyLocal('eventInfo');
-              clearDirtyLocal('sessions');
-              clearDirtyLocal('speakers');
-              clearDirtyLocal('exhibitors');
-              clearDirtyLocal('rooms');
+              clearDirtyAndRefresh('eventInfo');
+              clearDirtyAndRefresh('sessions');
+              clearDirtyAndRefresh('speakers');
+              clearDirtyAndRefresh('exhibitors');
+              clearDirtyAndRefresh('rooms');
+              markCloudSyncSuccess();
               showToast('Database Cloud Firestore berhasil diinisialisasi!');
             } else {
               const syncedLabels: string[] = [];
               if (isDirtyLocal('eventInfo')) {
                 await saveEventInfoToFirestore(latestCatalogRef.current.eventInfo, user.uid);
-                clearDirtyLocal('eventInfo');
+                clearDirtyAndRefresh('eventInfo');
                 syncedLabels.push('Pengaturan Event');
               }
               if (isDirtyLocal('sessions')) {
                 inFlightCloudSyncRef.current.sessions += 1;
                 try {
                   await syncSessionsToFirestore(latestCatalogRef.current.sessions);
-                  clearDirtyLocal('sessions');
+                  clearDirtyAndRefresh('sessions');
                   syncedLabels.push('Jadwal');
                 } finally {
                   inFlightCloudSyncRef.current.sessions = Math.max(0, inFlightCloudSyncRef.current.sessions - 1);
@@ -814,7 +885,7 @@ export default function App() {
                 inFlightCloudSyncRef.current.speakers += 1;
                 try {
                   await syncSpeakersToFirestore(latestCatalogRef.current.speakers);
-                  clearDirtyLocal('speakers');
+                  clearDirtyAndRefresh('speakers');
                   syncedLabels.push('Pembicara');
                 } finally {
                   inFlightCloudSyncRef.current.speakers = Math.max(0, inFlightCloudSyncRef.current.speakers - 1);
@@ -824,7 +895,7 @@ export default function App() {
                 inFlightCloudSyncRef.current.exhibitors += 1;
                 try {
                   await syncExhibitorsToFirestore(latestCatalogRef.current.exhibitors);
-                  clearDirtyLocal('exhibitors');
+                  clearDirtyAndRefresh('exhibitors');
                   syncedLabels.push('Pameran');
                 } finally {
                   inFlightCloudSyncRef.current.exhibitors = Math.max(0, inFlightCloudSyncRef.current.exhibitors - 1);
@@ -834,16 +905,25 @@ export default function App() {
                 inFlightCloudSyncRef.current.rooms += 1;
                 try {
                   await syncRoomsToFirestore(latestCatalogRef.current.rooms);
-                  clearDirtyLocal('rooms');
+                  clearDirtyAndRefresh('rooms');
                   syncedLabels.push('Ruangan');
                 } finally {
                   inFlightCloudSyncRef.current.rooms = Math.max(0, inFlightCloudSyncRef.current.rooms - 1);
                 }
               }
               if (syncedLabels.length > 0) {
+                markCloudSyncSuccess();
                 showToast(`Perubahan lokal (${syncedLabels.join(', ')}) disinkronkan ke Cloud!`);
               }
             }
+          } catch (syncErr) {
+            console.error('Auto-sync dirty local changes failed:', syncErr);
+            setCloudSyncError(
+              isFirestoreQuotaError(syncErr)
+                ? QUOTA_EXCEEDED_TOAST
+                : 'Sebagian perubahan lokal belum tersinkron ke Cloud. Klik "Kirim ke Cloud Sekarang".'
+            );
+            refreshUnsyncedCollections();
           } finally {
             setIsCloudSyncing(false);
           }
@@ -1072,11 +1152,16 @@ export default function App() {
               inFlightCloudSyncRef.current.participants += 1;
               syncParticipantsToFirestore(localToPush)
                 .then(() => {
-                  clearDirtyLocal('participants');
+                  clearDirtyAndRefresh('participants');
+                  markCloudSyncSuccess();
                   showToast(`${localToPush.length} data peserta lokal disinkronkan ke Cloud!`);
                 })
                 .catch((err) => {
                   console.error('Auto-push local participants failed:', err);
+                  const msg = isFirestoreQuotaError(err)
+                    ? QUOTA_EXCEEDED_TOAST
+                    : 'Gagal mengirim data peserta lokal ke Cloud Database.';
+                  setCloudSyncError(msg);
                   if (isFirestoreQuotaError(err)) {
                     showToast(QUOTA_EXCEEDED_TOAST);
                   }
@@ -1207,6 +1292,7 @@ export default function App() {
       return;
     }
     resetCloudWriteQuotaFlag();
+    setCloudSyncError(null);
     setIsCloudSyncing(true);
     const keys: Array<'sessions' | 'speakers' | 'exhibitors' | 'rooms' | 'participants'> = [
       'sessions',
@@ -1218,30 +1304,83 @@ export default function App() {
     keys.forEach((k) => {
       inFlightCloudSyncRef.current[k] += 1;
     });
+
+    const syncTasks: Array<{
+      dirtyKey?: DirtyCollectionKey;
+      label: string;
+      run: () => Promise<unknown>;
+    }> = [
+      {
+        dirtyKey: 'eventInfo',
+        label: DIRTY_COLLECTION_LABELS.eventInfo,
+        run: () => saveEventInfoToFirestore(eventInfo, firebaseUser.uid),
+      },
+      {
+        dirtyKey: 'sessions',
+        label: DIRTY_COLLECTION_LABELS.sessions,
+        run: () => syncSessionsToFirestore(sessions),
+      },
+      {
+        label: 'Materi PDF',
+        run: () => syncLocalPdfMaterialsToFirestore(sessions),
+      },
+      {
+        dirtyKey: 'speakers',
+        label: DIRTY_COLLECTION_LABELS.speakers,
+        run: () => syncSpeakersToFirestore(speakers),
+      },
+      {
+        dirtyKey: 'exhibitors',
+        label: DIRTY_COLLECTION_LABELS.exhibitors,
+        run: () => syncExhibitorsToFirestore(exhibitors),
+      },
+      {
+        dirtyKey: 'rooms',
+        label: DIRTY_COLLECTION_LABELS.rooms,
+        run: () => syncRoomsToFirestore(rooms),
+      },
+      {
+        dirtyKey: 'participants',
+        label: DIRTY_COLLECTION_LABELS.participants,
+        run: () => syncParticipantsToFirestore(participants),
+      },
+    ];
+
     try {
-      await Promise.all([
-        saveEventInfoToFirestore(eventInfo, firebaseUser.uid),
-        syncSessionsToFirestore(sessions),
-        syncLocalPdfMaterialsToFirestore(sessions),
-        syncSpeakersToFirestore(speakers),
-        syncExhibitorsToFirestore(exhibitors),
-        syncRoomsToFirestore(rooms),
-        syncParticipantsToFirestore(participants),
-      ]);
-      clearDirtyLocal('eventInfo');
-      clearDirtyLocal('sessions');
-      clearDirtyLocal('speakers');
-      clearDirtyLocal('exhibitors');
-      clearDirtyLocal('rooms');
-      clearDirtyLocal('participants');
-      showToast('Seluruh data berhasil disinkronkan ke Cloud Database!');
-    } catch (err) {
-      console.error('Force cloud sync failed:', err);
-      showToast(
-        isFirestoreQuotaError(err)
+      const results = await Promise.allSettled(syncTasks.map((t) => t.run()));
+      const failedLabels: string[] = [];
+      let hitQuota = false;
+
+      results.forEach((res, idx) => {
+        const task = syncTasks[idx];
+        if (res.status === 'fulfilled') {
+          if (task.dirtyKey) {
+            clearDirtyLocal(task.dirtyKey);
+          }
+        } else {
+          console.error(`Force cloud sync failed for ${task.label}:`, res.reason);
+          if (task.dirtyKey) {
+            setDirtyLocal(task.dirtyKey);
+          }
+          if (isFirestoreQuotaError(res.reason)) {
+            hitQuota = true;
+          }
+          failedLabels.push(task.label);
+        }
+      });
+
+      refreshUnsyncedCollections();
+
+      if (failedLabels.length === 0) {
+        markCloudSyncSuccess();
+        showToast('Seluruh data berhasil disinkronkan ke Cloud Database!');
+      } else {
+        const errMsg = hitQuota
           ? QUOTA_EXCEEDED_TOAST
-          : 'Sebagian data gagal disinkronkan ke Cloud.'
-      );
+          : `Sebagian data gagal disinkronkan (${failedLabels.join(', ')}). Coba lagi beberapa saat.`;
+        setCloudSyncError(errMsg);
+        showToast(errMsg);
+      }
     } finally {
       keys.forEach((k) => {
         inFlightCloudSyncRef.current[k] = Math.max(0, inFlightCloudSyncRef.current[k] - 1);
@@ -1258,14 +1397,14 @@ export default function App() {
         const syncedLabels: string[] = [];
         if (isDirtyLocal('eventInfo')) {
           await saveEventInfoToFirestore(latestCatalogRef.current.eventInfo, user.uid);
-          clearDirtyLocal('eventInfo');
+          clearDirtyAndRefresh('eventInfo');
           syncedLabels.push('Pengaturan Event');
         }
         if (isDirtyLocal('sessions')) {
           inFlightCloudSyncRef.current.sessions += 1;
           try {
             await syncSessionsToFirestore(latestCatalogRef.current.sessions);
-            clearDirtyLocal('sessions');
+            clearDirtyAndRefresh('sessions');
             syncedLabels.push('Jadwal');
           } finally {
             inFlightCloudSyncRef.current.sessions = Math.max(0, inFlightCloudSyncRef.current.sessions - 1);
@@ -1275,7 +1414,7 @@ export default function App() {
           inFlightCloudSyncRef.current.speakers += 1;
           try {
             await syncSpeakersToFirestore(latestCatalogRef.current.speakers);
-            clearDirtyLocal('speakers');
+            clearDirtyAndRefresh('speakers');
             syncedLabels.push('Pembicara');
           } finally {
             inFlightCloudSyncRef.current.speakers = Math.max(0, inFlightCloudSyncRef.current.speakers - 1);
@@ -1285,7 +1424,7 @@ export default function App() {
           inFlightCloudSyncRef.current.exhibitors += 1;
           try {
             await syncExhibitorsToFirestore(latestCatalogRef.current.exhibitors);
-            clearDirtyLocal('exhibitors');
+            clearDirtyAndRefresh('exhibitors');
             syncedLabels.push('Pameran');
           } finally {
             inFlightCloudSyncRef.current.exhibitors = Math.max(0, inFlightCloudSyncRef.current.exhibitors - 1);
@@ -1295,7 +1434,7 @@ export default function App() {
           inFlightCloudSyncRef.current.rooms += 1;
           try {
             await syncRoomsToFirestore(latestCatalogRef.current.rooms);
-            clearDirtyLocal('rooms');
+            clearDirtyAndRefresh('rooms');
             syncedLabels.push('Ruangan');
           } finally {
             inFlightCloudSyncRef.current.rooms = Math.max(0, inFlightCloudSyncRef.current.rooms - 1);
@@ -1303,6 +1442,7 @@ export default function App() {
         }
         setIsCloudAdmin(true);
         setIsAdminAuthenticated(true);
+        markCloudSyncSuccess();
         showToast(
           syncedLabels.length > 0
             ? `Terhubung ke Cloud & perubahan lokal (${syncedLabels.join(', ')}) tersinkron (${user.email})`
@@ -1410,17 +1550,15 @@ export default function App() {
   };
 
   const handleAdminLoginSuccess = (cloudAdmin = false) => {
-    setIsAdminAuthenticated(true);
-    if (cloudAdmin) {
-      setIsCloudAdmin(true);
+    if (!cloudAdmin) {
+      showToast('Mode edit lokal dinonaktifkan. Silakan login menggunakan akun Google Admin.');
+      return;
     }
+    setIsCloudAdmin(true);
+    setIsAdminAuthenticated(true);
     setIsAdminLoginModalOpen(false);
     navigateToTab('admin');
-    showToast(
-      cloudAdmin
-        ? 'Login Admin Google Cloud Sync Berhasil!'
-        : 'Login Admin Mode Lokal Berhasil!'
-    );
+    showToast('Login Admin Google Cloud Sync Berhasil!');
   };
 
   const handleAdminLogout = () => {
@@ -1491,21 +1629,21 @@ export default function App() {
     }
 
     if (activeTab === 'admin') {
-      if (!isAdminAuthenticated) {
+      if (!isAdminAuthenticated || !isCloudAdmin) {
         return (
           <div className="max-w-md mx-auto p-6 text-center space-y-4 bg-white rounded-3xl shadow-md border border-emerald-100 mt-10">
             <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto">
               <Lock className="w-6 h-6" />
             </div>
-            <h2 className="text-lg font-black text-slate-900">Akses Admin Terkunci</h2>
+            <h2 className="text-lg font-black text-slate-900">Akses Admin Cloud Terkunci</h2>
             <p className="text-xs text-slate-600 leading-relaxed">
-              Anda harus melakukan login dengan kata sandi administrator untuk mengakses panel pengelolaan simposium.
+              Masuk dengan akun Google Administrator agar setiap perubahan Logo, Jadwal, Pembicara, Pameran, dan Ruangan tersinkron otomatis ke seluruh perangkat peserta.
             </p>
             <button
               onClick={() => setIsAdminLoginModalOpen(true)}
               className="min-h-[44px] px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-600/20 transition-all cursor-pointer"
             >
-              Buka Form Login Admin
+              Masuk Admin dengan Google
             </button>
           </div>
         );
@@ -1538,6 +1676,9 @@ export default function App() {
           firebaseUser={firebaseUser}
           isCloudAdmin={isCloudAdmin}
           isCloudSyncing={isCloudSyncing}
+          unsyncedCollectionLabels={unsyncedCollections.map((k) => DIRTY_COLLECTION_LABELS[k])}
+          cloudSyncError={cloudSyncError}
+          lastCloudSyncedAt={lastCloudSyncedAt}
           onForceCloudSync={handleForceCloudSync}
           onCloudAdminSignIn={handleCloudAdminSignIn}
           onCloudSignInAndSyncParticipants={handleCloudSignInAndSyncParticipants}

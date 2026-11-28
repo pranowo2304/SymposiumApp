@@ -91,6 +91,9 @@ interface AdminPageViewProps {
   firebaseUser?: FirebaseUser | null;
   isCloudAdmin?: boolean;
   isCloudSyncing?: boolean;
+  unsyncedCollectionLabels?: string[];
+  cloudSyncError?: string | null;
+  lastCloudSyncedAt?: string | null;
   onForceCloudSync?: () => void;
   onCloudAdminSignIn?: () => void;
   onCloudSignInAndSyncParticipants?: () => void;
@@ -133,6 +136,9 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
   firebaseUser = null,
   isCloudAdmin = false,
   isCloudSyncing = false,
+  unsyncedCollectionLabels = [],
+  cloudSyncError = null,
+  lastCloudSyncedAt = null,
   onForceCloudSync,
   onCloudAdminSignIn,
   onCloudSignInAndSyncParticipants,
@@ -1009,7 +1015,59 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         </div>
 
         {/* Cloud Database (Firestore) Sync Status Banner */}
-        <div className="max-w-7xl mx-auto px-4 pt-2.5">
+        <div className="max-w-7xl mx-auto px-4 pt-2.5 space-y-2">
+          {(unsyncedCollectionLabels.length > 0 || cloudSyncError) && (
+            <div className="bg-amber-950/85 border border-amber-400/60 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs shadow-md">
+              <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                <div className="p-1.5 rounded-lg bg-amber-400/20 text-amber-300 shrink-0 mt-0.5">
+                  <AlertCircle className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 space-y-0.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-black text-amber-200">
+                      Ada Data Belum Terkirim ke Cloud Database
+                      {unsyncedCollectionLabels.length > 0
+                        ? ` (${unsyncedCollectionLabels.length} bagian)`
+                        : ''}
+                    </span>
+                  </div>
+                  {unsyncedCollectionLabels.length > 0 && (
+                    <p className="text-[11px] font-semibold text-amber-100">
+                      Belum tersinkron: {unsyncedCollectionLabels.join(' · ')}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                    {cloudSyncError ||
+                      'Perubahan pada bagian di atas baru tersimpan di perangkat ini dan belum terlihat oleh user lain. Klik tombol di kanan untuk mengirim ke Cloud.'}
+                  </p>
+                </div>
+              </div>
+
+              {isCloudAdmin && onForceCloudSync ? (
+                <button
+                  type="button"
+                  onClick={onForceCloudSync}
+                  disabled={isCloudSyncing}
+                  className="min-h-[40px] px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60 shrink-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isCloudSyncing ? 'Mengirim ke Cloud...' : 'Kirim ke Cloud Sekarang'}</span>
+                </button>
+              ) : (
+                onCloudAdminSignIn && (
+                  <button
+                    type="button"
+                    onClick={onCloudAdminSignIn}
+                    className="min-h-[40px] px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Hubungkan Google Admin</span>
+                  </button>
+                )
+              )}
+            </div>
+          )}
+
           {isCloudAdmin && firebaseUser ? (
             <div className="bg-emerald-950/70 border border-emerald-500/40 rounded-2xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2.5 min-w-0">
@@ -1021,12 +1079,18 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                     <span className="font-black text-emerald-300">
                       Terhubung ke Cloud Database: {firebaseUser.email}
                     </span>
-                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
-                      {isCloudSyncing ? 'Menyinkronkan...' : 'Realtime Sync Aktif'}
+                    <span className="text-[11px] font-bold text-emerald-200">
+                      · {isCloudSyncing
+                        ? 'Menyinkronkan...'
+                        : unsyncedCollectionLabels.length > 0
+                        ? 'Menunggu Sinkronisasi'
+                        : lastCloudSyncedAt
+                        ? `Tersinkron pukul ${lastCloudSyncedAt}`
+                        : 'Realtime Sync Aktif'}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-300 truncate">
-                    Setiap perubahan jadwal, pembicara, ruangan, exhibitor, dan broadcast otomatis tersimpan ke Firebase Firestore untuk semua peserta.
+                    Setiap perubahan logo, jadwal, pembicara, ruangan, pameran, dan broadcast otomatis tersimpan ke Firebase Firestore untuk semua peserta.
                   </p>
                 </div>
               </div>
@@ -1036,7 +1100,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                   type="button"
                   onClick={onForceCloudSync}
                   disabled={isCloudSyncing}
-                  className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60 shrink-0"
+                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-60 shrink-0"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isCloudSyncing ? 'animate-spin' : ''}`} />
                   <span>{isCloudSyncing ? 'Menyinkronkan...' : 'Sinkronkan Ulang ke Cloud'}</span>
@@ -1044,17 +1108,17 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
               )}
             </div>
           ) : (
-            <div className="bg-amber-950/50 border border-amber-500/40 rounded-2xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="bg-rose-950/60 border border-rose-500/40 rounded-2xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 shrink-0">
+                <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-300 shrink-0">
                   <AlertCircle className="w-4 h-4" />
                 </div>
                 <div className="min-w-0">
-                  <span className="font-black text-amber-200 block">
-                    Mode Lokal Perangkat (Belum Tersinkron ke Cloud Database)
+                  <span className="font-black text-rose-200 block">
+                    Sesi Cloud Admin Terputus — Mode Edit Lokal Dinonaktifkan
                   </span>
                   <p className="text-[11px] text-slate-300 truncate">
-                    Hubungkan akun Google Admin (<strong className="text-white">pranowo.tfc@gmail.com</strong>) agar perubahan tampil di semua perangkat peserta.
+                    Hubungkan kembali akun Google Admin (<strong className="text-white">pranowo.tfc@gmail.com</strong>) agar perubahan tampil di semua perangkat peserta.
                   </p>
                 </div>
               </div>
@@ -1063,7 +1127,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
                 <button
                   type="button"
                   onClick={onCloudAdminSignIn}
-                  className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                  className="min-h-[38px] px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
                 >
                   <LogIn className="w-3.5 h-3.5" />
                   <span>Hubungkan Akun Google Admin</span>

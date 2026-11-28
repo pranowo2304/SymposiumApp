@@ -114,7 +114,7 @@ export const ParticipantCertificateCard: React.FC<ParticipantCertificateCardProp
         <Award className="w-9 h-9 text-slate-600 mx-auto" />
         <p className="text-sm font-bold text-slate-300">E-Sertifikat Belum Tersedia</p>
         <p className="text-xs text-slate-500">
-          Panitia belum mengunggah desain template sertifikat untuk sesi Anda.
+          E-Sertifikat untuk sesi Anda belum dibagikan atau desain template belum diunggah oleh panitia.
         </p>
       </div>
     );

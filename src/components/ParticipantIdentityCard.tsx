@@ -1,12 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
-import {
-  BadgeCheck,
-  Building2,
-  QrCode,
-  Ticket,
-  UserCheck,
-} from 'lucide-react';
 import { Participant, SymposiumInfo } from '../types';
 import { extractParticipantIdRegistrant } from '../data/participantData';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
@@ -52,15 +45,6 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [qrError, setQrError] = useState<boolean>(false);
   const [logoLoadFailed, setLogoLoadFailed] = useState<boolean>(false);
-  const [previewMode, setPreviewMode] = useState<'card' | 'compact'>(() =>
-    activeTemplateUrl ? 'card' : 'compact'
-  );
-
-  useEffect(() => {
-    if (activeTemplateUrl) {
-      setPreviewMode('card');
-    }
-  }, [activeTemplateUrl]);
 
   const qrIdCode = useMemo(() => {
     const idReg = extractParticipantIdRegistrant(participant);
@@ -151,37 +135,10 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
         </div>
       ) : null}
 
-      {/* Preview Mode Switcher */}
-      <div className="flex items-center justify-between gap-2 bg-slate-950 p-1 rounded-xl border border-slate-800">
-        <button
-          type="button"
-          onClick={() => setPreviewMode('card')}
-          className={`flex-1 py-1.5 px-2.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
-            previewMode === 'card'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          Tampilan Kartu ID
-        </button>
-        <button
-          type="button"
-          onClick={() => setPreviewMode('compact')}
-          className={`flex-1 py-1.5 px-2.5 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
-            previewMode === 'compact'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'text-slate-400 hover:text-slate-200'
-          }`}
-        >
-          Tampilan Ringkas
-        </button>
-      </div>
-
-      {previewMode === 'card' ? (
-        <div
-          style={{ containerType: 'inline-size' }}
-          className="relative w-full max-w-[300px] mx-auto aspect-[760/1080] rounded-2xl overflow-hidden border border-slate-700 bg-white shadow-xl select-none"
-        >
+      <div
+        style={{ containerType: 'inline-size' }}
+        className="relative w-full max-w-[300px] mx-auto aspect-[760/1080] rounded-2xl overflow-hidden border border-emerald-200 bg-white shadow-xl select-none"
+      >
           {activeTemplateUrl ? (
             <img
               src={activeTemplateUrl}
@@ -361,138 +318,7 @@ export const ParticipantIdentityCard: React.FC<ParticipantIdentityCardProps> = (
               )}
             </div>
           )}
-        </div>
-      ) : (
-        /* Credential Identity Card (Compact Info View) */
-        <div 
-        className="rounded-2xl overflow-hidden border border-slate-700/90 shadow-lg relative"
-        style={
-          activeTemplateUrl
-            ? {
-                backgroundImage: `url(${activeTemplateUrl})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }
-            : {
-                backgroundColor: '#020617',
-              }
-        }
-      >
-        {activeTemplateUrl && (
-          <div className="absolute inset-0 bg-slate-950/25 pointer-events-none" />
-        )}
-
-        <div className="relative z-10">
-          {/* Top Event Header Band */}
-          <div
-            style={
-              !activeTemplateUrl
-                ? {
-                    background: `linear-gradient(135deg, #020617 0%, ${palette.primaryHex || '#059669'} 140%)`,
-                  }
-                : undefined
-            }
-            className={`px-4 py-3 border-b ${activeTemplateUrl ? 'border-white/20 bg-slate-950/45' : 'border-white/10'} flex items-center justify-between gap-3`}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              {info.logoUrl && !logoLoadFailed ? (
-                <div className="w-9 h-9 rounded-lg bg-white p-1 shrink-0 flex items-center justify-center overflow-hidden">
-                  <img
-                    src={info.logoUrl}
-                    alt={info.title}
-                    className="w-full h-full object-contain"
-                    referrerPolicy="no-referrer"
-                    onError={() => setLogoLoadFailed(true)}
-                  />
-                </div>
-              ) : (
-                <div className="w-9 h-9 rounded-lg bg-white/15 border border-white/20 shrink-0 flex items-center justify-center text-white">
-                  <QrCode className="w-4 h-4" />
-                </div>
-              )}
-              <div className="min-w-0">
-                <div className="text-[11px] font-bold text-emerald-200 tracking-wide">
-                  Kartu Identitas Peserta
-                </div>
-                <div className="text-xs font-extrabold text-white truncate">
-                  {info.title || 'Simposium & Workshop'}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1 text-emerald-300 text-[11px] font-bold shrink-0">
-              <BadgeCheck className="w-4 h-4 shrink-0" />
-              <span>Terverifikasi</span>
-            </div>
-          </div>
-
-          {/* Credential Body: Identity Details + Embedded QR Code */}
-          <div className={`p-4 flex flex-col sm:flex-row sm:items-stretch gap-4 ${activeTemplateUrl ? 'bg-slate-950/35' : 'bg-gradient-to-br from-slate-900 via-slate-950 to-slate-950'}`}>
-          {/* Left Identity Info */}
-          <div className="flex-1 min-w-0 flex flex-col justify-between space-y-3">
-            <div>
-              <div className="flex items-center gap-2 text-xs text-slate-400">
-                <span>ID Registrant</span>
-                <span aria-hidden="true">·</span>
-                <span className="font-mono font-bold text-amber-300 tabular-nums">
-                  {qrIdCode}
-                </span>
-              </div>
-
-              <h3 className="text-base sm:text-lg font-extrabold text-white leading-snug mt-1 break-words">
-                {participant.name}
-              </h3>
-              {participant.title && (
-                <p className="text-xs text-slate-300 mt-0.5">{participant.title}</p>
-              )}
-            </div>
-
-            <div className="space-y-2 pt-2.5 border-t border-slate-800 text-xs text-slate-300">
-              <div className="flex items-start gap-2">
-                <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                <span className="leading-snug">
-                  {participant.institution || 'RS / Faskes Peserta'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <UserCheck className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>{participant.role || 'Peserta'}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Ticket className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="text-emerald-300 font-semibold">
-                  {participant.ticketType || 'Simposium Full Pass'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Embedded QR Code Sticker */}
-          <div className="sm:w-40 shrink-0 flex flex-col items-center justify-center bg-white rounded-xl p-2.5 border border-slate-200 shadow-sm text-center self-center sm:self-stretch">
-            {qrDataUrl ? (
-              <img
-                src={qrDataUrl}
-                alt={`QR Code ID Registrant ${qrIdCode}`}
-                className="w-32 h-32 object-contain"
-              />
-            ) : (
-              <div className="w-32 h-32 flex items-center justify-center bg-slate-100 rounded-lg text-[11px] text-slate-500 font-medium px-2">
-                {qrError ? 'QR gagal dimuat' : 'Membuat QR...'}
-              </div>
-            )}
-            <div className="mt-1.5 pt-1.5 border-t border-slate-200 w-full">
-              <div className="text-[10px] font-bold text-slate-500 tracking-wide">
-                ID REGISTRANT
-              </div>
-              <div className="font-mono text-xs font-extrabold text-slate-900 truncate tabular-nums">
-                {qrIdCode}
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
-      </div>
-      )}
     </div>
   );
 };

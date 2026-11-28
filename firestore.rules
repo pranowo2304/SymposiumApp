@@ -75,7 +75,8 @@ service cloud.firestore {
           'dateString', 'dates', 'organizer', 'accreditation', 'logoUrl',
           'customIdentityCardUrl', 'identityCardLayout', 'workshopRundownPdfs',
           'workshopMaterials', 'themeColor', 'contactEmail', 'contactPhone',
-          'websiteUrl', 'enableQrAttendance', 'isPublished', 'updatedAt', 'updatedBy'
+          'websiteUrl', 'enableQrAttendance', 'certificateReleaseStatus',
+          'isPublished', 'updatedAt', 'updatedBy'
         ]) &&
         data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
         data.location is string && data.location.size() >= 1 && data.location.size() <= 250 &&
@@ -101,6 +102,12 @@ service cloud.firestore {
         isValidOptionalString(data, 'contactPhone', 60) &&
         isValidOptionalString(data, 'websiteUrl', 300) &&
         (!( 'enableQrAttendance' in data ) || data.enableQrAttendance is bool) &&
+        (!( 'certificateReleaseStatus' in data ) || (
+          data.certificateReleaseStatus is map &&
+          data.certificateReleaseStatus.keys().hasOnly(['symposium', 'workshop']) &&
+          (!( 'symposium' in data.certificateReleaseStatus ) || data.certificateReleaseStatus.symposium is bool) &&
+          (!( 'workshop' in data.certificateReleaseStatus ) || data.certificateReleaseStatus.workshop is bool)
+        )) &&
         isValidOptionalString(data, 'updatedBy', 128);
     }
 

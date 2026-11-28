@@ -12,13 +12,16 @@ import {
   FileImage,
   FileText,
   Loader2,
+  Lock,
   Move,
   Palette,
   RotateCcw,
   Save,
+  Share2,
   Sliders,
   Sparkles,
   Trash2,
+  Unlock,
   Upload,
   User,
 } from 'lucide-react';
@@ -39,6 +42,7 @@ import {
   DEFAULT_CERTIFICATE_LAYOUT,
   downloadCertificateAsPdf,
   downloadCertificateAsPng,
+  getCertificateReleaseStatus,
   getCertificateTemplateSlots,
   normalizeCertificateLayout,
 } from '../../utils/certificateTemplates';
@@ -191,6 +195,53 @@ export const AdminCertificateTemplatesManager: React.FC<AdminCertificateTemplate
   );
 
   const scaleRatio = previewWidth / CERTIFICATE_CANVAS_W;
+
+  const releaseStatus = useMemo(
+    () => getCertificateReleaseStatus(eventInfo),
+    [eventInfo]
+  );
+
+  const symposiumUploadedCount = useMemo(
+    () =>
+      slots.filter(
+        (slot) => slot.category === 'symposium' && Boolean(savedTemplatesMap[slot.templateKey]?.templateUrl)
+      ).length,
+    [slots, savedTemplatesMap]
+  );
+
+  const workshopSlotsCount = useMemo(
+    () => slots.filter((slot) => slot.category === 'workshop').length,
+    [slots]
+  );
+
+  const workshopUploadedCount = useMemo(
+    () =>
+      slots.filter(
+        (slot) => slot.category === 'workshop' && Boolean(savedTemplatesMap[slot.templateKey]?.templateUrl)
+      ).length,
+    [slots, savedTemplatesMap]
+  );
+
+  const handleToggleReleaseStatus = (category: 'symposium' | 'workshop', nextReleased: boolean) => {
+    const currentVal = category === 'symposium' ? releaseStatus.symposium : releaseStatus.workshop;
+    if (currentVal === nextReleased) return;
+
+    const nextReleaseStatus = {
+      ...releaseStatus,
+      [category]: nextReleased,
+    };
+    const updatedInfo: SymposiumInfo = {
+      ...eventInfo,
+      certificateReleaseStatus: nextReleaseStatus,
+    };
+    onSaveEventInfo(updatedInfo);
+    const label = category === 'symposium' ? 'Symposium' : 'Workshop';
+    onShowToast(
+      nextReleased
+        ? `E-Sertifikat ${label} sekarang SUDAH DIBAGIKAN dan dapat diunduh oleh peserta.`
+        : `E-Sertifikat ${label} diubah ke BELUM DIBAGIKAN (akses unduh peserta dikunci).`
+    );
+  };
 
   const commitTemplatesMap = (
     nextMap: Record<string, CertificateTemplate>,
@@ -441,6 +492,175 @@ export const AdminCertificateTemplatesManager: React.FC<AdminCertificateTemplate
         </div>
       </div>
 
+      {/* Status Pembagian E-Sertifikat (Symposium & Workshop) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+              <Share2 className="w-4 h-4 text-emerald-400" />
+              Status Pembagian E-Sertifikat ke Peserta
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Atur secara terpisah apakah E-Sertifikat <strong className="text-slate-200">Symposium</strong> dan <strong className="text-slate-200">Workshop</strong> sudah bisa diunduh oleh peserta atau masih dikunci.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Symposium Release Toggle Card */}
+          <div
+            className={`rounded-2xl border p-4 space-y-3 transition-colors ${
+              releaseStatus.symposium
+                ? 'bg-emerald-950/25 border-emerald-500/35'
+                : 'bg-slate-950/80 border-amber-500/35'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    SYMPOSIUM
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-400">
+                    {symposiumUploadedCount > 0 ? 'Desain terpasang' : 'Desain belum diunggah'}
+                  </span>
+                </div>
+                <h4 className="text-sm font-black text-white">E-Sertifikat Symposium</h4>
+              </div>
+
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black shrink-0 border ${
+                  releaseStatus.symposium
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                }`}
+              >
+                {releaseStatus.symposium ? (
+                  <>
+                    <Unlock className="w-3.5 h-3.5" />
+                    <span>Sudah Dibagikan</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Belum Dibagikan</span>
+                  </>
+                )}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-900 border border-slate-800">
+              <button
+                type="button"
+                onClick={() => handleToggleReleaseStatus('symposium', false)}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  !releaseStatus.symposium
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/70'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Belum Dibagikan</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleReleaseStatus('symposium', true)}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  releaseStatus.symposium
+                    ? 'bg-emerald-500 text-slate-950 font-black shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/70'
+                }`}
+              >
+                <Unlock className="w-3.5 h-3.5" />
+                <span>Sudah Dibagikan</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              {releaseStatus.symposium
+                ? 'Peserta Symposium yang terdaftar sudah dapat melihat pratinjau dan mengunduh E-Sertifikat Symposium.'
+                : 'Akses unduh E-Sertifikat Symposium sedang dikunci. Peserta akan melihat status belum dibagikan oleh panitia.'}
+            </p>
+          </div>
+
+          {/* Workshop Release Toggle Card */}
+          <div
+            className={`rounded-2xl border p-4 space-y-3 transition-colors ${
+              releaseStatus.workshop
+                ? 'bg-emerald-950/25 border-emerald-500/35'
+                : 'bg-slate-950/80 border-amber-500/35'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                    WORKSHOP
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-400">
+                    {workshopUploadedCount} / {workshopSlotsCount} desain terpasang
+                  </span>
+                </div>
+                <h4 className="text-sm font-black text-white">E-Sertifikat Workshop</h4>
+              </div>
+
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-black shrink-0 border ${
+                  releaseStatus.workshop
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                }`}
+              >
+                {releaseStatus.workshop ? (
+                  <>
+                    <Unlock className="w-3.5 h-3.5" />
+                    <span>Sudah Dibagikan</span>
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Belum Dibagikan</span>
+                  </>
+                )}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-900 border border-slate-800">
+              <button
+                type="button"
+                onClick={() => handleToggleReleaseStatus('workshop', false)}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  !releaseStatus.workshop
+                    ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/70'
+                }`}
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Belum Dibagikan</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleReleaseStatus('workshop', true)}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  releaseStatus.workshop
+                    ? 'bg-emerald-500 text-slate-950 font-black shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/70'
+                }`}
+              >
+                <Unlock className="w-3.5 h-3.5" />
+                <span>Sudah Dibagikan</span>
+              </button>
+            </div>
+
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              {releaseStatus.workshop
+                ? 'Peserta Workshop yang terdaftar sudah dapat melihat pratinjau dan mengunduh E-Sertifikat Workshop sesuai kelasnya.'
+                : 'Akses unduh E-Sertifikat Workshop sedang dikunci. Peserta akan melihat status belum dibagikan oleh panitia.'}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Template Upload Cards Grid (Symposium + Workshop 1 + Workshop 2) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {slots.map((slot) => {
@@ -449,6 +669,7 @@ export const AdminCertificateTemplatesManager: React.FC<AdminCertificateTemplate
           const isActive = activeSlot?.templateKey === slot.templateKey;
           const isUploading = uploadingSlotKey === slot.templateKey;
           const isSymposium = slot.category === 'symposium';
+          const isCategoryReleased = isSymposium ? releaseStatus.symposium : releaseStatus.workshop;
 
           return (
             <div
@@ -461,7 +682,7 @@ export const AdminCertificateTemplatesManager: React.FC<AdminCertificateTemplate
             >
               {/* Card Top Meta */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span
                     className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${
                       isSymposium
@@ -471,16 +692,32 @@ export const AdminCertificateTemplatesManager: React.FC<AdminCertificateTemplate
                   >
                     {slot.badgeLabel}
                   </span>
-                  {isUploaded ? (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Terpasang
+                  <div className="flex items-center gap-1.5">
+                    {isUploaded ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Terpasang
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-slate-500">
+                        Belum Diunggah
+                      </span>
+                    )}
+                    <span
+                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
+                        isCategoryReleased
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
+                          : 'bg-amber-500/15 text-amber-300 border-amber-500/25'
+                      }`}
+                    >
+                      {isCategoryReleased ? (
+                        <Unlock className="w-2.5 h-2.5" />
+                      ) : (
+                        <Lock className="w-2.5 h-2.5" />
+                      )}
+                      {isCategoryReleased ? 'Dibagikan' : 'Dikunci'}
                     </span>
-                  ) : (
-                    <span className="text-[11px] font-semibold text-slate-500">
-                      Belum Diunggah
-                    </span>
-                  )}
+                  </div>
                 </div>
 
                 <div>

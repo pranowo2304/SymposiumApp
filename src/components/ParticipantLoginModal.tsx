@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Award,
-  CreditCard,
   IdCard,
   LogIn,
   LogOut,
@@ -269,27 +268,20 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
           {(!isParticipantLoggedIn || showSwitchForm) && (
             <>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 text-xs text-emerald-950 leading-relaxed">
-                  Masukkan <strong className="text-emerald-800 font-mono font-bold">Id_registrant</strong> (atau ID Badge registrasi) yang Anda terima dari panitia untuk mengaktifkan identitas peserta Anda.
+                <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 text-xs text-emerald-950 font-semibold leading-relaxed">
+                  Masukkan Nomor. Registrasi Anda
                 </div>
 
-                <div className="space-y-1.5">
-                  <label
-                    htmlFor="input-id-registrant"
-                    className="text-xs font-bold text-slate-700 flex items-center gap-1.5"
-                  >
-                    <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Id_registrant</span>
-                  </label>
+                <div>
                   <input
                     id="input-id-registrant"
                     type="text"
                     required
                     autoFocus
                     maxLength={80}
+                    aria-label="Nomor Registrasi"
                     value={idRegistrantInput}
                     onChange={(e) => setIdRegistrantInput(e.target.value)}
-                    placeholder="Contoh: ID-SIMP-2026-001"
                     className="w-full min-h-[46px] bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                   />
                 </div>

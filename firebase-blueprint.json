@@ -28,6 +28,14 @@
         "contactPhone": { "type": "string", "maxLength": 60 },
         "websiteUrl": { "type": "string", "maxLength": 300 },
         "enableQrAttendance": { "type": "boolean" },
+        "certificateReleaseStatus": {
+          "type": "object",
+          "description": "Controls whether Symposium and Workshop E-Certificates are released for participant download.",
+          "properties": {
+            "symposium": { "type": "boolean" },
+            "workshop": { "type": "boolean" }
+          }
+        },
         "isPublished": { "type": "boolean" },
         "updatedAt": { "type": "string", "format": "date-time" },
         "updatedBy": { "type": "string", "maxLength": 128 }

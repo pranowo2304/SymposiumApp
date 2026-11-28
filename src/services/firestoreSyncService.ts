@@ -325,6 +325,10 @@ function sanitizeEventInfoPayload(info: SymposiumInfo, updatedBy?: string) {
     contactPhone: clampStr(info.contactPhone, 60),
     websiteUrl: clampStr(info.websiteUrl, 300),
     enableQrAttendance: Boolean(info.enableQrAttendance),
+    certificateReleaseStatus: {
+      symposium: info.certificateReleaseStatus?.symposium !== false,
+      workshop: info.certificateReleaseStatus?.workshop !== false,
+    },
     isPublished: true,
     updatedAt: serverTimestamp(),
   };

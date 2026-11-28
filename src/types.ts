@@ -150,6 +150,11 @@ export interface CertificateTemplate {
   certificateNumberPrefix?: string;
 }
 
+export interface CertificateReleaseStatus {
+  symposium: boolean;
+  workshop: boolean;
+}
+
 export interface SymposiumInfo {
   title: string;
   subtitle: string;
@@ -180,6 +185,7 @@ export interface SymposiumInfo {
   workshopRundownPdfs?: Record<string, WorkshopRundownPdf>;
   workshopMaterials?: Record<string, WorkshopMaterialPdf[]>;
   certificateTemplates?: Record<string, CertificateTemplate>;
+  certificateReleaseStatus?: CertificateReleaseStatus;
 }
 
 export interface Participant {

@@ -1,6 +1,7 @@
 import {
   CertificateFieldConfig,
   CertificateLayoutConfig,
+  CertificateReleaseStatus,
   CertificateTemplate,
   Participant,
   Session,
@@ -463,6 +464,21 @@ function scoreTicketForWorkshop(normalizedText: string, workshopLabel: string): 
   return matches > 0 ? matches * 10 + (matches / tokens.length) * 5 : 0;
 }
 
+export function getCertificateReleaseStatus(eventInfo?: SymposiumInfo): CertificateReleaseStatus {
+  return {
+    symposium: eventInfo?.certificateReleaseStatus?.symposium !== false,
+    workshop: eventInfo?.certificateReleaseStatus?.workshop !== false,
+  };
+}
+
+export function isCertificateCategoryReleased(
+  category: 'symposium' | 'workshop',
+  eventInfo?: SymposiumInfo
+): boolean {
+  const status = getCertificateReleaseStatus(eventInfo);
+  return category === 'symposium' ? status.symposium : status.workshop;
+}
+
 export interface ResolvedParticipantCertificate {
   template: CertificateTemplate;
   layout: CertificateLayoutConfig;
@@ -472,10 +488,12 @@ export interface ResolvedParticipantCertificate {
 
 /**
  * Resolves which uploaded certificates are available for a participant based on their ticket/role.
+ * By default filters out categories not yet released by Admin unless includeUnreleased is true.
  */
 export function resolveParticipantCertificates(
   participant: Participant,
-  eventInfo: SymposiumInfo
+  eventInfo: SymposiumInfo,
+  options?: { includeUnreleased?: boolean }
 ): ResolvedParticipantCertificate[] {
   const uploadedList = Object.values(eventInfo.certificateTemplates || {}).filter(
     (tpl) => Boolean(tpl && tpl.templateKey && tpl.templateUrl)
@@ -544,7 +562,17 @@ export function resolveParticipantCertificates(
     eligible.push(sympTemplates[0]);
   }
 
-  return eligible.map((tpl) => {
+  const finalTemplates = options?.includeUnreleased
+    ? eligible
+    : eligible.filter((tpl) => {
+        const category: 'symposium' | 'workshop' =
+          tpl.category === 'symposium' || tpl.templateKey === 'symposium'
+            ? 'symposium'
+            : 'workshop';
+        return isCertificateCategoryReleased(category, eventInfo);
+      });
+
+  return finalTemplates.map((tpl) => {
     const prefix = (tpl.certificateNumberPrefix || (tpl.category === 'symposium' ? 'CERT-SYMP-2026-' : 'CERT-WS-2026-')).trim();
     const certNumber = prefix ? `${prefix}${idCode}` : idCode;
     const dateText =

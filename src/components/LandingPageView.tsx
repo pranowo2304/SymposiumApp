@@ -19,7 +19,10 @@ import { MainTabType } from './MainMenuTabs';
 import { Participant, SymposiumInfo } from '../types';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { extractParticipantIdRegistrant } from '../data/participantData';
-import { resolveParticipantCertificates } from '../utils/certificateTemplates';
+import {
+  isCertificateCategoryReleased,
+  resolveParticipantCertificates,
+} from '../utils/certificateTemplates';
 import { getThemePalette } from '../utils/themeColors';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
@@ -62,6 +65,14 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   const [inlineQrUrl, setInlineQrUrl] = useState<string>('');
   const uploadedCertCount = info.certificateTemplates
     ? Object.values(info.certificateTemplates).filter((t) => Boolean(t?.templateUrl)).length
+    : 0;
+  const releasedUploadedCertCount = info.certificateTemplates
+    ? Object.values(info.certificateTemplates).filter((t) => {
+        if (!t?.templateUrl) return false;
+        const cat: 'symposium' | 'workshop' =
+          t.category === 'symposium' || t.templateKey === 'symposium' ? 'symposium' : 'workshop';
+        return isCertificateCategoryReleased(cat, info);
+      }).length
     : 0;
   const eligibleCertCount =
     isParticipantLoggedIn && currentUser
@@ -169,8 +180,10 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       subtitle:
         eligibleCertCount > 0
           ? `${eligibleCertCount} Siap Unduh`
-          : uploadedCertCount > 0
+          : releasedUploadedCertCount > 0
           ? 'Unduh PDF & PNG'
+          : uploadedCertCount > 0
+          ? 'Belum Dibagikan'
           : 'Simposium & Workshop',
       desc: 'Unduh E-Sertifikat resmi Simposium, Workshop, atau Bundling sesuai tiket yang Anda ikuti.',
       icon: Award,

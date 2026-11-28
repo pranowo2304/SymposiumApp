@@ -560,14 +560,72 @@ export function resolveParticipantCertificates(
   });
 }
 
+const CERT_CUSTOM_NAME_STORAGE_PREFIX = 'simposium_cert_custom_name_v1_';
+
+function getParticipantStorageKey(participant: Participant): string {
+  const code = (
+    extractParticipantIdRegistrant(participant) ||
+    participant.badgeId ||
+    participant.id ||
+    participant.email ||
+    'default'
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '_');
+  return `${CERT_CUSTOM_NAME_STORAGE_PREFIX}${code}`;
+}
+
+export function getDefaultCertificateDisplayName(participant: Participant): string {
+  const name = (participant.name || '').trim();
+  const title = (participant.title || '').trim();
+  if (title && !name.toLowerCase().includes(title.toLowerCase())) {
+    return `${title} ${name}`.trim();
+  }
+  return name || 'Nama Peserta';
+}
+
+export function getSavedCertificateCustomName(participant: Participant): string {
+  try {
+    const saved = localStorage.getItem(getParticipantStorageKey(participant));
+    return saved ? saved.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveCertificateCustomName(participant: Participant, customName: string): void {
+  try {
+    const key = getParticipantStorageKey(participant);
+    const cleaned = customName.trim().slice(0, 120);
+    const defaultName = getDefaultCertificateDisplayName(participant);
+    if (!cleaned || cleaned === defaultName) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, cleaned);
+    }
+  } catch {}
+}
+
+export function withCertificateDisplayName(
+  participant: Participant,
+  customName?: string
+): Participant {
+  const cleaned = (customName || '').trim().slice(0, 120);
+  if (!cleaned) return participant;
+  return {
+    ...participant,
+    name: cleaned,
+    title: '',
+  };
+}
+
 export function buildCertificateFieldTexts(
   participant: Participant,
   template: CertificateTemplate,
   eventInfo: SymposiumInfo
 ): Record<keyof CertificateLayoutConfig, string> {
-  const fullName = participant.title && !participant.name.toLowerCase().includes(participant.title.toLowerCase())
-    ? `${participant.title} ${participant.name}`.trim()
-    : participant.name;
+  const fullName = getDefaultCertificateDisplayName(participant);
   const idCode = (extractParticipantIdRegistrant(participant) || participant.badgeId || participant.id || '001').trim();
   const prefix = (template.certificateNumberPrefix || '').trim();
   const certNo = prefix ? `${prefix}${idCode}` : idCode;

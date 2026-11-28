@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Award,
   BadgeCheck,
@@ -25,7 +25,11 @@ import {
   downloadCertificateAsPdf,
   downloadCertificateAsPng,
   getCertificateTemplateSlots,
+  getDefaultCertificateDisplayName,
+  getSavedCertificateCustomName,
   resolveParticipantCertificates,
+  saveCertificateCustomName,
+  withCertificateDisplayName,
 } from '../utils/certificateTemplates';
 import { describeTicketAccessSummary } from '../utils/materialAccess';
 import { getThemePalette } from '../utils/themeColors';
@@ -60,6 +64,28 @@ export const CertificateDownloadView: React.FC<CertificateDownloadViewProps> = (
   const [isVerifying, setIsVerifying] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+
+  const defaultDisplayName = useMemo(
+    () => getDefaultCertificateDisplayName(currentUser),
+    [currentUser]
+  );
+  const [customPrintName, setCustomPrintName] = useState<string>(
+    () => getSavedCertificateCustomName(currentUser) || defaultDisplayName
+  );
+
+  useEffect(() => {
+    setCustomPrintName(getSavedCertificateCustomName(currentUser) || defaultDisplayName);
+  }, [currentUser.id, currentUser.badgeId, defaultDisplayName]);
+
+  const handleCustomPrintNameChange = (nextVal: string) => {
+    setCustomPrintName(nextVal);
+    saveCertificateCustomName(currentUser, nextVal);
+  };
+
+  const effectiveParticipant = useMemo(
+    () => withCertificateDisplayName(currentUser, customPrintName || defaultDisplayName),
+    [currentUser, customPrintName, defaultDisplayName]
+  );
 
   const templateSlots = useMemo(
     () => getCertificateTemplateSlots(sessions, info),
@@ -148,9 +174,9 @@ export const CertificateDownloadView: React.FC<CertificateDownloadViewProps> = (
     setDownloadingKey(busyId);
     try {
       if (format === 'png') {
-        await downloadCertificateAsPng(currentUser, certTemplate, info);
+        await downloadCertificateAsPng(effectiveParticipant, certTemplate, info);
       } else {
-        await downloadCertificateAsPdf(currentUser, certTemplate, info);
+        await downloadCertificateAsPdf(effectiveParticipant, certTemplate, info);
       }
     } catch (err) {
       console.error('Certificate download error:', err);
@@ -454,7 +480,12 @@ export const CertificateDownloadView: React.FC<CertificateDownloadViewProps> = (
                   </span>
                 </div>
 
-                <ParticipantCertificateCard participant={currentUser} eventInfo={info} />
+                <ParticipantCertificateCard
+                  participant={currentUser}
+                  eventInfo={info}
+                  customPrintName={customPrintName}
+                  onCustomPrintNameChange={handleCustomPrintNameChange}
+                />
               </div>
             </div>
           ) : (

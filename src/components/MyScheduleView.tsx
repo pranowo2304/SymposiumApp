@@ -1,6 +1,7 @@
 import React from 'react';
 import { BookmarkCheck, Trash2, Clock, MapPin, Share2, AlertTriangle, Calendar, ArrowLeft, Bell, Volume2, CheckCircle2, Sparkles } from 'lucide-react';
 import { Session, Speaker } from '../types';
+import { sortSessionsChronologically } from '../utils/sessionSorting';
 import { SessionCard } from './SessionCard';
 
 interface MyScheduleViewProps {
@@ -22,9 +23,9 @@ export const MyScheduleView: React.FC<MyScheduleViewProps> = ({
   onBackToSchedule,
   onTriggerReminderToast
 }) => {
-  // Separate into Hari I and Hari II
-  const day1Sessions = bookmarkedSessions.filter(s => s.day === 'Hari I');
-  const day2Sessions = bookmarkedSessions.filter(s => s.day === 'Hari II');
+  // Separate into Hari I and Hari II, sorted chronologically
+  const day1Sessions = sortSessionsChronologically(bookmarkedSessions.filter(s => s.day === 'Hari I'));
+  const day2Sessions = sortSessionsChronologically(bookmarkedSessions.filter(s => s.day === 'Hari II'));
 
   // Check for time collisions on same day
   const hasTimeCollision = (sessions: Session[]) => {

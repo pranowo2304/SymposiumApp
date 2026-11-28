@@ -43,6 +43,7 @@ import {
   Award
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
+import { compareRundownItemsByTime, sortSessionsChronologically } from '../utils/sessionSorting';
 import { Speaker, Session, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification, AttendanceRecord, WorkshopRundownItem, PresentationMaterial } from '../types';
 import { AdminParticipantsManager } from './admin/AdminParticipantsManager';
 import { SessionImportExportModal } from './admin/SessionImportExportModal';
@@ -497,7 +498,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
 
   const handleSortRundownRows = () => {
     const currentRundown = [...(sessionForm.rundown || [])];
-    currentRundown.sort((a, b) => a.startTime.localeCompare(b.startTime));
+    currentRundown.sort(compareRundownItemsByTime);
     setSessionForm({
       ...sessionForm,
       rundown: currentRundown
@@ -520,10 +521,10 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
     e.preventDefault();
     if (!sessionForm.title.trim()) return;
 
-    // Clean rundown items (keep non-empty activity rows, sort by startTime)
+    // Clean rundown items (keep non-empty activity rows, sort chronologically by startTime)
     const cleanedRundown = (sessionForm.rundown || [])
       .filter(r => r.activity.trim() !== '')
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+      .sort(compareRundownItemsByTime);
 
     // If rundown exists for workshop, sync overall session startTime & endTime from first and last rundown item if appropriate
     const effectiveStartTime = sessionForm.startTime;
@@ -856,12 +857,14 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
     e.target.value = '';
   };
 
-  // Categorize sessions
+  // Categorize sessions (sorted chronologically by day, time, and room)
   const [selectedWorkshopRoomFilter, setSelectedWorkshopRoomFilter] = useState<string>('all');
-  const symposiumSessions = sessions.filter(s => s.type !== 'Workshop Hands-On' && !s.category.includes('Workshop'));
-  const workshopSessions = sessions
-    .filter(s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.includes('Workshop'))
-    .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  const symposiumSessions = sortSessionsChronologically(
+    sessions.filter(s => s.type !== 'Workshop Hands-On' && !s.category.includes('Workshop') && !s.day.toLowerCase().includes('workshop'))
+  );
+  const workshopSessions = sortSessionsChronologically(
+    sessions.filter(s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.toLowerCase().includes('workshop'))
+  );
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 pb-16">

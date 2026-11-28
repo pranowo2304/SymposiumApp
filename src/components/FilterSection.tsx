@@ -2,20 +2,30 @@ import React from 'react';
 import { Filter, DoorOpen, RotateCcw } from 'lucide-react';
 import { ROOMS_LIST } from '../data/symposiumData';
 
+export interface RoomFilterOption {
+  id: string;
+  name: string;
+  floor?: string;
+}
+
 interface FilterSectionProps {
   selectedRoom: string;
   onSelectRoom: (room: string) => void;
   onResetFilters: () => void;
   totalResults: number;
+  rooms?: RoomFilterOption[];
 }
 
 export const FilterSection: React.FC<FilterSectionProps> = ({
   selectedRoom,
   onSelectRoom,
   onResetFilters,
-  totalResults
+  totalResults,
+  rooms
 }) => {
   const hasActiveFilter = selectedRoom !== 'all';
+  const roomOptions: RoomFilterOption[] =
+    rooms && rooms.length > 0 ? rooms : ROOMS_LIST;
 
   return (
     <div className="bg-white/90 backdrop-blur border-b border-slate-200 py-2.5 px-3 sm:px-4 sticky top-[108px] z-20 shadow-xs">
@@ -35,9 +45,9 @@ export const FilterSection: React.FC<FilterSectionProps> = ({
               onChange={(e) => onSelectRoom(e.target.value)}
               className="w-full sm:w-auto appearance-none bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg py-1.5 pl-8 pr-7 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500 transition-colors"
             >
-              {ROOMS_LIST.map((r) => (
+              {roomOptions.map((r) => (
                 <option key={r.id} value={r.id}>
-                  {r.name} {r.floor !== 'Semua' ? `(${r.floor})` : ''}
+                  {r.name} {r.floor && r.floor !== 'Semua' ? `(${r.floor})` : ''}
                 </option>
               ))}
             </select>

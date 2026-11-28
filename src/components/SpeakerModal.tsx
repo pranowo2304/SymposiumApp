@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Building, Mail, BookOpen, Calendar, Clock, MapPin, ChevronRight } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Speaker, Session } from '../types';
+import { sortSessionsChronologically } from '../utils/sessionSorting';
 
 interface SpeakerModalProps {
   speaker: Speaker | null;
@@ -18,9 +19,9 @@ export const SpeakerModal: React.FC<SpeakerModalProps> = ({
 }) => {
   if (!speaker) return null;
 
-  // Filter sessions presented by this speaker
-  const speakerSessions = allSessions.filter(s =>
-    s.speakers.some(sp => sp.id === speaker.id)
+  // Filter and chronologically sort sessions presented by this speaker
+  const speakerSessions = sortSessionsChronologically(
+    allSessions.filter(s => s.speakers.some(sp => sp.id === speaker.id))
   );
 
   return (

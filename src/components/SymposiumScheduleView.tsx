@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Calendar, Search } from 'lucide-react';
-import { Session, Speaker, SymposiumInfo } from '../types';
-import { SESSIONS_DATA, SYMPOSIUM_INFO } from '../data/symposiumData';
+import { Room, Session, Speaker, SymposiumInfo } from '../types';
+import { ROOMS_LIST, SESSIONS_DATA, SYMPOSIUM_INFO } from '../data/symposiumData';
 import { getThemePalette } from '../utils/themeColors';
-import { FilterSection } from './FilterSection';
+import { getDaySortRank, sortSessionsChronologically } from '../utils/sessionSorting';
+import { FilterSection, RoomFilterOption } from './FilterSection';
 import { SessionCard } from './SessionCard';
 
 interface SymposiumScheduleViewProps {
   sessions?: Session[];
+  rooms?: Room[];
   onSelectSession: (session: Session, initialTab?: 'abstract' | 'materials' | 'speakers') => void;
   onSelectSpeaker: (speaker: Speaker) => void;
   searchQuery: string;
@@ -17,6 +19,7 @@ interface SymposiumScheduleViewProps {
 
 export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
   sessions,
+  rooms,
   onSelectSession,
   onSelectSpeaker,
   searchQuery,
@@ -27,27 +30,24 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
   const palette = getThemePalette(info);
 
   const allSessions = sessions !== undefined ? sessions : SESSIONS_DATA;
-  const sourceSessions = React.useMemo(() => {
-    return allSessions.filter(
+  const sourceSessions = useMemo(() => {
+    const symposiumOnly = allSessions.filter(
       s =>
         s.type !== 'Workshop Hands-On' &&
         !s.category?.toLowerCase().includes('workshop') &&
         !s.day?.toLowerCase().includes('workshop')
     );
+    return sortSessionsChronologically(symposiumOnly);
   }, [allSessions]);
 
   // Compute available days dynamically from actual symposium sessions (excluding Workshop)
-  const availableDays = React.useMemo(() => {
-    const orderPriority = ['Pre-Congress', 'Hari I', 'Hari II', 'Hari III'];
+  const availableDays = useMemo(() => {
     const uniqueDays = Array.from(new Set<string>(sourceSessions.map(s => s.day)));
 
     const sortedDays = uniqueDays.sort((a: string, b: string) => {
-      const idxA = orderPriority.indexOf(a);
-      const idxB = orderPriority.indexOf(b);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return a.localeCompare(b);
+      const rankDiff = getDaySortRank(a) - getDaySortRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      return a.localeCompare(b, 'id', { numeric: true, sensitivity: 'base' });
     });
 
     return sortedDays.map(dayKey => {
@@ -65,40 +65,119 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
     return 'Hari I';
   });
 
+  useEffect(() => {
+    if (
+      activeDay !== 'all' &&
+      availableDays.length > 0 &&
+      !availableDays.some(d => d.key === activeDay)
+    ) {
+      setActiveDay(availableDays[0].key);
+    }
+  }, [availableDays, activeDay]);
+
   const [selectedRoom, setSelectedRoom] = useState<string>('all');
 
-  const daySessions = activeDay === 'all' 
-    ? sourceSessions 
-    : sourceSessions.filter(s => s.day === activeDay);
+  const daySessions = useMemo(() => {
+    const list =
+      activeDay === 'all'
+        ? sourceSessions
+        : sourceSessions.filter(s => s.day === activeDay);
+    return sortSessionsChronologically(list);
+  }, [sourceSessions, activeDay]);
 
-  const filteredSessions = daySessions.filter(session => {
-    // Room Filter
-    if (selectedRoom !== 'all' && session.room !== selectedRoom) {
-      return false;
-    }
+  // Build room filter options dynamically from actual symposium sessions & configured rooms
+  const roomFilterOptions = useMemo<RoomFilterOption[]>(() => {
+    const byNormName = new Map<string, RoomFilterOption>();
 
-    // Search Query
-    if (searchQuery.trim() !== '') {
-      const q = searchQuery.toLowerCase();
-      const matchTitle = session.title.toLowerCase().includes(q);
-      const matchRoom = session.room.toLowerCase().includes(q);
-      const matchCategory = session.category.toLowerCase().includes(q);
-      const matchSpeaker = session.speakers.some(sp => 
-        sp.name.toLowerCase().includes(q) || 
-        sp.specialty.toLowerCase().includes(q) ||
-        sp.institution.toLowerCase().includes(q)
+    // Prefer metadata from configured rooms (excluding workshop-only rooms unless used by symposium sessions)
+    const configuredRooms = rooms && rooms.length > 0 ? rooms : [];
+    const lookupFloor = (roomName: string): string => {
+      const norm = roomName.trim().toLowerCase();
+      const matchedConfig = configuredRooms.find(
+        r => r.name.trim().toLowerCase() === norm || r.id.trim().toLowerCase() === norm
       );
-      const matchAbstract = 
-        session.abstract.background.toLowerCase().includes(q) ||
-        session.abstract.clinicalUpdates.some(u => u.toLowerCase().includes(q));
+      if (matchedConfig?.floor) return matchedConfig.floor;
+      const matchedStatic = ROOMS_LIST.find(
+        r => r.id.trim().toLowerCase() === norm || r.name.trim().toLowerCase() === norm
+      );
+      return matchedStatic?.floor || '';
+    };
 
-      if (!matchTitle && !matchRoom && !matchCategory && !matchSpeaker && !matchAbstract) {
+    sourceSessions.forEach(s => {
+      const roomName = (s.room || '').trim();
+      if (!roomName) return;
+      const key = roomName.toLowerCase();
+      if (!byNormName.has(key)) {
+        byNormName.set(key, {
+          id: roomName,
+          name: roomName,
+          floor: s.floor || lookupFloor(roomName)
+        });
+      }
+    });
+
+    // Include non-workshop configured rooms as well
+    configuredRooms.forEach(r => {
+      if (r.type === 'workshop') return;
+      const roomName = (r.name || '').trim();
+      if (!roomName) return;
+      const key = roomName.toLowerCase();
+      if (!byNormName.has(key)) {
+        byNormName.set(key, {
+          id: roomName,
+          name: roomName,
+          floor: r.floor
+        });
+      }
+    });
+
+    const dynamicList = Array.from(byNormName.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, 'id', { numeric: true, sensitivity: 'base' })
+    );
+
+    return [
+      { id: 'all', name: 'Semua Ruangan', floor: 'Semua' },
+      ...dynamicList
+    ];
+  }, [sourceSessions, rooms]);
+
+  const filteredSessions = useMemo(() => {
+    const normalizedSelectedRoom = selectedRoom.trim().toLowerCase();
+
+    const filtered = daySessions.filter(session => {
+      // Room Filter (case & whitespace tolerant)
+      if (
+        selectedRoom !== 'all' &&
+        (session.room || '').trim().toLowerCase() !== normalizedSelectedRoom
+      ) {
         return false;
       }
-    }
 
-    return true;
-  });
+      // Search Query
+      if (searchQuery.trim() !== '') {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = session.title.toLowerCase().includes(q);
+        const matchRoom = session.room.toLowerCase().includes(q);
+        const matchCategory = session.category.toLowerCase().includes(q);
+        const matchSpeaker = session.speakers.some(sp => 
+          sp.name.toLowerCase().includes(q) || 
+          sp.specialty.toLowerCase().includes(q) ||
+          sp.institution.toLowerCase().includes(q)
+        );
+        const matchAbstract = 
+          session.abstract.background.toLowerCase().includes(q) ||
+          session.abstract.clinicalUpdates.some(u => u.toLowerCase().includes(q));
+
+        if (!matchTitle && !matchRoom && !matchCategory && !matchSpeaker && !matchAbstract) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    return sortSessionsChronologically(filtered);
+  }, [daySessions, selectedRoom, searchQuery]);
 
   const currentDayInfo = availableDays.find(d => d.key === activeDay);
   const bannerTitle = activeDay === 'all'
@@ -176,6 +255,7 @@ export const SymposiumScheduleView: React.FC<SymposiumScheduleViewProps> = ({
           onSearchChange('');
         }}
         totalResults={filteredSessions.length}
+        rooms={roomFilterOptions}
       />
 
       {/* Sessions List */}

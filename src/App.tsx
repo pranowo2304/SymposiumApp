@@ -49,6 +49,7 @@ import { PWAInstallModal, OfflineIndicator } from './components/PWAInstallModal'
 import { AppQRCodeModal } from './components/AppQRCodeModal';
 import { playBroadcastChime } from './utils/broadcastSound';
 import { syncAppIconWithEventLogo } from './utils/appIconSync';
+import { sortSessionsChronologically } from './utils/sessionSorting';
 import { SESSIONS_DATA, SPEAKERS_DATABASE, SYMPOSIUM_INFO } from './data/symposiumData';
 import { EXHIBITORS_DATA } from './data/exhibitorsData';
 import { DEFAULT_ROOMS_DATA } from './data/roomsData';
@@ -307,7 +308,7 @@ export default function App() {
               const defaultWorkshops = SESSIONS_DATA.filter(
                 (s: Session) => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.includes('Workshop')
               );
-              const merged = [...defaultWorkshops, ...nonWorkshops];
+              const merged = sortSessionsChronologically([...defaultWorkshops, ...nonWorkshops]);
               try {
                 localStorage.setItem('simposium_sessions_custom', JSON.stringify(merged));
               } catch (e) {
@@ -316,13 +317,13 @@ export default function App() {
               return merged;
             }
 
-            return parsed;
+            return sortSessionsChronologically(parsed);
           }
         }
       }
-      return SESSIONS_DATA;
+      return sortSessionsChronologically(SESSIONS_DATA);
     } catch (e) {
-      return SESSIONS_DATA;
+      return sortSessionsChronologically(SESSIONS_DATA);
     }
   });
 
@@ -522,16 +523,17 @@ export default function App() {
   };
 
   const handleSaveSessions = (newSessions: Session[]) => {
-    setSessions(newSessions);
+    const sortedSessions = sortSessionsChronologically(newSessions);
+    setSessions(sortedSessions);
     try {
-      localStorage.setItem('simposium_sessions_custom', JSON.stringify(newSessions));
+      localStorage.setItem('simposium_sessions_custom', JSON.stringify(sortedSessions));
     } catch (e) {
       console.error(e);
     }
     if (isCloudAdmin) {
       runTrackedCatalogSync(
         'sessions',
-        () => syncSessionsToFirestore(newSessions),
+        () => syncSessionsToFirestore(sortedSessions),
         'Perubahan jadwal tersimpan lokal, namun gagal sinkron ke Cloud Database.'
       );
     } else {
@@ -908,9 +910,10 @@ export default function App() {
         if (isDirtyLocal('sessions') || inFlightCloudSyncRef.current.sessions > 0) {
           return;
         }
-        setSessions(cloudSessions);
+        const sortedCloudSessions = sortSessionsChronologically(cloudSessions);
+        setSessions(sortedCloudSessions);
         try {
-          localStorage.setItem('simposium_sessions_custom', JSON.stringify(cloudSessions));
+          localStorage.setItem('simposium_sessions_custom', JSON.stringify(sortedCloudSessions));
         } catch {}
       },
       onSpeakers: (cloudSpeakers) => {
@@ -1372,15 +1375,17 @@ export default function App() {
     navigateToTab(tab);
   };
 
-  const displaySessions = sessions.map(session => ({
-    ...session,
-    speakers: (session.speakers || []).map(sessSp => {
-      const masterSp = speakers.find(
-        m => m.id === sessSp.id || m.name.toLowerCase().trim() === sessSp.name.toLowerCase().trim()
-      );
-      return masterSp ? { ...sessSp, ...masterSp, photoUrl: masterSp.photoUrl || sessSp.photoUrl } : sessSp;
-    })
-  }));
+  const displaySessions = sortSessionsChronologically(
+    sessions.map(session => ({
+      ...session,
+      speakers: (session.speakers || []).map(sessSp => {
+        const masterSp = speakers.find(
+          m => m.id === sessSp.id || m.name.toLowerCase().trim() === sessSp.name.toLowerCase().trim()
+        );
+        return masterSp ? { ...sessSp, ...masterSp, photoUrl: masterSp.photoUrl || sessSp.photoUrl } : sessSp;
+      })
+    }))
+  );
 
   const workshopsCount = displaySessions.filter(
     s => s.type === 'Workshop Hands-On' || s.category.includes('Workshop') || s.day.toLowerCase().includes('workshop')
@@ -1526,6 +1531,7 @@ export default function App() {
     return (
       <SymposiumScheduleView
         sessions={displaySessions}
+        rooms={rooms}
         onSelectSession={(s, tab) => handleOpenSession(s, tab || 'abstract')}
         onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
         searchQuery={searchQuery}

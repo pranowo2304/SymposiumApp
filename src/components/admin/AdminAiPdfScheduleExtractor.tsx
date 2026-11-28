@@ -32,6 +32,7 @@ import {
   Stethoscope
 } from 'lucide-react';
 import { Session, Speaker, Room, SymposiumInfo } from '../../types';
+import { sortSessionsChronologically } from '../../utils/sessionSorting';
 import {
   extractScheduleFromPdf,
   extractScheduleFromText,
@@ -544,19 +545,21 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
     onShowToast('File JSON jadwal simposium berhasil diunduh!');
   };
 
-  // Filtered Sessions in Preview
-  const filteredPreviewSessions = extractedSessions.filter(s => {
-    if (previewFilterDay !== 'all' && s.day !== previewFilterDay) return false;
-    if (previewFilterRoom !== 'all' && s.room !== previewFilterRoom) return false;
-    if (previewSearch.trim()) {
-      const q = previewSearch.toLowerCase();
-      const matchTitle = s.title.toLowerCase().includes(q);
-      const matchRoom = s.room.toLowerCase().includes(q);
-      const matchSpeaker = s.speakers?.some(sp => sp.name.toLowerCase().includes(q));
-      if (!matchTitle && !matchRoom && !matchSpeaker) return false;
-    }
-    return true;
-  });
+  // Filtered Sessions in Preview (sorted chronologically)
+  const filteredPreviewSessions = sortSessionsChronologically(
+    extractedSessions.filter(s => {
+      if (previewFilterDay !== 'all' && s.day !== previewFilterDay) return false;
+      if (previewFilterRoom !== 'all' && s.room !== previewFilterRoom) return false;
+      if (previewSearch.trim()) {
+        const q = previewSearch.toLowerCase();
+        const matchTitle = s.title.toLowerCase().includes(q);
+        const matchRoom = s.room.toLowerCase().includes(q);
+        const matchSpeaker = s.speakers?.some(sp => sp.name.toLowerCase().includes(q));
+        if (!matchTitle && !matchRoom && !matchSpeaker) return false;
+      }
+      return true;
+    })
+  );
 
   const uniqueRoomsInPreview = Array.from(new Set(extractedSessions.map(s => s.room).filter(Boolean)));
   const uniqueDaysInPreview = Array.from(new Set(extractedSessions.map(s => s.day).filter(Boolean)));

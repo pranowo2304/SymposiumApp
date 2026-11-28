@@ -38,6 +38,7 @@ import type {
   WorkshopRundownPdf,
   CertificateTemplate,
 } from '../types';
+import { sortSessionsChronologically } from '../utils/sessionSorting';
 import {
   base64ToPdfBlob,
   getPdfMaterialLocal,
@@ -994,10 +995,12 @@ export function subscribePublicCatalog(callbacks: {
       (snapshot) => {
         if (!snapshot.empty) {
           pendingEmptySessions = false;
-          const list = snapshot.docs.map((d) => {
-            const { isPublished, updatedAt, ...rest } = d.data() as any;
-            return rest as Session;
-          });
+          const list = sortSessionsChronologically(
+            snapshot.docs.map((d) => {
+              const { isPublished, updatedAt, ...rest } = d.data() as any;
+              return rest as Session;
+            })
+          );
           callbacks.onSessions(list);
         } else if (isCatalogSeeded) {
           callbacks.onSessions([]);

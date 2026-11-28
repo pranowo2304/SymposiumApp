@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { DoorOpen, Clock, Calendar, User, FileText, ChevronRight } from 'lucide-react';
 import { Session, Speaker, Room } from '../types';
 import { SESSIONS_DATA, ROOMS_LIST } from '../data/symposiumData';
+import { getDaySortRank, sortSessionsChronologically } from '../utils/sessionSorting';
 
 interface RoomGridViewProps {
   rooms?: Room[];
@@ -16,19 +17,18 @@ export const RoomGridView: React.FC<RoomGridViewProps> = ({
   onSelectSession,
   onSelectSpeaker
 }) => {
-  const sourceSessions = sessions !== undefined ? sessions : SESSIONS_DATA;
+  const sourceSessions = useMemo(
+    () => sortSessionsChronologically(sessions !== undefined ? sessions : SESSIONS_DATA),
+    [sessions]
+  );
 
-  const availableDays = React.useMemo(() => {
-    const orderPriority = ['Workshop (28 Nov)', 'Pre-Congress', 'Hari I', 'Hari II', 'Hari III'];
+  const availableDays = useMemo(() => {
     const uniqueDays = Array.from(new Set<string>(sourceSessions.map(s => s.day)));
 
     const sortedDays = uniqueDays.sort((a: string, b: string) => {
-      const idxA = orderPriority.indexOf(a);
-      const idxB = orderPriority.indexOf(b);
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-      if (idxA !== -1) return -1;
-      if (idxB !== -1) return 1;
-      return a.localeCompare(b);
+      const rankDiff = getDaySortRank(a) - getDaySortRank(b);
+      if (rankDiff !== 0) return rankDiff;
+      return a.localeCompare(b, 'id', { numeric: true, sensitivity: 'base' });
     });
 
     return sortedDays.map(dayKey => {
@@ -44,14 +44,49 @@ export const RoomGridView: React.FC<RoomGridViewProps> = ({
 
   const [selectedDay, setSelectedDay] = useState<string>('Hari I');
 
-  const daySessions = selectedDay === 'all'
-    ? sourceSessions
-    : sourceSessions.filter(s => s.day === selectedDay);
+  const daySessions = useMemo(() => {
+    const list =
+      selectedDay === 'all'
+        ? sourceSessions
+        : sourceSessions.filter(s => s.day === selectedDay);
+    return sortSessionsChronologically(list);
+  }, [sourceSessions, selectedDay]);
 
-  // Derive rooms list from props or ROOMS_LIST
-  const activeRooms = rooms && rooms.length > 0 
-    ? rooms.map(r => ({ id: r.name, label: r.name, floor: r.floor }))
-    : ROOMS_LIST.filter(r => r.id !== 'all');
+  // Derive rooms list from props, ROOMS_LIST, and any additional rooms present in sessions
+  const activeRooms = useMemo(() => {
+    const baseRooms =
+      rooms && rooms.length > 0
+        ? rooms.map(r => ({
+            id: r.name,
+            name: r.name,
+            floor: r.floor,
+            color: 'border-l-emerald-500 border-slate-200'
+          }))
+        : ROOMS_LIST.filter(r => r.id !== 'all').map(r => ({
+            id: r.id,
+            name: r.name,
+            floor: r.floor,
+            color: r.color || 'border-l-emerald-500 border-slate-200'
+          }));
+
+    const seen = new Set(baseRooms.map(r => r.id.trim().toLowerCase()));
+    const merged = [...baseRooms];
+    sourceSessions.forEach(s => {
+      const roomName = (s.room || '').trim();
+      if (!roomName) return;
+      const key = roomName.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push({
+          id: roomName,
+          name: roomName,
+          floor: s.floor || '',
+          color: 'border-l-sky-500 border-slate-200'
+        });
+      }
+    });
+    return merged;
+  }, [rooms, sourceSessions]);
 
   return (
     <div className="max-w-5xl mx-auto p-3 sm:p-5 space-y-5 animate-in fade-in duration-200">
@@ -105,7 +140,10 @@ export const RoomGridView: React.FC<RoomGridViewProps> = ({
       {/* Grid of Rooms */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {activeRooms.map(roomObj => {
-          const roomSessions = daySessions.filter(s => s.room === roomObj.id);
+          const normRoomId = roomObj.id.trim().toLowerCase();
+          const roomSessions = sortSessionsChronologically(
+            daySessions.filter(s => (s.room || '').trim().toLowerCase() === normRoomId)
+          );
           
           if (roomSessions.length === 0) return null;
 

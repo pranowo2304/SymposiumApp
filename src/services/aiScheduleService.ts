@@ -1,4 +1,5 @@
 import { Session, Speaker } from '../types';
+import { sortSessionsChronologically } from '../utils/sessionSorting';
 
 export interface AiExtractionOptions {
   targetDayHint?: string;
@@ -229,16 +230,6 @@ export function normalizeExtractedDay(rawDayInput: unknown, fallbackDay = 'Hari 
   return original;
 }
 
-function getDaySortRank(day: string): number {
-  const lower = (day || '').toLowerCase();
-  if (lower.includes('pre-congress') || lower.includes('workshop')) return 0;
-  if (lower === 'hari i') return 1;
-  if (lower === 'hari ii') return 2;
-  if (lower === 'hari iii') return 3;
-  if (lower === 'hari iv') return 4;
-  return 5;
-}
-
 function normalizeTimeValue(raw: string): string {
   const match = String(raw || '').match(/(\d{1,2})[:.](\d{2})/);
   if (!match) return '';
@@ -425,12 +416,7 @@ export function sanitizeExtractedSessions(
       } as Session;
     });
 
-  // Sort cleanly by day order, then chronologically by startTime
-  return sanitized.sort((a, b) => {
-    const rankDiff = getDaySortRank(a.day) - getDaySortRank(b.day);
-    if (rankDiff !== 0) return rankDiff;
-    if (a.day !== b.day) return a.day.localeCompare(b.day);
-    return a.startTime.localeCompare(b.startTime);
-  });
+  // Sort cleanly by day order, then chronologically by start/end time & room
+  return sortSessionsChronologically(sanitized);
 }
 

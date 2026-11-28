@@ -14,7 +14,12 @@ export function formatSessionWhatsAppMessage(session: Session, eventInfo?: Sympo
   const currentUrl = buildShareableHashUrl(isWorkshop ? 'workshop' : 'symposium');
 
   const speakerLines = session.speakers.length > 0
-    ? session.speakers.map((sp, idx) => `  ${idx + 1}. *${sp.name}*\n     _${sp.institution}_`).join('\n')
+    ? session.speakers
+        .map((sp, idx) => {
+          const inst = sp.institution?.trim();
+          return inst ? `  ${idx + 1}. *${sp.name}*\n     _${inst}_` : `  ${idx + 1}. *${sp.name}*`;
+        })
+        .join('\n')
     : '  - _(Daftar narasumber dalam konfirmasi)_';
 
   const clinicalKeypoints = session.keyTakeaways && session.keyTakeaways.length > 0
@@ -46,7 +51,7 @@ _${info.theme}_
 ${speakerLines}${clinicalKeypoints}
 
 ━━━━━━━━━━━━━━━━━━━━━
-💡 *Catatan:* Sesi berakreditasi SKP Kemenkes RI / IDI. Pastikan hadir tepat waktu dan lakukan presensi melalui QR Code di aplikasi simposium.
+💡 *Catatan:* Pastikan hadir tepat waktu dan lakukan presensi melalui QR Code di aplikasi simposium.
 
 📲 *Buka Aplikasi Simposium:*
 ${currentUrl}

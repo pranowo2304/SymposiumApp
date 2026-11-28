@@ -228,8 +228,14 @@ ${session.keyTakeaways?.map((k) => `• ${k}`).join('\n') || ''}
   const handleShareWhatsApp = () => {
     const eventTitle = eventInfo?.title || 'Simposium Nasional Kedokteran 2026';
     const speakersList = session.speakers
-      .map((s) => `• *${s.name}* (${s.institution})`)
+      .map((s) => {
+        const inst = s.institution?.trim();
+        return inst ? `• *${s.name}* (${inst})` : `• *${s.name}*`;
+      })
       .join('\n');
+    const formattedTime = /\bWIB\b/i.test(session.timeString)
+      ? session.timeString
+      : `${session.timeString} WIB`;
     const takeawaysList =
       session.keyTakeaways && session.keyTakeaways.length > 0
         ? `\n💡 *Poin Utama:*\n${session.keyTakeaways
@@ -246,9 +252,8 @@ ${session.keyTakeaways?.map((k) => `• ${k}`).join('\n') || ''}
 
 🗓️ *WAKTU & TEMPAT:*
 • Hari/Tgl: ${session.day}, ${session.date}
-• Jam: ${session.timeString} WIB
+• Jam: ${formattedTime}
 • Ruangan: ${session.room} (${session.floor})
-• Akreditasi: 4 SKP Kemenkes RI
 
 👨‍⚕️ *PEMBICARA:*
 ${speakersList}

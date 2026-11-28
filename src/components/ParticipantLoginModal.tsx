@@ -4,7 +4,6 @@ import {
   IdCard,
   LogIn,
   LogOut,
-  RefreshCw,
   ShieldAlert,
   X,
 } from 'lucide-react';
@@ -230,32 +229,14 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
                 />
               )}
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                >
-                  <span>Masuk ke Portal</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setErrorMsg(null);
-                    setShowSwitchForm(true);
-                  }}
-                  className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 shrink-0" />
-                  <span>Ganti Id_registrant</span>
-                </button>
+              <div className="flex pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => {
                     onLogout();
                     onClose();
                   }}
-                  className="min-h-[44px] py-2.5 px-3.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  className="w-full min-h-[44px] py-2.5 px-3.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
                   <LogOut className="w-3.5 h-3.5 shrink-0" />
                   <span>Logout</span>

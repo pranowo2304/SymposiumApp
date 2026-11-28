@@ -680,7 +680,10 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         website: exhibitor.website || '',
         phone: exhibitor.phone || '',
         demoSchedule: exhibitor.demoSchedule || '',
-        highlight: exhibitor.highlight || ''
+        highlight:
+          exhibitor.highlight?.trim().toLowerCase() === 'sample produk medis gratis'
+            ? ''
+            : exhibitor.highlight || ''
       });
       setProductsRaw(exhibitor.featuredProducts.join(', '));
     } else {
@@ -697,7 +700,7 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
         website: 'https://www.perusahaan.co.id',
         phone: '+62 21 555 1234',
         demoSchedule: 'Pukul 11:00 WIB: Live Demo & Diskusi',
-        highlight: 'Sample Produk Medis Gratis'
+        highlight: ''
       });
       setProductsRaw('Produk Farmasi A, Produk Diagnostik B, Terapi C');
     }

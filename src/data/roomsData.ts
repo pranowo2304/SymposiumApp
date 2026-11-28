@@ -62,16 +62,16 @@ export const DEFAULT_ROOMS_DATA: Room[] = [
   },
   {
     id: "Foyer & Exhibition Amartapura",
-    name: "Foyer & Exhibition Area Amartapura",
+    name: "Foyer Amartapura Ballroom (Area Booth Pameran)",
     shortName: "Foyer Amartapura",
     floor: "Lantai 1",
     capacity: 300,
     x: 50,
-    y: 75,
-    color: "bg-teal-600",
-    badgeBg: "bg-teal-600 text-white",
-    description: "Area pameran farmasi veteriner, peralatan bedah hewan, USG, anestesi hewan, coffee break networking, dan meja registrasi barcode QR.",
-    facilities: ["Booth Pameran Farmasi Veteriner", "Coffee Break Counter", "Meja Registrasi Barcode QR", "Helpdesk SKP PDHI"],
+    y: 81,
+    color: "bg-amber-500",
+    badgeBg: "bg-amber-600 text-white",
+    description: "Lokasi seluruh Booth Pameran Industri Farmasi & Alat Kesehatan di Foyer Amartapura Ballroom Lantai 1, dilengkapi coffee break counter dan meja registrasi.",
+    facilities: ["Area Booth Pameran Industri", "Coffee Break Counter", "Meja Registrasi Barcode QR", "Helpdesk SKP PDHI"],
     type: "facility"
   }
 ];

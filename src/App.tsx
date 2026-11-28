@@ -186,6 +186,10 @@ export default function App() {
     return 'home';
   });
   const [tabDirection, setTabDirection] = useState<number>(1);
+  const [venueFocusTarget, setVenueFocusTarget] = useState<{
+    focusBoothArea?: boolean;
+    nonce: number;
+  } | null>(null);
 
   // Broadcast Notification State (Cross-Tab & Real-Time Sync)
   const [activeBroadcast, setActiveBroadcast] = useState<BroadcastNotification | null>(() => {
@@ -1502,7 +1506,10 @@ export default function App() {
       return (
         <ExhibitionView
           exhibitors={exhibitors}
-          onOpenVenue={() => navigateToTab('venue')}
+          onOpenVenue={() => {
+            setVenueFocusTarget({ focusBoothArea: true, nonce: Date.now() });
+            navigateToTab('venue');
+          }}
         />
       );
     }
@@ -1511,6 +1518,11 @@ export default function App() {
       return (
         <InteractiveVenueMap
           rooms={rooms}
+          sessions={displaySessions}
+          exhibitors={exhibitors}
+          initialFocusTarget={venueFocusTarget}
+          onSelectSession={(s) => handleOpenSession(s, 'abstract')}
+          onOpenExhibition={() => navigateToTab('pameran')}
           eventInfo={eventInfo}
         />
       );

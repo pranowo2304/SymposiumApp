@@ -21,12 +21,22 @@ import {
   Check,
   DownloadCloud,
   RefreshCw,
-  X
+  X,
+  Store,
+  Calendar,
+  Clock,
+  ChevronRight,
+  Mic2
 } from 'lucide-react';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { DEFAULT_ROOMS_DATA } from '../data/roomsData';
-import { Session, Speaker, Room, SymposiumInfo } from '../types';
+import { EXHIBITORS_DATA } from '../data/exhibitorsData';
+import { Session, Speaker, Room, SymposiumInfo, Exhibitor } from '../types';
 import { getThemePalette } from '../utils/themeColors';
+import {
+  sortSessionsChronologically,
+  getSessionTimeRangeMinutes
+} from '../utils/sessionSorting';
 import {
   saveVenueMapToCache,
   loadVenueMapFromCache,
@@ -39,8 +49,14 @@ import {
 interface InteractiveVenueMapProps {
   rooms?: Room[];
   sessions?: Session[];
+  exhibitors?: Exhibitor[];
+  initialFocusTarget?: {
+    focusBoothArea?: boolean;
+    nonce: number;
+  } | null;
   onSelectSession?: (session: Session) => void;
   onSelectSpeaker?: (speaker: Speaker) => void;
+  onOpenExhibition?: () => void;
   eventInfo?: SymposiumInfo;
 }
 
@@ -53,7 +69,198 @@ interface RoomGeoPolygon {
   height: number; // percentage
   label: string;
   entryDoor?: { x: number; y: number; label?: string };
+  isBoothArea?: boolean;
 }
+
+const DEFAULT_BOOTH_FOYER_ROOM: Room = {
+  id: 'Foyer & Exhibition Amartapura',
+  name: 'Foyer Amartapura Ballroom (Area Booth Pameran)',
+  shortName: 'Foyer Amartapura',
+  floor: 'Lantai 1',
+  capacity: 300,
+  x: 50,
+  y: 81,
+  color: 'bg-amber-500',
+  badgeBg: 'bg-amber-600 text-white',
+  description:
+    'Lokasi seluruh Booth Pameran Industri Farmasi & Alat Kesehatan di Foyer Amartapura Ballroom Lantai 1, dilengkapi coffee break counter dan meja registrasi.',
+  facilities: [
+    'Area Booth Pameran Industri',
+    'Coffee Break Counter',
+    'Meja Registrasi Barcode QR',
+    'Helpdesk SKP PDHI'
+  ],
+  type: 'facility'
+};
+
+const isBoothFoyerRoom = (room?: Room | null): boolean => {
+  if (!room) return false;
+  if (room.id === 'Foyer & Exhibition Amartapura') return true;
+  const text = `${room.id} ${room.name} ${room.shortName}`.toLowerCase();
+  const floorText = (room.floor || '').toLowerCase();
+  return (
+    (text.includes('foyer') && text.includes('amartapura')) ||
+    ((text.includes('foyer') || text.includes('exhibition') || text.includes('booth')) &&
+      (floorText.includes('1') || floorText.includes('atas')))
+  );
+};
+
+const MONTH_NAME_MAP: Record<string, number> = {
+  jan: 0,
+  januari: 0,
+  january: 0,
+  feb: 1,
+  februari: 1,
+  february: 1,
+  mar: 2,
+  maret: 2,
+  march: 2,
+  apr: 3,
+  april: 3,
+  mei: 4,
+  may: 4,
+  jun: 5,
+  juni: 5,
+  june: 5,
+  jul: 6,
+  juli: 6,
+  july: 6,
+  agu: 7,
+  agt: 7,
+  agustus: 7,
+  aug: 7,
+  august: 7,
+  sep: 8,
+  sept: 8,
+  september: 8,
+  okt: 9,
+  oktober: 9,
+  oct: 9,
+  october: 9,
+  nov: 10,
+  november: 10,
+  des: 11,
+  desember: 11,
+  dec: 11,
+  december: 11
+};
+
+const parseCalendarDateFromText = (
+  raw?: string | null
+): { year?: number; month: number; day: number } | null => {
+  if (!raw) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+
+  // ISO format: YYYY-MM-DD
+  const iso = text.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/);
+  if (iso) {
+    const year = parseInt(iso[1], 10);
+    const month = parseInt(iso[2], 10) - 1;
+    const day = parseInt(iso[3], 10);
+    if (month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+      return { year, month, day };
+    }
+  }
+
+  // DD/MM/YYYY or DD-MM-YYYY
+  const dmy = text.match(/\b(\d{1,2})[/-](\d{1,2})[/-](20\d{2})\b/);
+  if (dmy) {
+    const day = parseInt(dmy[1], 10);
+    const month = parseInt(dmy[2], 10) - 1;
+    const year = parseInt(dmy[3], 10);
+    if (month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+      return { year, month, day };
+    }
+  }
+
+  // DD MonthName [YYYY], e.g. "Sabtu, 28 November 2026" or "Workshop (28 Nov)"
+  const named = text.match(/\b(\d{1,2})\s+([A-Za-z]+)(?:\s+(20\d{2}))?\b/);
+  if (named) {
+    const day = parseInt(named[1], 10);
+    const monthKey = named[2].toLowerCase();
+    const month = MONTH_NAME_MAP[monthKey];
+    const year = named[3] ? parseInt(named[3], 10) : undefined;
+    if (month !== undefined && day >= 1 && day <= 31) {
+      return { year, month, day };
+    }
+  }
+
+  return null;
+};
+
+const isSessionOnToday = (session: Session, now: Date): boolean => {
+  const parsed =
+    parseCalendarDateFromText(session.date) ||
+    parseCalendarDateFromText(session.day);
+  if (!parsed) return false;
+  if (parsed.day !== now.getDate() || parsed.month !== now.getMonth()) {
+    return false;
+  }
+  if (parsed.year !== undefined && parsed.year !== now.getFullYear()) {
+    return false;
+  }
+  return true;
+};
+
+type SessionLiveStatus = 'live' | 'upcoming' | 'finished' | 'scheduled';
+
+const getSessionLiveStatus = (
+  session: Session,
+  now: Date
+): SessionLiveStatus => {
+  if (!isSessionOnToday(session, now)) return 'scheduled';
+  const { start, end } = getSessionTimeRangeMinutes(session);
+  if (start === Number.MAX_SAFE_INTEGER) return 'upcoming';
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const effectiveEnd = end > start ? end : start + 45;
+  if (nowMinutes >= start && nowMinutes < effectiveEnd) return 'live';
+  if (nowMinutes < start) return 'upcoming';
+  return 'finished';
+};
+
+const normalizeRoomToken = (val?: string | null): string =>
+  String(val || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
+const escapeRegExp = (str: string): string =>
+  str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const doesSessionMatchRoom = (session: Session, room: Room): boolean => {
+  const sRoom = normalizeRoomToken(session.room);
+  if (!sRoom) return false;
+
+  const rId = normalizeRoomToken(room.id);
+  const rName = normalizeRoomToken(room.name);
+  const rShort = normalizeRoomToken(room.shortName);
+
+  if (sRoom === rId || sRoom === rName || (rShort && sRoom === rShort)) {
+    return true;
+  }
+
+  if (isBoothFoyerRoom(room)) {
+    if (
+      (sRoom.includes('foyer') || sRoom.includes('exhibition') || sRoom.includes('pameran')) &&
+      !sRoom.includes('ground')
+    ) {
+      return true;
+    }
+  }
+
+  if (rShort && rShort.length >= 4) {
+    const shortRegex = new RegExp(`\\b${escapeRegExp(rShort)}\\b`, 'i');
+    if (shortRegex.test(sRoom)) return true;
+  }
+
+  if (rId && rId.length >= 4) {
+    const idRegex = new RegExp(`\\b${escapeRegExp(rId)}\\b`, 'i');
+    if (idRegex.test(sRoom)) return true;
+  }
+
+  return false;
+};
 
 const FLOOR_ROOM_POLYGONS: Record<string, RoomGeoPolygon[]> = {
   'Ground Floor': [
@@ -110,8 +317,9 @@ const FLOOR_ROOM_POLYGONS: Record<string, RoomGeoPolygon[]> = {
       y: 70,
       width: 84,
       height: 22,
-      label: "Foyer & Exhibition Area Amartapura",
-      entryDoor: { x: 50, y: 70, label: "Lobby Pameran Amartapura" }
+      label: "Foyer Amartapura Ballroom (Area Booth Pameran)",
+      entryDoor: { x: 50, y: 70, label: "Akses Foyer & Booth Pameran" },
+      isBoothArea: true
     }
   ],
   'Lantai Dasar': [
@@ -231,8 +439,9 @@ const FLOOR_ROOM_POLYGONS: Record<string, RoomGeoPolygon[]> = {
       y: 72,
       width: 84,
       height: 20,
-      label: "Foyer Ballroom & Exhibition Area",
-      entryDoor: { x: 50, y: 72, label: "Akses Lobby Utama" }
+      label: "Foyer Amartapura Ballroom (Area Booth Pameran)",
+      entryDoor: { x: 50, y: 72, label: "Akses Foyer & Booth Pameran" },
+      isBoothArea: true
     }
   ],
   'Lantai 2': [
@@ -297,6 +506,11 @@ const FLOOR_ROOM_POLYGONS: Record<string, RoomGeoPolygon[]> = {
 
 export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
   rooms,
+  sessions,
+  exhibitors,
+  initialFocusTarget,
+  onSelectSession,
+  onOpenExhibition,
   eventInfo
 }) => {
   // Offline Cache Snapshot & Connectivity State
@@ -312,6 +526,46 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     return initial?.cachedAt || null;
   });
 
+  // Live clock for "Hari Ini" & "Sedang Berlangsung" status
+  const [now, setNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const todayFormatted = useMemo(() => {
+    try {
+      return now.toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+    } catch {
+      return now.toDateString();
+    }
+  }, [now]);
+
+  const currentSessions = useMemo(() => {
+    const raw =
+      sessions && sessions.length > 0
+        ? sessions
+        : cachedSnapshot?.sessions && cachedSnapshot.sessions.length > 0
+        ? cachedSnapshot.sessions
+        : [];
+    return sortSessionsChronologically(raw);
+  }, [sessions, cachedSnapshot]);
+
+  const sortedExhibitors = useMemo(() => {
+    const source = exhibitors !== undefined ? exhibitors : EXHIBITORS_DATA;
+    return [...source].sort((a, b) =>
+      (a.boothNumber || '').localeCompare(b.boothNumber || '', 'id', {
+        numeric: true,
+        sensitivity: 'base'
+      })
+    );
+  }, [exhibitors]);
+
   const currentRooms = useMemo(() => {
     const rawRooms =
       rooms && rooms.length > 0
@@ -320,12 +574,20 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
         ? cachedSnapshot.rooms
         : DEFAULT_ROOMS_DATA;
     const seen = new Set<string>();
-    return rawRooms.filter(r => {
+    const deduped = rawRooms.filter(r => {
       if (!r?.id || seen.has(r.id)) return false;
       seen.add(r.id);
       return true;
     });
+    if (!deduped.some((r) => isBoothFoyerRoom(r))) {
+      return [...deduped, DEFAULT_BOOTH_FOYER_ROOM];
+    }
+    return deduped;
   }, [rooms, cachedSnapshot]);
+
+  const boothFoyerRoom = useMemo(() => {
+    return currentRooms.find((r) => isBoothFoyerRoom(r)) || DEFAULT_BOOTH_FOYER_ROOM;
+  }, [currentRooms]);
 
   const activeFloorPolygonsMap = useMemo(() => {
     if (!isOnline && cachedSnapshot?.floorPolygons && Object.keys(cachedSnapshot.floorPolygons).length > 0) {
@@ -351,6 +613,9 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
 
   // Floor Selection & Smooth Transition Animation States
   const [selectedFloor, setSelectedFloor] = useState<string>(() => {
+    if (initialFocusTarget?.focusBoothArea) {
+      return boothFoyerRoom.floor || 'Lantai 1';
+    }
     if (savedUIState?.selectedFloor) return savedUIState.selectedFloor;
     return currentRooms[0]?.floor || 'Ground Floor';
   });
@@ -360,6 +625,9 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
   const floorToastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [activePinId, setActivePinId] = useState<string>(() => {
+    if (initialFocusTarget?.focusBoothArea) {
+      return boothFoyerRoom.id;
+    }
     if (savedUIState?.activePinId && currentRooms.some(r => r.id === savedUIState.activePinId)) {
       return savedUIState.activePinId;
     }
@@ -387,13 +655,13 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     };
   }, []);
 
-  // Automatically cache the venue map data (rooms, floor polygons, eventInfo) for offline access
+  // Automatically cache the venue map data (rooms, sessions, floor polygons, eventInfo) for offline access
   const handleManualSyncOfflineCache = useCallback(async () => {
     setIsSyncingCache(true);
     try {
       const result = await saveVenueMapToCache(
         currentRooms,
-        [],
+        currentSessions,
         FLOOR_ROOM_POLYGONS,
         info
       );
@@ -403,11 +671,11 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     } finally {
       setTimeout(() => setIsSyncingCache(false), 350);
     }
-  }, [currentRooms, info]);
+  }, [currentRooms, currentSessions, info]);
 
   useEffect(() => {
     let isMounted = true;
-    saveVenueMapToCache(currentRooms, [], FLOOR_ROOM_POLYGONS, info).then(res => {
+    saveVenueMapToCache(currentRooms, currentSessions, FLOOR_ROOM_POLYGONS, info).then(res => {
       if (isMounted && res.success) {
         setLastCachedAt(res.cachedAt);
       }
@@ -415,7 +683,7 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [currentRooms, info]);
+  }, [currentRooms, currentSessions, info]);
 
   // Persist user's active floor and pin for seamless offline navigation
   useEffect(() => {
@@ -623,21 +891,31 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
     touchStartRef.current.dist = undefined;
   };
 
-  // Filter pins based on floor and search
+  // Filter pins based on floor and search (including booth/exhibitor search)
   const filteredPins = useMemo(() => {
     return currentRooms.filter(pin => {
       if (selectedFloor !== 'Semua' && pin.floor !== selectedFloor) return false;
       if (mapSearchQuery.trim()) {
         const q = mapSearchQuery.toLowerCase();
-        return (
+        const matchesRoom =
           pin.name.toLowerCase().includes(q) ||
           pin.shortName.toLowerCase().includes(q) ||
-          pin.description.toLowerCase().includes(q)
-        );
+          pin.description.toLowerCase().includes(q);
+        if (matchesRoom) return true;
+        if (isBoothFoyerRoom(pin)) {
+          if ('booth pameran foyer amartapura lantai 1'.includes(q)) return true;
+          return sortedExhibitors.some(
+            (ex) =>
+              (ex.name || '').toLowerCase().includes(q) ||
+              (ex.boothNumber || '').toLowerCase().includes(q) ||
+              (ex.zone || '').toLowerCase().includes(q)
+          );
+        }
+        return false;
       }
       return true;
     });
-  }, [currentRooms, selectedFloor, mapSearchQuery]);
+  }, [currentRooms, selectedFloor, mapSearchQuery, sortedExhibitors]);
 
   const activePin = useMemo(() => {
     return currentRooms.find(p => p.id === activePinId) || currentRooms[0] || DEFAULT_ROOMS_DATA[0];
@@ -681,21 +959,102 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
   }, [currentRooms, selectedFloor, handleSelectFloor]);
 
   // Center view on specific room
-  const handleFocusRoom = (pinId: string) => {
+  const handleFocusRoom = useCallback((pinId: string) => {
     setActivePinId(pinId);
     const pin = currentRooms.find(r => r.id === pinId);
     if (pin) {
       if (selectedFloor !== 'Semua' && pin.floor !== selectedFloor) {
         handleSelectFloor(pin.floor);
       }
-      const offsetX = (50 - pin.x) * 3;
-      const offsetY = (50 - pin.y) * 3;
+      const offsetX = (50 - (pin.x ?? 50)) * 2.5;
+      const offsetY = (50 - (pin.y ?? 50)) * 2.5;
       setPanOffset({ x: offsetX, y: offsetY });
-      if (zoomLevel < 1.2) {
-        setZoomLevel(1.3);
+      setZoomLevel(prev => (prev < 1.15 ? 1.2 : prev));
+    }
+  }, [currentRooms, selectedFloor, handleSelectFloor]);
+
+  const handleFocusBoothArea = useCallback(() => {
+    setMapSearchQuery('');
+    setActivePinId(boothFoyerRoom.id);
+    const targetFloor = boothFoyerRoom.floor || 'Lantai 1';
+    if (selectedFloor !== targetFloor) {
+      handleSelectFloor(targetFloor);
+    }
+    setPanOffset({ x: 0, y: -35 });
+    setZoomLevel(1.1);
+  }, [boothFoyerRoom, selectedFloor, handleSelectFloor]);
+
+  // Auto-focus Foyer Amartapura Ballroom Lantai 1 when navigated from Booth/Exhibition page
+  useEffect(() => {
+    if (!initialFocusTarget?.focusBoothArea) return;
+    setSelectedFloor(boothFoyerRoom.floor || 'Lantai 1');
+    setActivePinId(boothFoyerRoom.id);
+    setPanOffset({ x: 0, y: -30 });
+    setZoomLevel(1.08);
+  }, [initialFocusTarget?.nonce, initialFocusTarget?.focusBoothArea, boothFoyerRoom]);
+
+  // Schedule tab inside room details card: defaults to 'TODAY' (Hari Ini) whenever a room is clicked
+  const [roomScheduleDayFilter, setRoomScheduleDayFilter] = useState<string>('TODAY');
+  useEffect(() => {
+    setRoomScheduleDayFilter('TODAY');
+  }, [activePinId]);
+
+  // Per-room today session counts & live status for map pins
+  const roomTodayStats = useMemo(() => {
+    const map = new Map<string, { todayCount: number; hasLive: boolean }>();
+    for (const room of currentRooms) {
+      let todayCount = 0;
+      let hasLive = false;
+      for (const session of currentSessions) {
+        if (!doesSessionMatchRoom(session, room)) continue;
+        if (isSessionOnToday(session, now)) {
+          todayCount += 1;
+          if (getSessionLiveStatus(session, now) === 'live') {
+            hasLive = true;
+          }
+        }
+      }
+      map.set(room.id, { todayCount, hasLive });
+    }
+    return map;
+  }, [currentRooms, currentSessions, now]);
+
+  // Sessions matching the currently selected room
+  const activeRoomAllSessions = useMemo(() => {
+    return currentSessions.filter((s) => doesSessionMatchRoom(s, activePin));
+  }, [currentSessions, activePin]);
+
+  const activeRoomTodaySessions = useMemo(() => {
+    return activeRoomAllSessions.filter((s) => isSessionOnToday(s, now));
+  }, [activeRoomAllSessions, now]);
+
+  const activeRoomAvailableDays = useMemo(() => {
+    const seen = new Set<string>();
+    const days: string[] = [];
+    for (const s of activeRoomAllSessions) {
+      const label = (s.day || '').trim();
+      if (label && !seen.has(label)) {
+        seen.add(label);
+        days.push(label);
       }
     }
-  };
+    return days;
+  }, [activeRoomAllSessions]);
+
+  const displayedRoomSessions = useMemo(() => {
+    if (roomScheduleDayFilter === 'TODAY') {
+      return activeRoomTodaySessions;
+    }
+    return activeRoomAllSessions.filter(
+      (s) => (s.day || '').trim() === roomScheduleDayFilter
+    );
+  }, [roomScheduleDayFilter, activeRoomTodaySessions, activeRoomAllSessions]);
+
+  const hasLiveInActiveRoom = useMemo(() => {
+    return activeRoomTodaySessions.some(
+      (s) => getSessionLiveStatus(s, now) === 'live'
+    );
+  }, [activeRoomTodaySessions, now]);
 
   // Shared sub-component: Room Details Card (used in standard grid and fullscreen sidebar)
   const renderRoomDetailsCard = (isSidebar = false) => (
@@ -743,6 +1102,168 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
           </div>
         </div>
 
+        {/* Today's Events in Selected Room */}
+        <div className="bg-slate-950/75 border border-sky-500/30 rounded-xl p-3 space-y-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <h4 className="text-xs font-black text-white uppercase tracking-wide">
+                  {roomScheduleDayFilter === 'TODAY'
+                    ? 'Acara Hari Ini'
+                    : `Jadwal ${roomScheduleDayFilter}`}
+                </h4>
+              </div>
+              {roomScheduleDayFilter === 'TODAY' && (
+                <p className="text-[10px] text-slate-400 font-medium">
+                  {todayFormatted}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 shrink-0">
+              {roomScheduleDayFilter === 'TODAY' && hasLiveInActiveRoom && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/50 text-[10px] font-black">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  LIVE
+                </span>
+              )}
+              <span className="px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 border border-sky-400/30 text-[10px] font-black">
+                {displayedRoomSessions.length} Sesi
+              </span>
+            </div>
+          </div>
+
+          {/* Day Filter Switcher (Hari Ini default + other days in this room) */}
+          {activeRoomAvailableDays.length > 0 && (
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-0.5">
+              <button
+                type="button"
+                onClick={() => setRoomScheduleDayFilter('TODAY')}
+                className={`px-2 py-1 rounded-md text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                  roomScheduleDayFilter === 'TODAY'
+                    ? 'bg-sky-500 text-slate-950 font-black'
+                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                }`}
+              >
+                Hari Ini ({activeRoomTodaySessions.length})
+              </button>
+              {activeRoomAvailableDays.map((dayLabel) => (
+                <button
+                  key={dayLabel}
+                  type="button"
+                  onClick={() => setRoomScheduleDayFilter(dayLabel)}
+                  className={`px-2 py-1 rounded-md text-[10px] font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                    roomScheduleDayFilter === dayLabel
+                      ? 'bg-sky-500 text-slate-950 font-black'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  {dayLabel}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Sessions List */}
+          {displayedRoomSessions.length === 0 ? (
+            <div className="rounded-lg bg-slate-900/90 border border-slate-800 p-3 text-center space-y-2">
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                {roomScheduleDayFilter === 'TODAY'
+                  ? `Tidak ada acara yang dijadwalkan hari ini di ${activePin.shortName}.`
+                  : `Belum ada jadwal sesi untuk ${roomScheduleDayFilter} di ${activePin.shortName}.`}
+              </p>
+              {roomScheduleDayFilter === 'TODAY' && activeRoomAvailableDays.length > 0 && (
+                <div className="flex flex-wrap items-center justify-center gap-1.5 pt-0.5">
+                  {activeRoomAvailableDays.map((dayLabel) => (
+                    <button
+                      key={dayLabel}
+                      type="button"
+                      onClick={() => setRoomScheduleDayFilter(dayLabel)}
+                      className="px-2 py-1 rounded-md bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-[10px] font-bold cursor-pointer"
+                    >
+                      Lihat {dayLabel}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
+              {displayedRoomSessions.map((session) => {
+                const liveStatus = getSessionLiveStatus(session, now);
+                const isLive = liveStatus === 'live';
+                const timeDisplay =
+                  (session.timeString || '').trim() ||
+                  `${session.startTime || ''}${session.endTime ? ` - ${session.endTime}` : ''}`;
+                const speakerNames = (session.speakers || [])
+                  .map((sp) => sp.name)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .join(', ');
+
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => onSelectSession?.(session)}
+                    disabled={!onSelectSession}
+                    className={`w-full text-left rounded-lg p-2.5 border transition-all space-y-1 ${
+                      isLive
+                        ? 'bg-emerald-500/15 border-emerald-400/60 hover:bg-emerald-500/20'
+                        : 'bg-slate-900/90 border-slate-800 hover:border-sky-500/50 hover:bg-slate-800/80'
+                    } ${onSelectSession ? 'cursor-pointer' : 'cursor-default'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-sky-300">
+                        <Clock className="w-3 h-3 shrink-0" />
+                        <span>{timeDisplay || 'Jadwal Sesi'}</span>
+                      </span>
+
+                      {liveStatus === 'live' ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500 text-slate-950 text-[9px] font-black uppercase tracking-wider shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-950 animate-pulse" />
+                          Berlangsung
+                        </span>
+                      ) : liveStatus === 'upcoming' ? (
+                        <span className="px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 text-[9px] font-bold shrink-0">
+                          Akan Datang
+                        </span>
+                      ) : liveStatus === 'finished' ? (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 text-[9px] font-bold shrink-0">
+                          Selesai
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[9px] font-bold shrink-0">
+                          {session.date || session.day}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-start justify-between gap-1.5">
+                      <p className="text-xs font-bold text-white leading-snug line-clamp-2">
+                        {session.title}
+                      </p>
+                      {onSelectSession && (
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                      )}
+                    </div>
+
+                    {(speakerNames || session.moderator) && (
+                      <p className="text-[10px] text-slate-400 flex items-center gap-1 truncate">
+                        <Mic2 className="w-3 h-3 text-slate-500 shrink-0" />
+                        <span className="truncate">
+                          {speakerNames || `Moderator: ${session.moderator}`}
+                        </span>
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Room Description */}
         <p className="text-xs text-slate-300 leading-relaxed">
           {activePin.description}
@@ -765,6 +1286,54 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
             ))}
           </div>
         </div>
+
+        {/* Dedicated Booth Exhibition Directory when Foyer Amartapura Ballroom (Lantai 1) is selected */}
+        {isBoothFoyerRoom(activePin) && (
+          <div className="bg-amber-500/10 border border-amber-400/35 rounded-xl p-3 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <Store className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="text-xs font-black text-amber-200">
+                  Lokasi Booth Pameran (Lt. 1)
+                </span>
+              </div>
+              <span className="px-2 py-0.5 rounded-md bg-amber-400 text-slate-950 text-[10px] font-black shrink-0">
+                {sortedExhibitors.length} Booth
+              </span>
+            </div>
+
+            <p className="text-[11px] text-amber-100/85 leading-relaxed">
+              Seluruh booth pameran industri berada di <strong className="text-white">Foyer Amartapura Ballroom, Lantai 1</strong> (tepat di depan pintu masuk Ballroom Amartapura A &amp; B).
+            </p>
+
+            {sortedExhibitors.length > 0 && (
+              <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                {sortedExhibitors.map((ex) => (
+                  <div
+                    key={ex.id}
+                    className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-slate-950/70 border border-amber-500/20 text-[11px]"
+                  >
+                    <span className="font-bold text-slate-100 truncate">{ex.name}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono font-bold text-[10px] shrink-0">
+                      {ex.boothNumber}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {onOpenExhibition && (
+              <button
+                type="button"
+                onClick={onOpenExhibition}
+                className="w-full py-2 px-3 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-black flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <Store className="w-3.5 h-3.5" />
+                <span>Lihat Daftar Lengkap Booth</span>
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Bottom Info Footer */}
@@ -890,7 +1459,9 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
 
             {/* Room Boundary Polygons with Selected Highlights */}
             {currentFloorPolygons.map((poly) => {
-              const isSelected = activePinId === poly.roomId;
+              const targetRoomId = poly.isBoothArea ? boothFoyerRoom.id : poly.roomId;
+              const isSelected = activePinId === targetRoomId || activePinId === poly.roomId;
+              const isBooth = Boolean(poly.isBoothArea);
 
               return (
                 <g 
@@ -898,7 +1469,7 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                   className="cursor-pointer pointer-events-auto group/polygon"
                   onClick={(e) => {
                     e.stopPropagation();
-                    handlePinClick(poly.roomId);
+                    handlePinClick(targetRoomId);
                   }}
                 >
                   {/* Room Area Rectangle */}
@@ -910,12 +1481,38 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                     rx="2"
                     className={`transition-all duration-300 ${
                       isSelected
-                        ? 'stroke-sky-300 fill-sky-500/35 group-hover/polygon:fill-sky-500/45'
-                        : 'stroke-slate-700 fill-slate-800/30 group-hover/polygon:stroke-sky-400 group-hover/polygon:fill-slate-800/70'
+                        ? isBooth
+                          ? 'stroke-amber-300 fill-amber-500/35 group-hover/polygon:fill-amber-500/45'
+                          : 'stroke-sky-300 fill-sky-500/35 group-hover/polygon:fill-sky-500/45'
+                        : isBooth
+                          ? 'stroke-amber-500/80 fill-amber-500/15 group-hover/polygon:stroke-amber-300 group-hover/polygon:fill-amber-500/30'
+                          : 'stroke-slate-700 fill-slate-800/30 group-hover/polygon:stroke-sky-400 group-hover/polygon:fill-slate-800/70'
                     }`}
-                    strokeWidth={isSelected ? '2' : '0.7'}
+                    strokeWidth={isSelected ? '2' : isBooth ? '1.1' : '0.7'}
                     filter={isSelected ? 'url(#selectedGlow)' : undefined}
                   />
+
+                  {/* Visual Booth Slots Row inside Foyer Amartapura Ballroom (Lantai 1) */}
+                  {isBooth && (
+                    <g className="pointer-events-none">
+                      {[12, 20, 28, 36, 56, 64, 72, 80].map((bx, idx) => (
+                        <rect
+                          key={idx}
+                          x={bx}
+                          y={poly.y + poly.height - 5.2}
+                          width="6"
+                          height="3.2"
+                          rx="0.7"
+                          className={
+                            isSelected
+                              ? 'fill-amber-300/85 stroke-amber-100'
+                              : 'fill-amber-400/50 stroke-amber-300/70'
+                          }
+                          strokeWidth="0.35"
+                        />
+                      ))}
+                    </g>
+                  )}
 
                   {/* Pulsating dashed highlight outline for selected room on blueprint */}
                   {isSelected && (
@@ -925,7 +1522,7 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                       width={poly.width + 1.4}
                       height={poly.height + 1.4}
                       rx="2.8"
-                      className="stroke-sky-300 fill-none stroke-[1.3] animate-pulse pointer-events-none"
+                      className={`${isBooth ? 'stroke-amber-300' : 'stroke-sky-300'} fill-none stroke-[1.3] animate-pulse pointer-events-none`}
                       strokeDasharray="2.5 1.5"
                       filter="url(#selectedGlow)"
                     />
@@ -934,25 +1531,41 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                   {/* Room Name Label directly on SVG Floorplan */}
                   <text
                     x={poly.x + poly.width / 2}
-                    y={poly.y + poly.height / 2 - 2}
+                    y={poly.y + (isBooth ? 6.5 : poly.height / 2 - 2)}
                     textAnchor="middle"
                     className={`font-bold text-[2.8px] select-none pointer-events-none transition-colors ${
-                      isSelected ? 'fill-sky-200 font-black' : 'fill-slate-300 group-hover/polygon:fill-white'
+                      isSelected
+                        ? isBooth
+                          ? 'fill-amber-100 font-black'
+                          : 'fill-sky-200 font-black'
+                        : isBooth
+                          ? 'fill-amber-200 group-hover/polygon:fill-white'
+                          : 'fill-slate-300 group-hover/polygon:fill-white'
                     }`}
                   >
                     {poly.label}
                   </text>
                   <text
                     x={poly.x + poly.width / 2}
-                    y={poly.y + poly.height / 2 + 2.5}
+                    y={poly.y + (isBooth ? 10.5 : poly.height / 2 + 2.5)}
                     textAnchor="middle"
                     className={`text-[2.1px] font-bold select-none pointer-events-none ${
                       isSelected
-                        ? 'fill-sky-300 font-black'
-                        : 'fill-sky-400/80 group-hover/polygon:fill-sky-300'
+                        ? isBooth
+                          ? 'fill-amber-300 font-black'
+                          : 'fill-sky-300 font-black'
+                        : isBooth
+                          ? 'fill-amber-300/90 group-hover/polygon:fill-amber-200'
+                          : 'fill-sky-400/80 group-hover/polygon:fill-sky-300'
                     }`}
                   >
-                    {isSelected ? '★ RUANGAN TERPILIH' : 'Ketuk untuk info ruangan'}
+                    {isBooth
+                      ? isSelected
+                        ? `★ LOKASI BOOTH PAMERAN (${sortedExhibitors.length} BOOTH • LT. 1)`
+                        : `${sortedExhibitors.length} Booth Pameran • Ketuk untuk lihat daftar booth`
+                      : isSelected
+                        ? '★ RUANGAN TERPILIH'
+                        : 'Ketuk untuk info ruangan'}
                   </text>
 
                   {/* Entry Door Mark */}
@@ -961,7 +1574,13 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                       cx={poly.entryDoor.x}
                       cy={poly.entryDoor.y}
                       r={isSelected ? '1.5' : '1.2'}
-                      className={isSelected ? 'fill-sky-300' : 'fill-sky-400'}
+                      className={
+                        isBooth
+                          ? 'fill-amber-300'
+                          : isSelected
+                            ? 'fill-sky-300'
+                            : 'fill-sky-400'
+                      }
                     />
                   )}
                 </g>
@@ -977,6 +1596,10 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
           {/* Interactive Room Pins Overlay */}
           {filteredPins.map((pin) => {
             const isSelected = activePinId === pin.id;
+            const isBoothPin = isBoothFoyerRoom(pin);
+            const todayStat = roomTodayStats.get(pin.id);
+            const hasLiveNow = Boolean(todayStat?.hasLive);
+            const todayCount = todayStat?.todayCount || 0;
 
             return (
               <div
@@ -987,25 +1610,37 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                 }}
                 style={{ top: `${pin.y}%`, left: `${pin.x}%` }}
                 className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer transition-all duration-300 z-20 group/pin"
-                title={`${pin.name} - Ketuk untuk melihat informasi ruangan`}
+                title={
+                  isBoothPin
+                    ? `${pin.name} (${sortedExhibitors.length} Booth) - Ketuk untuk melihat daftar booth & acara hari ini`
+                    : `${pin.name}${todayCount > 0 ? ` (${todayCount} acara hari ini)` : ''} - Ketuk untuk melihat acara hari ini`
+                }
               >
                 {/* Luminous Pulsing Sonar / Radar Waves when selected */}
                 {isSelected && (
                   <>
-                    <span className="absolute -inset-7 rounded-full bg-sky-400/20 animate-ping pointer-events-none duration-1000" />
-                    <span className="absolute -inset-4 rounded-full border-2 border-sky-400/70 animate-pulse pointer-events-none" />
-                    <span className="absolute -inset-2 rounded-full bg-sky-400/30 blur-xs pointer-events-none" />
+                    <span className={`absolute -inset-7 rounded-full ${isBoothPin ? 'bg-amber-400/20' : 'bg-sky-400/20'} animate-ping pointer-events-none duration-1000`} />
+                    <span className={`absolute -inset-4 rounded-full border-2 ${isBoothPin ? 'border-amber-400/75' : 'border-sky-400/70'} animate-pulse pointer-events-none`} />
+                    <span className={`absolute -inset-2 rounded-full ${isBoothPin ? 'bg-amber-400/30' : 'bg-sky-400/30'} blur-xs pointer-events-none`} />
                   </>
                 )}
 
                 {/* Floating Pin Location Beacon Badge with Bounce Animation */}
                 {isSelected && (
                   <div className="absolute -top-7 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-none z-30 animate-bounce">
-                    <div className="px-2 py-0.5 rounded-full bg-gradient-to-r from-sky-400 via-sky-300 to-blue-500 text-slate-950 font-black text-[9px] shadow-lg shadow-sky-500/60 flex items-center gap-1 uppercase tracking-wider whitespace-nowrap border border-white">
-                      <Sparkles className="w-2.5 h-2.5 text-slate-950 fill-slate-950" />
-                      <span>RUANGAN TERPILIH</span>
+                    <div className={`px-2 py-0.5 rounded-full font-black text-[9px] shadow-lg flex items-center gap-1 uppercase tracking-wider whitespace-nowrap border border-white ${
+                      isBoothPin
+                        ? 'bg-gradient-to-r from-amber-400 via-amber-300 to-orange-400 text-slate-950 shadow-amber-500/60'
+                        : 'bg-gradient-to-r from-sky-400 via-sky-300 to-blue-500 text-slate-950 shadow-sky-500/60'
+                    }`}>
+                      {isBoothPin ? (
+                        <Store className="w-2.5 h-2.5 text-slate-950" />
+                      ) : (
+                        <Sparkles className="w-2.5 h-2.5 text-slate-950 fill-slate-950" />
+                      )}
+                      <span>{isBoothPin ? 'LOKASI BOOTH PAMERAN' : 'RUANGAN TERPILIH'}</span>
                     </div>
-                    <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-sky-400" />
+                    <div className={`w-0 h-0 border-x-4 border-x-transparent border-t-4 ${isBoothPin ? 'border-t-amber-400' : 'border-t-sky-400'}`} />
                   </div>
                 )}
 
@@ -1013,26 +1648,56 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                 <div 
                   className={`relative px-2.5 py-1.5 rounded-xl border flex items-center space-x-1.5 shadow-xl transition-all duration-300 backdrop-blur-sm ${
                     isSelected
-                      ? 'bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 text-white border-2 border-white scale-120 ring-4 ring-sky-400/80 shadow-[0_0_25px_rgba(56,189,248,0.85)] z-30 font-bold'
-                      : 'bg-slate-900/90 text-slate-200 border-slate-700 hover:bg-slate-800 hover:scale-105 hover:border-slate-500'
+                      ? isBoothPin
+                        ? 'bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 text-white border-2 border-white scale-115 ring-4 ring-amber-400/80 shadow-[0_0_25px_rgba(251,191,36,0.85)] z-30 font-bold'
+                        : 'bg-gradient-to-r from-sky-500 via-blue-600 to-indigo-600 text-white border-2 border-white scale-120 ring-4 ring-sky-400/80 shadow-[0_0_25px_rgba(56,189,248,0.85)] z-30 font-bold'
+                      : isBoothPin
+                        ? 'bg-amber-950/90 text-amber-100 border-amber-500/70 hover:bg-amber-900 hover:scale-105 hover:border-amber-300'
+                        : 'bg-slate-900/90 text-slate-200 border-slate-700 hover:bg-slate-800 hover:scale-105 hover:border-slate-500'
                   }`}
                 >
-                  {/* Status / Category Dot */}
-                  <span 
-                    className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                      isSelected
-                        ? 'bg-white ring-2 ring-sky-300 animate-pulse'
-                        : pin.color
-                    }`} 
-                  />
+                  {/* Status / Category Dot or Store Icon */}
+                  {isBoothPin ? (
+                    <Store className={`w-3.5 h-3.5 shrink-0 ${isSelected ? 'text-white' : 'text-amber-400'}`} />
+                  ) : (
+                    <span 
+                      className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                        hasLiveNow
+                          ? 'bg-emerald-400 ring-2 ring-emerald-300/80 animate-pulse'
+                          : isSelected
+                            ? 'bg-white ring-2 ring-sky-300 animate-pulse'
+                            : pin.color
+                      }`} 
+                    />
+                  )}
 
                   {/* Room Label */}
                   <span className="text-[11px] font-black whitespace-nowrap">
                     {pin.shortName}
                   </span>
 
-                  {/* Capacity Badge */}
-                  {pin.type !== 'facility' && pin.capacity > 0 && (
+                  {/* Live / Today Sessions / Booth Count / Capacity Badge */}
+                  {hasLiveNow ? (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-md font-black uppercase bg-emerald-400 text-slate-950 whitespace-nowrap">
+                      LIVE
+                    </span>
+                  ) : isBoothPin ? (
+                    <span className={`text-[9px] px-1.5 py-0.2 rounded-md font-mono font-bold whitespace-nowrap ${
+                      isSelected
+                        ? 'bg-white/25 text-white border border-white/40'
+                        : 'bg-amber-500/25 text-amber-200 border border-amber-400/50'
+                    }`}>
+                      {sortedExhibitors.length} Booth
+                    </span>
+                  ) : todayCount > 0 ? (
+                    <span className={`text-[9px] px-1.5 py-0.2 rounded-md font-mono font-bold whitespace-nowrap ${
+                      isSelected
+                        ? 'bg-white/25 text-white border border-white/40'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/40'
+                    }`}>
+                      {todayCount} Hari Ini
+                    </span>
+                  ) : pin.type !== 'facility' && pin.capacity > 0 ? (
                     <span className={`text-[9px] px-1.5 py-0.2 rounded-md font-mono font-bold ${
                       isSelected
                         ? 'bg-white/20 text-white border border-white/40'
@@ -1040,12 +1705,16 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
                     }`}>
                       {pin.capacity} K
                     </span>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* Little downward pointer for active pin */}
                 {isSelected && (
-                  <div className="w-0 h-0 border-x-5 border-x-transparent border-t-5 border-t-sky-300 mx-auto -mt-0.5 pointer-events-none drop-shadow-[0_2px_4px_rgba(56,189,248,0.9)]" />
+                  <div className={`w-0 h-0 border-x-5 border-x-transparent border-t-5 mx-auto -mt-0.5 pointer-events-none ${
+                    isBoothPin
+                      ? 'border-t-amber-300 drop-shadow-[0_2px_4px_rgba(251,191,36,0.9)]'
+                      : 'border-t-sky-300 drop-shadow-[0_2px_4px_rgba(56,189,248,0.9)]'
+                  }`} />
                 )}
               </div>
             );
@@ -1096,15 +1765,15 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
 
       {/* Bottom Legend Overlay */}
       <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-slate-900/95 backdrop-blur-md p-2 rounded-xl border border-slate-800 text-[10px] text-slate-300 flex flex-wrap items-center justify-between gap-2 z-30 shadow-md transition-all">
-        <div className="flex items-center space-x-3 flex-wrap">
+        <div className="flex items-center space-x-3 flex-wrap gap-y-1">
           <span className="flex items-center">
-            <span className="w-2 h-2 rounded-full bg-rose-500 mr-1" /> Ballroom Pleno
+            <span className="w-2 h-2 rounded-full bg-indigo-500 mr-1" /> Ballroom Amartapura
           </span>
           <span className="flex items-center">
-            <span className="w-2 h-2 rounded-full bg-amber-500 mr-1" /> Hall Paralel
+            <span className="w-2 h-2 rounded-full bg-amber-400 mr-1" /> Booth Pameran (Foyer Amartapura Lt. 1)
           </span>
           <span className="flex items-center">
-            <span className="w-2 h-2 rounded-full bg-indigo-500 mr-1" /> Workshop Skill
+            <span className="w-2 h-2 rounded-full bg-violet-500 mr-1" /> Workshop Skill
           </span>
         </div>
         <div className="text-sky-400 font-medium hidden sm:inline">
@@ -1327,7 +1996,7 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
           </h2>
         </div>
 
-        {/* Floor Switcher & Fullscreen Mode Action */}
+        {/* Floor Switcher, Booth Shortcut & Fullscreen Mode Action */}
         <div className="relative z-10 flex flex-wrap items-center gap-2 shrink-0">
           <div className="flex flex-wrap items-center gap-1 bg-slate-800/90 p-1 rounded-lg border border-slate-700/80">
             {availableFloors.map((fl) => (
@@ -1345,6 +2014,16 @@ export const InteractiveVenueMap: React.FC<InteractiveVenueMapProps> = ({
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={handleFocusBoothArea}
+            className="px-3 py-1.5 rounded-lg bg-amber-400/20 hover:bg-amber-400/30 text-amber-200 border border-amber-400/50 font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+            title="Fokus ke lokasi Booth Pameran di Foyer Amartapura Ballroom Lantai 1"
+          >
+            <Store className="w-3.5 h-3.5 text-amber-300" />
+            <span>Lokasi Booth (Foyer Lt. 1)</span>
+          </button>
 
           <button
             onClick={toggleFullscreen}

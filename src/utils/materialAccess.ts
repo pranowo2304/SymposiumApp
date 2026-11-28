@@ -1,4 +1,4 @@
-import { Participant, Session } from '../types';
+import { Participant, Session, SymposiumInfo } from '../types';
 import { SESSIONS_DATA } from '../data/symposiumData';
 
 export type SessionTrackType = 'workshop' | 'symposium';
@@ -126,31 +126,75 @@ export function getSessionTrackType(session: Session | null | undefined): Sessio
   return 'symposium';
 }
 
+const GENERIC_ONLY_WORKSHOP_CATEGORY_RE =
+  /^(workshop|ws|workshop\s+hands[\s-]*on|hands[\s-]*on|workshop\s+pre[\s-]*congress|pre[\s-]*congress\s+workshop|pelatihan|praktikum|wetlab|drylab|workshop\s+umum)$/i;
+
 export function getWorkshopTypeLabel(session: Session | null | undefined): string {
   if (!session) return 'Workshop';
   const rawCategory = (session.category || '').trim();
-  if (rawCategory) {
+  const isGenericCategory = !rawCategory || GENERIC_ONLY_WORKSHOP_CATEGORY_RE.test(rawCategory);
+
+  if (rawCategory && !isGenericCategory) {
     if (/^workshop\b/i.test(rawCategory)) {
       return rawCategory;
     }
     return `Workshop ${rawCategory}`;
   }
+
   const rawTitle = (session.title || '').trim();
-  return rawTitle ? clampTicketLabel(rawTitle) : 'Workshop';
+  if (rawTitle) {
+    const cleanedTitle = clampTicketLabel(rawTitle);
+    return /\bworkshop\b/i.test(cleanedTitle) ? cleanedTitle : clampTicketLabel(`Workshop ${cleanedTitle}`);
+  }
+  return rawCategory || 'Workshop';
 }
 
-export function extractWorkshopTypes(sessions?: Session[]): string[] {
-  const source = sessions && sessions.length > 0 ? sessions : SESSIONS_DATA;
+export function extractWorkshopTypes(
+  sessions?: Session[],
+  eventInfo?: SymposiumInfo
+): string[] {
   const seen = new Map<string, string>();
-
-  source.forEach((session) => {
-    if (getSessionTrackType(session) !== 'workshop') return;
-    const label = getWorkshopTypeLabel(session);
-    const key = normalizeText(label);
+  const addLabel = (rawLabel?: string | null) => {
+    const cleaned = (rawLabel || '').trim();
+    if (!cleaned || GENERIC_ONLY_WORKSHOP_CATEGORY_RE.test(cleaned)) return;
+    const normalizedLabel = /^workshop\b/i.test(cleaned) ? cleaned : `Workshop ${cleaned}`;
+    const key = normalizeText(normalizedLabel);
     if (key && !seen.has(key)) {
-      seen.set(key, label);
+      seen.set(key, clampTicketLabel(normalizedLabel));
     }
-  });
+  };
+
+  // 1. Workshop sessions currently configured in active schedule
+  if (Array.isArray(sessions) && sessions.length > 0) {
+    sessions.forEach((session) => {
+      if (getSessionTrackType(session) !== 'workshop') return;
+      addLabel(getWorkshopTypeLabel(session));
+    });
+  }
+
+  // 2. Workshop labels configured in Event Info (ID Card Templates, Certificate Templates, Rundown PDFs)
+  if (eventInfo) {
+    Object.values(eventInfo.workshopIdentityCardTemplates || {}).forEach((tpl) => {
+      addLabel(tpl?.workshopLabel);
+    });
+    Object.values(eventInfo.certificateTemplates || {}).forEach((tpl) => {
+      if (tpl && tpl.category === 'workshop') {
+        addLabel(tpl.templateLabel);
+      }
+    });
+    Object.values(eventInfo.workshopRundownPdfs || {}).forEach((pdf) => {
+      addLabel(pdf?.workshopLabel);
+    });
+  }
+
+  // 3. Fallback to default event workshops if active sessions currently have no workshop entries
+  //    (e.g., admin deleted demo schedules or has only imported Symposium sessions so far).
+  if (seen.size === 0) {
+    SESSIONS_DATA.forEach((session) => {
+      if (getSessionTrackType(session) !== 'workshop') return;
+      addLabel(getWorkshopTypeLabel(session));
+    });
+  }
 
   return Array.from(seen.values());
 }
@@ -163,11 +207,14 @@ export function buildWorkshopPassLabel(workshopTypeLabel: string): string {
 
 export function buildSymposiumWorkshopBundleLabel(workshopTypeLabel: string): string {
   const clean = workshopTypeLabel.trim();
-  return clampTicketLabel(`Simposium + ${clean}`);
+  return clampTicketLabel(`Bundling Simposium + ${clean}`);
 }
 
-export function buildTicketPassOptionGroups(sessions?: Session[]): TicketPassOptionGroups {
-  const workshopTypes = extractWorkshopTypes(sessions);
+export function buildTicketPassOptionGroups(
+  sessions?: Session[],
+  eventInfo?: SymposiumInfo
+): TicketPassOptionGroups {
+  const workshopTypes = extractWorkshopTypes(sessions, eventInfo);
   const general = [...BASE_TICKET_OPTIONS];
   const workshopOnly = workshopTypes.map((ws) => buildWorkshopPassLabel(ws));
   const symposiumAndWorkshop = workshopTypes.map((ws) =>
@@ -257,28 +304,40 @@ function checkCustomFieldsForTrack(
 
 export function describeTicketAccessSummary(
   ticketType: string,
-  sessions?: Session[]
+  sessions?: Session[],
+  eventInfo?: SymposiumInfo
 ): string {
   const raw = (ticketType || '').trim();
   if (!raw) return 'Akses default: Materi Simposium';
 
-  const workshopTypes = extractWorkshopTypes(sessions);
+  const workshopTypes = extractWorkshopTypes(sessions, eventInfo);
   const lower = raw.toLowerCase();
   const normalized = normalizeText(raw);
+
+  const matchedWorkshops = workshopTypes.filter(
+    (ws) => scoreTicketAgainstWorkshop(normalized, ws) > 0
+  );
+
+  const hasSymposium =
+    /simposium|symposium|munas|kongres|congress|plenary|full\s*pass|member|peserta|regular|reguler/i.test(
+      lower
+    ) && !/^workshop\s*full\s*pass/i.test(lower);
 
   const isGlobalAllAccess =
     /all[\s-]*access|full[\s-]*access|vip|speaker|pembicara|panitia|moderator|instruktur|paket\s*lengkap|bundle|semua\s*workshop|all\s*workshop/i.test(
       lower
     );
 
+  if (matchedWorkshops.length > 0) {
+    const wsSummary = matchedWorkshops.join(', ');
+    return hasSymposium
+      ? `Akses Bundling: Materi Simposium + ${wsSummary} (termasuk kartu & e-sertifikat keduanya)`
+      : `Akses Materi: Khusus ${wsSummary}`;
+  }
+
   if (isGlobalAllAccess && !/workshop\s*full\s*pass|semua\s*workshop/i.test(lower)) {
     return 'Akses Penuh: Semua materi Simposium & seluruh Workshop';
   }
-
-  const hasSymposium =
-    /simposium|symposium|munas|kongres|congress|plenary|full\s*pass|member|peserta|regular|reguler/i.test(
-      lower
-    ) && !/^workshop\s*full\s*pass/i.test(lower);
 
   const isAllWorkshopsOnly =
     /workshop\s*full\s*pass|semua\s*workshop|all\s*workshop/i.test(lower);
@@ -287,17 +346,6 @@ export function describeTicketAccessSummary(
     return hasSymposium
       ? 'Akses Penuh: Materi Simposium & seluruh jenis Workshop'
       : 'Akses Materi: Seluruh jenis Workshop (tanpa Simposium)';
-  }
-
-  const matchedWorkshops = workshopTypes.filter(
-    (ws) => scoreTicketAgainstWorkshop(normalized, ws) > 0
-  );
-
-  if (matchedWorkshops.length > 0) {
-    const wsSummary = matchedWorkshops.join(', ');
-    return hasSymposium
-      ? `Akses Materi: Simposium + ${wsSummary}`
-      : `Akses Materi: Khusus ${wsSummary}`;
   }
 
   const hasGenericWorkshop =

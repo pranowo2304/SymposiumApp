@@ -155,8 +155,8 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
   }, [participants]);
 
   const ticketPassGroups = useMemo(
-    () => buildTicketPassOptionGroups(sessions),
-    [sessions]
+    () => buildTicketPassOptionGroups(sessions, eventInfo),
+    [sessions, eventInfo]
   );
 
   const customImportedTickets = useMemo(() => {
@@ -174,8 +174,8 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
   }, [ticketPassGroups, customImportedTickets]);
 
   const ticketAccessPreview = useMemo(
-    () => describeTicketAccessSummary(formTicketType, sessions),
-    [formTicketType, sessions]
+    () => describeTicketAccessSummary(formTicketType, sessions, eventInfo),
+    [formTicketType, sessions, eventInfo]
   );
 
   // Filter participants (including customFields search)
@@ -709,8 +709,8 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
   }, [ticketColIndex, parsedRows]);
 
   const importTicketAccessPreview = useMemo(
-    () => describeTicketAccessSummary(importTicketType, sessions),
-    [importTicketType, sessions]
+    () => describeTicketAccessSummary(importTicketType, sessions, eventInfo),
+    [importTicketType, sessions, eventInfo]
   );
 
   const previewRows = parsedRows.slice(0, 3);
@@ -928,7 +928,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
               </optgroup>
             )}
             {ticketPassGroups.symposiumAndWorkshop.length > 0 && (
-              <optgroup label="Paket Simposium + Workshop">
+              <optgroup label="Paket Bundling (Simposium + Masing-Masing Workshop)">
                 {ticketPassGroups.symposiumAndWorkshop.map((t) => (
                   <option key={t} value={t}>
                     {t}
@@ -1348,7 +1348,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                     </optgroup>
                   )}
                   {ticketPassGroups.symposiumAndWorkshop.length > 0 && (
-                    <optgroup label="Paket Simposium + Jenis Workshop">
+                    <optgroup label="Paket Bundling (Simposium + Masing-Masing Workshop)">
                       {ticketPassGroups.symposiumAndWorkshop.map((t) => (
                         <option key={t} value={t}>
                           {t}
@@ -1367,6 +1367,34 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                   )}
                   <option value="__custom__">Ketik Kustom Manual...</option>
                 </select>
+
+                {/* Quick-select Bundling & Workshop options in Add/Edit Participant Form */}
+                {ticketPassGroups.symposiumAndWorkshop.length > 0 && (
+                  <div className="space-y-1.5 pt-0.5">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-300/90">
+                      Paket Bundling Simposium + Workshop:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {ticketPassGroups.symposiumAndWorkshop.map((bundleLabel) => {
+                        const isSelected = formTicketType === bundleLabel;
+                        return (
+                          <button
+                            key={`form-bundle-${bundleLabel}`}
+                            type="button"
+                            onClick={() => setFormTicketType(bundleLabel)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-xs'
+                                : 'bg-slate-900 text-emerald-200 border-emerald-500/30 hover:border-emerald-400 hover:bg-emerald-950/40'
+                            }`}
+                          >
+                            {bundleLabel}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 <input
                   type="text"
@@ -1734,7 +1762,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                             </optgroup>
                           )}
                           {ticketPassGroups.symposiumAndWorkshop.length > 0 && (
-                            <optgroup label="Paket Simposium + Jenis Workshop">
+                            <optgroup label="Paket Bundling (Simposium + Masing-Masing Workshop)">
                               {ticketPassGroups.symposiumAndWorkshop.map((t) => (
                                 <option key={t} value={t}>
                                   {t}
@@ -1775,6 +1803,95 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                           className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:outline-hidden focus:border-indigo-400"
                         />
                       </div>
+
+                      {/* Grouped Quick-select buttons: Bundling Simposium + Workshop, Workshop Only, & Umum */}
+                      {(ticketPassGroups.symposiumAndWorkshop.length > 0 ||
+                        ticketPassGroups.workshopOnly.length > 0) && (
+                        <div className="space-y-2 pt-1">
+                          {ticketPassGroups.symposiumAndWorkshop.length > 0 && (
+                            <div className="space-y-1">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+                                Paket Bundling (Simposium + Masing-Masing Workshop):
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {ticketPassGroups.symposiumAndWorkshop.map((bundleLabel) => {
+                                  const isSelected = importTicketType === bundleLabel;
+                                  return (
+                                    <button
+                                      key={`quick-bundle-${bundleLabel}`}
+                                      type="button"
+                                      onClick={() => setImportTicketType(bundleLabel)}
+                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-xs'
+                                          : 'bg-emerald-950/35 text-emerald-200 border-emerald-500/35 hover:border-emerald-400 hover:bg-emerald-900/40'
+                                      }`}
+                                    >
+                                      {bundleLabel}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {ticketPassGroups.workshopOnly.length > 0 && (
+                            <div className="space-y-1">
+                              <span className="block text-[10px] font-bold uppercase tracking-wider text-sky-300">
+                                Khusus Workshop Saja:
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {ticketPassGroups.workshopOnly.map((wsLabel) => {
+                                  const isSelected = importTicketType === wsLabel;
+                                  return (
+                                    <button
+                                      key={`quick-ws-${wsLabel}`}
+                                      type="button"
+                                      onClick={() => setImportTicketType(wsLabel)}
+                                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                                        isSelected
+                                          ? 'bg-sky-500 text-slate-950 border-sky-400 shadow-xs'
+                                          : 'bg-slate-950/80 text-slate-300 border-slate-700 hover:border-sky-400/60 hover:text-white'
+                                      }`}
+                                    >
+                                      {wsLabel}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="space-y-1">
+                            <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              Paket Umum:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {[
+                                'Simposium Full Pass',
+                                'All-Access (Simposium + Workshop)',
+                                'Workshop Full Pass (Semua Workshop)',
+                              ].map((presetLabel) => {
+                                const isSelected = importTicketType === presetLabel;
+                                return (
+                                  <button
+                                    key={`quick-gen-${presetLabel}`}
+                                    type="button"
+                                    onClick={() => setImportTicketType(presetLabel)}
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                                      isSelected
+                                        ? 'bg-indigo-500 text-white border-indigo-400 shadow-xs'
+                                        : 'bg-slate-950/80 text-slate-300 border-slate-700 hover:border-indigo-400/60 hover:text-white'
+                                    }`}
+                                  >
+                                    {presetLabel}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       <p className="text-[11px] text-emerald-300/90 bg-emerald-950/40 border border-emerald-500/30 rounded-lg px-2.5 py-1.5">
                         {importTicketMode === 'override_all'

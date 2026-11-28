@@ -162,6 +162,29 @@ export function getWorkshopCardSlots(
     });
   }
 
+  // Fallback to default event workshops if active sessions contain only Symposium sessions
+  if (map.size === 0 && source !== SESSIONS_DATA) {
+    SESSIONS_DATA.forEach((s) => {
+      const dayLower = (s.day || '').toLowerCase();
+      const catLower = (s.category || '').toLowerCase();
+      if (!dayLower.includes('workshop') && !catLower.includes('workshop')) return;
+      const label = getWorkshopTypeLabel(s);
+      const key = toWorkshopTemplateKey(label);
+      const existing = map.get(key);
+      if (existing) {
+        existing.sessionCount += 1;
+      } else {
+        map.set(key, {
+          workshopKey: key,
+          workshopLabel: label,
+          shortLabel: makeShortWorkshopLabel(label),
+          sessionCount: 0,
+          roomLabel: s.room || undefined,
+        });
+      }
+    });
+  }
+
   // Ensure any previously saved custom workshop templates stay visible so admin can edit/delete them
   if (existingTemplates && typeof existingTemplates === 'object') {
     Object.values(existingTemplates).forEach((tpl) => {

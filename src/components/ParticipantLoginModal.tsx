@@ -129,46 +129,46 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-emerald-950/35 backdrop-blur-sm animate-in fade-in duration-200">
       <div
-        className={`bg-slate-900 border border-slate-700 w-full ${
+        className={`bg-white border border-emerald-100 w-full ${
           isParticipantLoggedIn && !showSwitchForm
             ? activeView === 'certificate'
               ? 'max-w-2xl'
               : 'max-w-lg'
             : 'max-w-md'
-        } rounded-2xl shadow-2xl overflow-hidden text-slate-100 max-h-[92vh] overflow-y-auto transition-all`}
+        } rounded-3xl shadow-2xl shadow-emerald-950/15 overflow-hidden text-slate-800 max-h-[92vh] overflow-y-auto transition-all`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="participant-login-title"
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-slate-950 via-emerald-950/80 to-slate-900 p-5 border-b border-slate-800 relative">
+        <div className="bg-gradient-to-br from-emerald-50 via-white to-green-50/90 p-5 sm:p-6 border-b border-emerald-100 relative">
           <button
             type="button"
             onClick={onClose}
-            className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="absolute top-3.5 right-3.5 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-500 hover:text-emerald-900 hover:bg-emerald-100/70 transition-colors cursor-pointer"
             title="Tutup dialog"
+            aria-label="Tutup dialog"
           >
             <X className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-xs">
+          <div className="flex items-center gap-3.5 pr-10">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-600/25">
               {activeView === 'certificate' && isParticipantLoggedIn && !showSwitchForm ? (
-                <Award className="w-6 h-6 text-amber-400" />
+                <Award className="w-6 h-6" />
               ) : (
                 <IdCard className="w-6 h-6" />
               )}
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-slate-950">
-                  AKSES PESERTA
-                </span>
-                <span className="text-xs text-slate-400 font-medium">Simposium &amp; Workshop</span>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700">
+                <span className="uppercase tracking-wider">Akses Peserta</span>
+                <span className="text-emerald-300" aria-hidden="true">·</span>
+                <span className="text-slate-500 font-semibold">Simposium &amp; Workshop</span>
               </div>
-              <h2 id="participant-login-title" className="text-lg font-black text-white mt-0.5">
+              <h2 id="participant-login-title" className="text-lg sm:text-xl font-black text-slate-900 tracking-tight mt-0.5">
                 {isParticipantLoggedIn && !showSwitchForm
                   ? activeView === 'certificate'
                     ? 'E-Sertifikat Peserta'
@@ -179,11 +179,11 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
           </div>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="p-5 sm:p-6 space-y-4 bg-white">
           {errorMsg && (
-            <div className="p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-200 text-xs flex items-start gap-2 animate-in fade-in">
-              <ShieldAlert className="w-4 h-4 shrink-0 text-rose-400 mt-0.5" />
-              <span>{errorMsg}</span>
+            <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2.5 animate-in fade-in">
+              <ShieldAlert className="w-4 h-4 shrink-0 text-rose-600 mt-0.5" />
+              <span className="leading-relaxed">{errorMsg}</span>
             </div>
           )}
 
@@ -191,14 +191,14 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
           {isParticipantLoggedIn && !showSwitchForm && (
             <div className="space-y-4">
               {availableCertificates.length > 0 && (
-                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800">
+                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-emerald-50 border border-emerald-100">
                   <button
                     type="button"
                     onClick={() => setActiveView('card')}
-                    className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    className={`min-h-[42px] py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                       activeView === 'card'
-                        ? 'bg-emerald-500 text-slate-950 font-black shadow-xs'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-emerald-600 text-white font-extrabold shadow-xs'
+                        : 'text-slate-600 hover:text-emerald-900 hover:bg-white/70'
                     }`}
                   >
                     <IdCard className="w-3.5 h-3.5" />
@@ -207,10 +207,10 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setActiveView('certificate')}
-                    className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    className={`min-h-[42px] py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                       activeView === 'certificate'
-                        ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-emerald-600 text-white font-extrabold shadow-xs'
+                        : 'text-slate-600 hover:text-emerald-900 hover:bg-white/70'
                     }`}
                   >
                     <Award className="w-3.5 h-3.5" />
@@ -231,11 +231,11 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
                 />
               )}
 
-              <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-slate-800">
+              <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20 transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
                   <span>Masuk ke Portal</span>
                 </button>
@@ -245,7 +245,7 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
                     setErrorMsg(null);
                     setShowSwitchForm(true);
                   }}
-                  className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  className="flex-1 min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
                   <RefreshCw className="w-3.5 h-3.5 shrink-0" />
                   <span>Ganti Id_registrant</span>
@@ -256,7 +256,7 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
                     onLogout();
                     onClose();
                   }}
-                  className="min-h-[44px] py-2.5 px-3 rounded-xl text-xs font-bold bg-rose-600/90 hover:bg-rose-500 text-white transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+                  className="min-h-[44px] py-2.5 px-3.5 rounded-xl text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
                 >
                   <LogOut className="w-3.5 h-3.5 shrink-0" />
                   <span>Logout</span>
@@ -268,17 +268,17 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
           {/* Id_registrant Login Form */}
           {(!isParticipantLoggedIn || showSwitchForm) && (
             <>
-              <form onSubmit={handleSubmit} className="space-y-3.5">
-                <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
-                  Masukkan <strong className="text-emerald-300 font-mono">Id_registrant</strong> (atau ID Badge registrasi) yang Anda terima dari panitia untuk mengaktifkan identitas peserta Anda.
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="p-3.5 rounded-2xl bg-emerald-50/80 border border-emerald-200/80 text-xs text-emerald-950 leading-relaxed">
+                  Masukkan <strong className="text-emerald-800 font-mono font-bold">Id_registrant</strong> (atau ID Badge registrasi) yang Anda terima dari panitia untuk mengaktifkan identitas peserta Anda.
                 </div>
 
                 <div className="space-y-1.5">
                   <label
                     htmlFor="input-id-registrant"
-                    className="text-xs font-bold text-slate-300 flex items-center gap-1.5"
+                    className="text-xs font-bold text-slate-700 flex items-center gap-1.5"
                   >
-                    <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                    <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
                     <span>Id_registrant</span>
                   </label>
                   <input
@@ -290,7 +290,7 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
                     value={idRegistrantInput}
                     onChange={(e) => setIdRegistrantInput(e.target.value)}
                     placeholder="Contoh: ID-SIMP-2026-001"
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400 transition-colors"
+                    className="w-full min-h-[46px] bg-white border border-slate-300 rounded-xl px-3.5 py-2.5 text-sm font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                   />
                 </div>
 
@@ -299,7 +299,7 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowSwitchForm(false)}
-                      className="px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors cursor-pointer"
+                      className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-emerald-900 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 transition-colors cursor-pointer"
                     >
                       Kembali
                     </button>
@@ -307,16 +307,16 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="px-4 py-2 rounded-xl text-xs font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors cursor-pointer"
+                    className="min-h-[44px] px-4 py-2 rounded-xl text-xs font-bold text-slate-700 hover:text-emerald-900 bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 transition-colors cursor-pointer"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="px-5 py-2 rounded-xl text-xs font-black bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-md transition-all flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
+                    className="min-h-[44px] px-5 py-2 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/25 transition-all flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
                   >
-                    <LogIn className="w-3.5 h-3.5" />
+                    <LogIn className="w-4 h-4" />
                     <span>{isLoading ? 'Memeriksa...' : 'Masuk Peserta'}</span>
                   </button>
                 </div>
@@ -325,20 +325,20 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
               {onGoogleSignIn && (
                 <>
                   <div className="relative flex items-center py-1">
-                    <div className="flex-grow border-t border-slate-800"></div>
+                    <div className="flex-grow border-t border-slate-200"></div>
                     <span className="shrink mx-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       Atau Masuk via Akun Google
                     </span>
-                    <div className="flex-grow border-t border-slate-800"></div>
+                    <div className="flex-grow border-t border-slate-200"></div>
                   </div>
 
                   <button
                     type="button"
                     onClick={handleGoogleLogin}
                     disabled={isGoogleLoading}
-                    className="w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+                    className="w-full min-h-[46px] py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-50/70 hover:bg-emerald-100/80 text-emerald-900 border border-emerald-200 transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
                   >
-                    <LogIn className="w-4 h-4 text-sky-400" />
+                    <LogIn className="w-4 h-4 text-emerald-700" />
                     <span>
                       {isGoogleLoading
                         ? 'Menghubungkan Akun Google...'

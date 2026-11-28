@@ -1493,17 +1493,17 @@ export default function App() {
     if (activeTab === 'admin') {
       if (!isAdminAuthenticated) {
         return (
-          <div className="max-w-md mx-auto p-6 text-center space-y-4 bg-white rounded-2xl shadow-md border border-slate-200 mt-10">
-            <div className="w-12 h-12 bg-amber-100 text-amber-700 rounded-full flex items-center justify-center mx-auto">
+          <div className="max-w-md mx-auto p-6 text-center space-y-4 bg-white rounded-3xl shadow-md border border-emerald-100 mt-10">
+            <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-2xl flex items-center justify-center mx-auto">
               <Lock className="w-6 h-6" />
             </div>
-            <h2 className="text-lg font-bold text-slate-900">Akses Admin Terkunci</h2>
-            <p className="text-xs text-slate-600">
+            <h2 className="text-lg font-black text-slate-900">Akses Admin Terkunci</h2>
+            <p className="text-xs text-slate-600 leading-relaxed">
               Anda harus melakukan login dengan kata sandi administrator untuk mengakses panel pengelolaan simposium.
             </p>
             <button
               onClick={() => setIsAdminLoginModalOpen(true)}
-              className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+              className="min-h-[44px] px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold shadow-sm shadow-emerald-600/20 transition-all cursor-pointer"
             >
               Buka Form Login Admin
             </button>

@@ -22,6 +22,7 @@ import {
   RefreshCw,
   LogIn,
   QrCode,
+  Ticket,
 } from 'lucide-react';
 import { Participant, Session, SymposiumInfo } from '../../types';
 import { ParticipantIdentityCard } from '../ParticipantIdentityCard';
@@ -119,6 +120,8 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
   const [parsedRows, setParsedRows] = useState<string[][]>([]);
   const [columnMapping, setColumnMapping] = useState<ParticipantMappingTarget[]>([]);
   const [autoGenerateEmail, setAutoGenerateEmail] = useState(false);
+  const [importTicketMode, setImportTicketMode] = useState<'override_all' | 'from_column_with_fallback'>('override_all');
+  const [importTicketType, setImportTicketType] = useState<string>('Simposium Full Pass');
   const [importErrorBanner, setImportErrorBanner] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<{
     imported: number;
@@ -208,9 +211,15 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
   }, [importResult, importErrorBanner]);
 
   const applyParsedTable = (headers: string[], rows: string[][]) => {
+    const detectedMapping = detectParticipantColumnMapping(headers, rows);
     setParsedHeaders(headers);
     setParsedRows(rows);
-    setColumnMapping(detectParticipantColumnMapping(headers, rows));
+    setColumnMapping(detectedMapping);
+    // If Excel has a detected ticket column, default to reading from that column (with fallback);
+    // otherwise default to assigning the selected ticket pass to all imported rows.
+    setImportTicketMode(
+      detectedMapping.includes('ticketType') ? 'from_column_with_fallback' : 'override_all'
+    );
     setImportResult(null);
     setImportErrorBanner(null);
   };
@@ -593,6 +602,8 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
       mapping,
       existingParticipants: participants,
       autoGeneratePlaceholderEmail: autoGenerateEmail,
+      defaultTicketType: importTicketType,
+      ticketImportMode: importTicketMode,
     });
 
     setImportResult({
@@ -635,10 +646,29 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
     setParsedRows([]);
     setColumnMapping([]);
     setAutoGenerateEmail(false);
+    setImportTicketMode('override_all');
+    setImportTicketType('Simposium Full Pass');
     setIsImportModalOpen(true);
   };
 
   const emailColMapped = columnMapping.includes('email');
+  const ticketColIndex = columnMapping.indexOf('ticketType');
+  const ticketColMapped = ticketColIndex >= 0;
+  const detectedExcelTicketValues = useMemo(() => {
+    if (ticketColIndex < 0 || parsedRows.length === 0) return [];
+    const seen = new Set<string>();
+    parsedRows.forEach((row) => {
+      const val = (row[ticketColIndex] || '').trim();
+      if (val) seen.add(val);
+    });
+    return Array.from(seen).slice(0, 20);
+  }, [ticketColIndex, parsedRows]);
+
+  const importTicketAccessPreview = useMemo(
+    () => describeTicketAccessSummary(importTicketType, sessions),
+    [importTicketType, sessions]
+  );
+
   const previewRows = parsedRows.slice(0, 3);
 
   return (
@@ -1558,6 +1588,158 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                     })}
                   </div>
 
+                  {/* Ticket / Pass Selection for Imported Data */}
+                  <div className="p-3.5 rounded-xl bg-slate-900/90 border border-indigo-500/35 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 font-bold text-white">
+                        <Ticket className="w-4 h-4 text-indigo-400" />
+                        <span>Pilihan Jenis Tiket / Pass untuk Data yang Diimpor</span>
+                      </div>
+                      {ticketColMapped && (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold">
+                          Kolom Tiket Excel Terdeteksi ({detectedExcelTicketValues.length} jenis)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setImportTicketMode('override_all')}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          importTicketMode === 'override_all'
+                            ? 'bg-indigo-600/20 border-indigo-400 text-white shadow-xs'
+                            : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="font-bold text-[11px] flex items-center gap-1.5">
+                          <span
+                            className={`w-2.5 h-2.5 rounded-full border ${
+                              importTicketMode === 'override_all'
+                                ? 'bg-indigo-400 border-indigo-300'
+                                : 'border-slate-600'
+                            }`}
+                          />
+                          <span>Tetapkan 1 Jenis Tiket untuk Semua Baris</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                          Cocok saat mengimpor Excel khusus peserta Workshop tertentu atau paket tiket yang sama.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setImportTicketMode('from_column_with_fallback')}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                          importTicketMode === 'from_column_with_fallback'
+                            ? 'bg-emerald-600/20 border-emerald-400 text-white shadow-xs'
+                            : 'bg-slate-950/70 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="font-bold text-[11px] flex items-center gap-1.5">
+                          <span
+                            className={`w-2.5 h-2.5 rounded-full border ${
+                              importTicketMode === 'from_column_with_fallback'
+                                ? 'bg-emerald-400 border-emerald-300'
+                                : 'border-slate-600'
+                            }`}
+                          />
+                          <span>Ikuti Kolom Tiket di Excel (+ Default)</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                          Mengambil nilai dari kolom Tiket Excel; pilihan di bawah dipakai jika ada baris kosong.
+                        </p>
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="block text-[11px] font-bold text-slate-300">
+                        {importTicketMode === 'override_all'
+                          ? 'Pilih Jenis Tiket / Pass yang Diterapkan ke Semua Data Impor:'
+                          : 'Pilih Jenis Tiket Default (jika kolom tiket Excel kosong):'}
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <select
+                          value={
+                            availableTickets.includes(importTicketType) ||
+                            detectedExcelTicketValues.includes(importTicketType)
+                              ? importTicketType
+                              : '__custom__'
+                          }
+                          onChange={(e) => {
+                            if (e.target.value !== '__custom__') {
+                              setImportTicketType(e.target.value);
+                            }
+                          }}
+                          className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs font-semibold focus:outline-hidden focus:border-indigo-400"
+                        >
+                          <optgroup label="Tiket Umum">
+                            {ticketPassGroups.general.map((t) => (
+                              <option key={t} value={t}>
+                                {t}
+                              </option>
+                            ))}
+                          </optgroup>
+                          {ticketPassGroups.workshopOnly.length > 0 && (
+                            <optgroup label="Tiket Pass Khusus Jenis Workshop">
+                              {ticketPassGroups.workshopOnly.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {ticketPassGroups.symposiumAndWorkshop.length > 0 && (
+                            <optgroup label="Paket Simposium + Jenis Workshop">
+                              {ticketPassGroups.symposiumAndWorkshop.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {detectedExcelTicketValues.filter((t) => !availableTickets.includes(t))
+                            .length > 0 && (
+                            <optgroup label="Jenis Tiket dari Data Excel">
+                              {detectedExcelTicketValues
+                                .filter((t) => !availableTickets.includes(t))
+                                .map((t) => (
+                                  <option key={`excel-${t}`} value={t}>
+                                    {t}
+                                  </option>
+                                ))}
+                            </optgroup>
+                          )}
+                          {customImportedTickets.length > 0 && (
+                            <optgroup label="Tiket Lainnya">
+                              {customImportedTickets.map((t) => (
+                                <option key={t} value={t}>
+                                  {t}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          <option value="__custom__">Ketik Kustom Manual...</option>
+                        </select>
+
+                        <input
+                          type="text"
+                          value={importTicketType}
+                          onChange={(e) => setImportTicketType(e.target.value)}
+                          maxLength={120}
+                          placeholder="Atau ketik nama tiket / pass khusus..."
+                          className="w-full p-2 bg-slate-950 border border-slate-700 rounded-xl text-white text-xs focus:outline-hidden focus:border-indigo-400"
+                        />
+                      </div>
+
+                      <p className="text-[11px] text-emerald-300/90 bg-emerald-950/40 border border-emerald-500/30 rounded-lg px-2.5 py-1.5">
+                        {importTicketMode === 'override_all'
+                          ? `Semua ${parsedRows.length} baris akan memakai tiket "${importTicketType || 'Simposium Full Pass'}". ${importTicketAccessPreview}`
+                          : `Baris tanpa kolom tiket akan memakai "${importTicketType || 'Simposium Full Pass'}". ${importTicketAccessPreview}`}
+                      </p>
+                    </div>
+                  </div>
+
                   {/* Option for files without email column */}
                   <label className="flex items-start gap-2 pt-1 cursor-pointer select-none">
                     <input
@@ -1591,6 +1773,9 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                         <table className="w-full text-[10px] text-left">
                           <thead className="bg-slate-900 text-slate-400">
                             <tr>
+                              <th className="px-2 py-1.5 whitespace-nowrap font-bold text-indigo-300 bg-indigo-950/40">
+                                Tiket Hasil Impor
+                              </th>
                               {parsedHeaders.map((h, i) => (
                                 <th key={i} className="px-2 py-1.5 whitespace-nowrap font-bold">
                                   {h}
@@ -1599,15 +1784,28 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/70 text-slate-300">
-                            {previewRows.map((r, rIdx) => (
-                              <tr key={rIdx}>
-                                {parsedHeaders.map((_, cIdx) => (
-                                  <td key={cIdx} className="px-2 py-1.5 whitespace-nowrap">
-                                    {r[cIdx] || '-'}
+                            {previewRows.map((r, rIdx) => {
+                              const rowExcelTicket =
+                                ticketColIndex >= 0 ? (r[ticketColIndex] || '').trim() : '';
+                              const effectiveTicket =
+                                importTicketMode === 'override_all'
+                                  ? importTicketType.trim() || 'Simposium Full Pass'
+                                  : rowExcelTicket ||
+                                    importTicketType.trim() ||
+                                    'Simposium Full Pass';
+                              return (
+                                <tr key={rIdx}>
+                                  <td className="px-2 py-1.5 whitespace-nowrap font-bold text-indigo-300 bg-indigo-950/25">
+                                    {effectiveTicket}
                                   </td>
-                                ))}
-                              </tr>
-                            ))}
+                                  {parsedHeaders.map((_, cIdx) => (
+                                    <td key={cIdx} className="px-2 py-1.5 whitespace-nowrap">
+                                      {r[cIdx] || '-'}
+                                    </td>
+                                  ))}
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

@@ -499,6 +499,8 @@ export function importParticipantsWithMapping(params: {
   mapping: ParticipantMappingTarget[];
   existingParticipants?: Participant[];
   autoGeneratePlaceholderEmail?: boolean;
+  defaultTicketType?: string;
+  ticketImportMode?: 'from_column_with_fallback' | 'override_all';
 }): {
   importedCount: number;
   updatedCount: number;
@@ -512,7 +514,10 @@ export function importParticipantsWithMapping(params: {
     mapping,
     existingParticipants,
     autoGeneratePlaceholderEmail = false,
+    defaultTicketType = 'Simposium Full Pass',
+    ticketImportMode = 'from_column_with_fallback',
   } = params;
+  const cleanDefaultTicket = defaultTicketType.trim() || 'Simposium Full Pass';
 
   const baseList = existingParticipants ? [...existingParticipants] : [...getStoredParticipants()];
 
@@ -630,6 +635,11 @@ export function importParticipantsWithMapping(params: {
       existing?.badgeId ||
       `ID-SIMP-2026-${Math.floor(1000 + Math.random() * 9000)}`;
 
+    const resolvedTicketType =
+      ticketImportMode === 'override_all'
+        ? cleanDefaultTicket
+        : ticketType || cleanDefaultTicket || existing?.ticketType || 'Simposium Full Pass';
+
     const participantObj: Participant = {
       id: existing ? existing.id : `part-${Date.now()}-${idx}`,
       ...(resolvedIdRegistrant ? { idRegistrant: resolvedIdRegistrant } : {}),
@@ -640,7 +650,7 @@ export function importParticipantsWithMapping(params: {
       role: role || existing?.role || 'Peserta',
       npaIdi: npaIdi || existing?.npaIdi || '',
       phone: phone || existing?.phone || '',
-      ticketType: ticketType || existing?.ticketType || 'Simposium Full Pass',
+      ticketType: resolvedTicketType,
       badgeId: resolvedBadgeId,
       registeredAt: existing?.registeredAt || nowDate,
       ...(Object.keys(mergedCustomFields).length > 0 ? { customFields: mergedCustomFields } : {}),

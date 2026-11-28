@@ -5,8 +5,8 @@ const DB_NAME = 'kivnahk_pdf_materials_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'materials';
 
-export const MAX_PDF_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB per uploaded PDF
-export const PDF_CHUNK_CHAR_SIZE = 400_000; // Safe margin under Firestore 1 MiB document limit
+export const MAX_PDF_UPLOAD_BYTES = 40 * 1024 * 1024; // 40 MB per uploaded PDF
+export const PDF_CHUNK_CHAR_SIZE = 700_000; // Safe margin under Firestore 1 MiB document limit
 
 export interface LocalPdfRecord {
   id: string;
@@ -47,7 +47,7 @@ export async function readPdfFileAsBase64(file: File): Promise<{
   }
   if (file.size > MAX_PDF_UPLOAD_BYTES) {
     throw new Error(
-      `Ukuran file (${formatPdfFileSize(file.size)}) melebihi batas unggah langsung 10 MB. Gunakan opsi Tautan PDF Eksternal untuk file lebih besar.`
+      `Ukuran file (${formatPdfFileSize(file.size)}) melebihi batas unggah langsung 40 MB. Gunakan opsi Link PDF Eksternal (Google Drive / URL) untuk file lebih besar.`
     );
   }
 

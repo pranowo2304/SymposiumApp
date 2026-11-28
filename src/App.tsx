@@ -1490,6 +1490,10 @@ export default function App() {
           onSelectSpeaker={(sp) => setSelectedSpeaker(sp)}
           onOpenVenue={() => navigateToTab('venue')}
           eventInfo={eventInfo}
+          currentUser={currentUser}
+          isParticipantLoggedIn={isParticipantLoggedIn}
+          isAdminAuthenticated={isAdminAuthenticated}
+          onOpenParticipantLogin={() => setIsParticipantLoginModalOpen(true)}
         />
       );
     }

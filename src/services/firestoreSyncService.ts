@@ -36,6 +36,7 @@ import type {
   PresentationMaterial,
   WorkshopIdentityCardTemplate,
   WorkshopRundownPdf,
+  WorkshopMaterialPdf,
   CertificateTemplate,
 } from '../types';
 import { sortSessionsChronologically } from '../utils/sessionSorting';
@@ -249,12 +250,50 @@ function sanitizeWorkshopRundownPdfsMap(
         materialId: safeMatId,
         title: clampStr(val.title, 300, `Rundown ${val.workshopLabel || safeKey}`),
         fileName: clampStr(val.fileName, 250, 'rundown-workshop.pdf'),
-        fileSize: Math.max(0, Math.min(15728640, Math.round(Number(val.fileSize) || 0))),
+        fileSize: Math.max(0, Math.min(52428800, Math.round(Number(val.fileSize) || 0))),
         mimeType: clampStr(val.mimeType, 100, 'application/pdf'),
-        chunkCount: Math.max(0, Math.min(40, Math.round(Number(val.chunkCount) || 0))),
+        chunkCount: Math.max(0, Math.min(100, Math.round(Number(val.chunkCount) || 0))),
         ...(val.externalUrl ? { externalUrl: clampStr(val.externalUrl, 1000) } : {}),
         uploadedAt: clampStr(val.uploadedAt, 60, new Date().toISOString()),
       };
+    });
+
+  return result;
+}
+
+function sanitizeWorkshopMaterialsMap(
+  rawMap?: Record<string, WorkshopMaterialPdf[]>
+): Record<string, WorkshopMaterialPdf[]> {
+  const result: Record<string, WorkshopMaterialPdf[]> = {};
+  if (!rawMap || typeof rawMap !== 'object') return result;
+
+  Object.entries(rawMap)
+    .slice(0, 15)
+    .forEach(([key, list]) => {
+      if (!Array.isArray(list)) return;
+      const safeKey = toFirestoreDocId(key, 'ws_material').slice(0, 120);
+      const cleanedList: WorkshopMaterialPdf[] = list
+        .filter((item) => item && typeof item === 'object')
+        .slice(0, 20)
+        .map((item) => {
+          const safeId = toFirestoreDocId(item.id, 'mat').slice(0, 128);
+          return {
+            id: safeId,
+            workshopKey: toFirestoreDocId(item.workshopKey || safeKey, 'ws_material').slice(0, 120),
+            workshopLabel: clampStr(item.workshopLabel, 200, safeKey),
+            title: clampStr(item.title, 300, 'Materi Workshop'),
+            ...(item.speakerName ? { speakerName: clampStr(item.speakerName, 200) } : {}),
+            fileName: clampStr(item.fileName, 250, 'materi-workshop.pdf'),
+            fileSize: Math.max(0, Math.min(52428800, Math.round(Number(item.fileSize) || 0))),
+            mimeType: clampStr(item.mimeType, 100, 'application/pdf'),
+            chunkCount: Math.max(0, Math.min(100, Math.round(Number(item.chunkCount) || 0))),
+            ...(item.externalUrl ? { externalUrl: clampStr(item.externalUrl, 1000) } : {}),
+            uploadedAt: clampStr(item.uploadedAt, 60, new Date().toISOString()),
+          };
+        });
+      if (cleanedList.length > 0) {
+        result[safeKey] = cleanedList;
+      }
     });
 
   return result;
@@ -280,6 +319,7 @@ function sanitizeEventInfoPayload(info: SymposiumInfo, updatedBy?: string) {
     customIdentityCardUrl: clampStr(info.customIdentityCardUrl, 500000),
     identityCardLayout: normalizeIdentityCardLayout(info.identityCardLayout),
     workshopRundownPdfs: sanitizeWorkshopRundownPdfsMap(info.workshopRundownPdfs),
+    workshopMaterials: sanitizeWorkshopMaterialsMap(info.workshopMaterials),
     themeColor,
     contactEmail: clampStr(info.contactEmail, 160),
     contactPhone: clampStr(info.contactPhone, 60),
@@ -390,12 +430,12 @@ function sanitizeSessionPayload(session: Session) {
         fileName: clampStr(mat.fileName, 250, 'materi.pdf'),
         fileSize:
           typeof mat.fileSize === 'number' && Number.isFinite(mat.fileSize)
-            ? Math.max(0, Math.min(15728640, Math.round(mat.fileSize)))
+            ? Math.max(0, Math.min(52428800, Math.round(mat.fileSize)))
             : 0,
         mimeType: clampStr(mat.mimeType, 100, 'application/pdf'),
         chunkCount:
           typeof mat.chunkCount === 'number' && Number.isFinite(mat.chunkCount)
-            ? Math.max(0, Math.min(40, Math.round(mat.chunkCount)))
+            ? Math.max(0, Math.min(100, Math.round(mat.chunkCount)))
             : 0,
         externalUrl: clampStr(mat.externalUrl, 1000),
         speakerName: clampStr(mat.speakerName, 200),
@@ -772,19 +812,21 @@ export async function ensureUserProfileAndCheckAdmin(user: User): Promise<{ isAd
 
 async function commitBatchOps(
   ops: Array<{ type: 'set' | 'delete'; ref: ReturnType<typeof doc>; data?: any }>,
-  pathLabel: string
+  pathLabel: string,
+  options?: { maxOpsPerBatch?: number; timeoutMs?: number }
 ) {
   if (ops.length === 0) return;
   if (isCloudWriteQuotaExhausted()) {
     throw createQuotaExceededError();
   }
-  const CHUNK_SIZE = 400;
-  for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+  const chunkSize = Math.max(1, Math.min(400, options?.maxOpsPerBatch || 400));
+  const timeoutMs = options?.timeoutMs || 12000;
+  for (let i = 0; i < ops.length; i += chunkSize) {
     if (isCloudWriteQuotaExhausted()) {
       throw createQuotaExceededError();
     }
     const batch = writeBatch(db);
-    const slice = ops.slice(i, i + CHUNK_SIZE);
+    const slice = ops.slice(i, i + chunkSize);
     for (const op of slice) {
       if (op.type === 'set') {
         batch.set(op.ref, op.data);
@@ -793,7 +835,7 @@ async function commitBatchOps(
       }
     }
     try {
-      await runWriteWithStallGuard(batch.commit());
+      await runWriteWithStallGuard(batch.commit(), timeoutMs);
     } catch (error) {
       markQuotaErrorIfNeeded(error);
       handleFirestoreError(error, OperationType.WRITE, pathLabel);
@@ -2012,8 +2054,8 @@ export async function uploadPdfMaterialToFirestore(
   const safeSessionId = toFirestoreDocId(sessionId, 'session');
   const chunks = splitBase64IntoChunks(base64Data);
 
-  if (chunks.length > 40) {
-    throw new Error('Ukuran file PDF melebihi kapasitas maksimal penyimpanan Cloud.');
+  if (chunks.length > 100) {
+    throw new Error('Ukuran file PDF melebihi kapasitas maksimal penyimpanan Cloud (maks. 40 MB).');
   }
 
   const materialPath = `presentation_materials/${safeMatId}`;
@@ -2023,7 +2065,7 @@ export async function uploadPdfMaterialToFirestore(
       sessionId: safeSessionId,
       title: clampStr(material.title, 300, 'Materi Presentasi'),
       fileName: clampStr(material.fileName, 250, 'materi.pdf'),
-      fileSize: Math.max(0, Math.min(15728640, Math.round(material.fileSize || 0))),
+      fileSize: Math.max(0, Math.min(52428800, Math.round(material.fileSize || 0))),
       mimeType: clampStr(material.mimeType, 100, 'application/pdf'),
       chunkCount: chunks.length,
       externalUrl: clampStr(material.externalUrl, 1000),
@@ -2051,7 +2093,11 @@ export async function uploadPdfMaterialToFirestore(
         },
       };
     });
-    await commitBatchOps(chunkOps, `${materialPath}/chunks`);
+    // Batch max 5 chunks (~3.5 MB) per commit to stay safely under Firestore's 10 MiB RPC limit
+    await commitBatchOps(chunkOps, `${materialPath}/chunks`, {
+      maxOpsPerBatch: 5,
+      timeoutMs: 30000,
+    });
   }
 
   return {
@@ -2086,23 +2132,32 @@ export async function fetchPdfMaterialBlobFromFirestore(
     return null;
   }
 
-  const indices = Array.from({ length: chunkCount }, (_, i) => i);
-  const chunkStrings = await Promise.all(
-    indices.map(async (idx) => {
-      const chunkId = `chunk_${idx}`;
-      const chunkPath = `presentation_materials/${safeMatId}/chunks/${chunkId}`;
-      try {
-        const snap = await getDoc(doc(db, 'presentation_materials', safeMatId, 'chunks', chunkId));
-        if (!snap.exists()) {
-          throw new Error(`Bagian file ${chunkId} tidak ditemukan di Cloud.`);
+  // Fetch chunks in controlled parallel groups of 8 to keep large PDFs smooth on mobile networks
+  const chunkStrings: string[] = new Array(chunkCount).fill('');
+  const READ_CONCURRENCY = 8;
+  for (let start = 0; start < chunkCount; start += READ_CONCURRENCY) {
+    const end = Math.min(chunkCount, start + READ_CONCURRENCY);
+    const batchIndices = Array.from({ length: end - start }, (_, offset) => start + offset);
+    const results = await Promise.all(
+      batchIndices.map(async (idx) => {
+        const chunkId = `chunk_${idx}`;
+        const chunkPath = `presentation_materials/${safeMatId}/chunks/${chunkId}`;
+        try {
+          const snap = await getDoc(doc(db, 'presentation_materials', safeMatId, 'chunks', chunkId));
+          if (!snap.exists()) {
+            throw new Error(`Bagian file ${chunkId} tidak ditemukan di Cloud.`);
+          }
+          return (snap.data()?.data as string) || '';
+        } catch (error) {
+          handleFirestoreError(error, OperationType.GET, chunkPath);
+          return '';
         }
-        return (snap.data()?.data as string) || '';
-      } catch (error) {
-        handleFirestoreError(error, OperationType.GET, chunkPath);
-        return '';
-      }
-    })
-  );
+      })
+    );
+    results.forEach((str, offset) => {
+      chunkStrings[start + offset] = str;
+    });
+  }
 
   const combinedBase64 = chunkStrings.join('');
   if (!combinedBase64) return null;

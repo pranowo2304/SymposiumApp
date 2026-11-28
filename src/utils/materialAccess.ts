@@ -185,6 +185,11 @@ export function extractWorkshopTypes(
     Object.values(eventInfo.workshopRundownPdfs || {}).forEach((pdf) => {
       addLabel(pdf?.workshopLabel);
     });
+    Object.values(eventInfo.workshopMaterials || {}).forEach((list) => {
+      if (Array.isArray(list)) {
+        list.forEach((mat) => addLabel(mat?.workshopLabel));
+      }
+    });
   }
 
   // 3. Fallback to default event workshops if active sessions currently have no workshop entries
@@ -601,4 +606,80 @@ export function evaluateSessionMaterialAccess(params: {
     title: 'Akses Materi Terbuka',
     description: `Tiket Anda (${currentTicketLabel}) memberikan akses ke materi sesi Simposium ini.`,
   };
+}
+
+/**
+ * Evaluate whether a participant (or admin) can view & download PDF materials
+ * belonging to a specific workshop track based on their registered ticket/package.
+ */
+export function evaluateWorkshopTrackMaterialAccess(params: {
+  workshopLabel: string;
+  allSessions?: Session[];
+  eventInfo?: SymposiumInfo;
+  currentUser?: Participant | null;
+  isParticipantLoggedIn: boolean;
+  isAdmin: boolean;
+}): MaterialAccessResult {
+  const {
+    workshopLabel,
+    allSessions,
+    eventInfo,
+    currentUser,
+    isParticipantLoggedIn,
+    isAdmin,
+  } = params;
+
+  const cleanLabel = (workshopLabel || '').trim() || 'Workshop';
+  const normalizedWorkshopLabel = /^workshop\b/i.test(cleanLabel)
+    ? cleanLabel
+    : `Workshop ${cleanLabel}`;
+
+  const syntheticSession: Session = {
+    id: `ws-access-${normalizeText(normalizedWorkshopLabel).replace(/\s+/g, '-')}`,
+    day: 'Workshop',
+    date: eventInfo?.dates?.workshop || '',
+    startTime: '08:00',
+    endTime: '17:00',
+    timeString: '08:00 - 17:00 WIB',
+    title: normalizedWorkshopLabel,
+    category: normalizedWorkshopLabel,
+    type: 'Workshop Hands-On',
+    room: 'Workshop Room',
+    floor: 'Ground Floor',
+    roomColor: 'bg-emerald-600',
+    moderator: '',
+    speakers: [],
+    abstract: {
+      background: '',
+      clinicalUpdates: [],
+      conclusion: '',
+    },
+  };
+
+  // Merge known workshops from eventInfo so cross-workshop matching always sees every workshop
+  const knownFromEvent = extractWorkshopTypes(allSessions, eventInfo);
+  const augmentedSessions: Session[] = [...(allSessions || [])];
+  knownFromEvent.forEach((wsName, idx) => {
+    const alreadyExists = augmentedSessions.some(
+      (s) =>
+        getSessionTrackType(s) === 'workshop' &&
+        normalizeText(getWorkshopTypeLabel(s)) === normalizeText(wsName)
+    );
+    if (!alreadyExists) {
+      augmentedSessions.push({
+        ...syntheticSession,
+        id: `ws-known-${idx}`,
+        title: wsName,
+        category: wsName,
+      });
+    }
+  });
+
+  return evaluateSessionMaterialAccess({
+    session: syntheticSession,
+    allSessions: augmentedSessions,
+    currentUser,
+    isParticipantLoggedIn,
+    isAdmin,
+  });
 }

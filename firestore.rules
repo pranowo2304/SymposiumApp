@@ -74,8 +74,8 @@ service cloud.firestore {
           'title', 'subtitle', 'theme', 'location', 'venueAddress', 'city',
           'dateString', 'dates', 'organizer', 'accreditation', 'logoUrl',
           'customIdentityCardUrl', 'identityCardLayout', 'workshopRundownPdfs',
-          'themeColor', 'contactEmail', 'contactPhone', 'websiteUrl',
-          'enableQrAttendance', 'isPublished', 'updatedAt', 'updatedBy'
+          'workshopMaterials', 'themeColor', 'contactEmail', 'contactPhone',
+          'websiteUrl', 'enableQrAttendance', 'isPublished', 'updatedAt', 'updatedBy'
         ]) &&
         data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
         data.location is string && data.location.size() >= 1 && data.location.size() <= 250 &&
@@ -93,6 +93,7 @@ service cloud.firestore {
         isValidOptionalString(data, 'customIdentityCardUrl', 500000) &&
         (!( 'identityCardLayout' in data ) || (data.identityCardLayout is map && data.identityCardLayout.size() <= 12)) &&
         (!( 'workshopRundownPdfs' in data ) || (data.workshopRundownPdfs is map && data.workshopRundownPdfs.size() <= 15)) &&
+        (!( 'workshopMaterials' in data ) || (data.workshopMaterials is map && data.workshopMaterials.size() <= 15)) &&
         (!( 'themeColor' in data ) || data.themeColor in [
           'medical-navy', 'gold-amber', 'cyan-teal', 'emerald-green', 'crimson-ruby', 'royal-indigo'
         ]) &&
@@ -415,9 +416,9 @@ service cloud.firestore {
         isValidId(data.sessionId) &&
         data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
         data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 250 &&
-        data.fileSize is number && data.fileSize >= 0 && data.fileSize <= 15728640 &&
+        data.fileSize is number && data.fileSize >= 0 && data.fileSize <= 52428800 &&
         data.mimeType is string && data.mimeType.size() >= 1 && data.mimeType.size() <= 100 &&
-        data.chunkCount is number && data.chunkCount >= 0 && data.chunkCount <= 40 &&
+        data.chunkCount is number && data.chunkCount >= 0 && data.chunkCount <= 100 &&
         isValidOptionalString(data, 'externalUrl', 1000) &&
         isValidOptionalString(data, 'speakerName', 200) &&
         data.isPublished is bool &&
@@ -430,8 +431,8 @@ service cloud.firestore {
         data.keys().hasOnly(['id', 'materialId', 'index', 'data', 'updatedAt']) &&
         isValidId(data.id) &&
         isValidId(data.materialId) &&
-        data.index is number && data.index >= 0 && data.index < 40 &&
-        data.data is string && data.data.size() >= 1 && data.data.size() <= 500000 &&
+        data.index is number && data.index >= 0 && data.index < 100 &&
+        data.data is string && data.data.size() >= 1 && data.data.size() <= 750000 &&
         data.updatedAt is timestamp && data.updatedAt == request.time;
     }
 

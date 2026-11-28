@@ -107,6 +107,20 @@ export interface WorkshopRundownPdf {
   uploadedAt: string;
 }
 
+export interface WorkshopMaterialPdf {
+  id: string;
+  workshopKey: string;
+  workshopLabel: string;
+  title: string;
+  speakerName?: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  chunkCount: number;
+  externalUrl?: string;
+  uploadedAt: string;
+}
+
 export interface CertificateFieldConfig {
   visible: boolean;
   x: number;
@@ -164,6 +178,7 @@ export interface SymposiumInfo {
   identityCardLayout?: IdentityCardLayoutConfig;
   workshopIdentityCardTemplates?: Record<string, WorkshopIdentityCardTemplate>;
   workshopRundownPdfs?: Record<string, WorkshopRundownPdf>;
+  workshopMaterials?: Record<string, WorkshopMaterialPdf[]>;
   certificateTemplates?: Record<string, CertificateTemplate>;
 }
 

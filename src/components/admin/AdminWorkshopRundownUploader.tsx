@@ -254,7 +254,7 @@ export const AdminWorkshopRundownUploader: React.FC<AdminWorkshopRundownUploader
           : `Rundown PDF "${slot.shortLabel}" tersimpan lokal. Login Google Admin untuk menyinkronkan ke semua peserta.`
       );
     } catch (err: any) {
-      console.error('Failed uploading workshop rundown PDF:', err);
+      console.warn('Upload workshop rundown PDF notice:', err);
       onShowToast(err?.message || 'Gagal mengunggah file rundown PDF.');
     } finally {
       setUploadingKey(null);
@@ -417,7 +417,7 @@ export const AdminWorkshopRundownUploader: React.FC<AdminWorkshopRundownUploader
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Halaman <strong className="text-slate-200">Jadwal Workshop</strong> peserta akan langsung menampilkan file rundown PDF yang diunggah di sini (format PDF maks. 10 MB atau tautan Google Drive PDF).
+            Halaman <strong className="text-slate-200">Jadwal Workshop</strong> peserta akan langsung menampilkan file rundown PDF yang diunggah di sini (format PDF maks. 40 MB atau tautan Google Drive PDF).
           </p>
         </div>
 
@@ -671,7 +671,7 @@ export const AdminWorkshopRundownUploader: React.FC<AdminWorkshopRundownUploader
                         : `Upload Rundown PDF ${slot.shortLabel}`}
                     </span>
                     <span className="text-[10px] text-slate-400">
-                      Format .pdf (maks. 10 MB) · Langsung tampil di halaman Jadwal Workshop
+                      Format .pdf (maks. 40 MB) · Langsung tampil di halaman Jadwal Workshop
                     </span>
                   </label>
 

@@ -53,6 +53,7 @@ import { AdminAnalyticsDashboard } from './admin/AdminAnalyticsDashboard';
 import { AdminAiPdfScheduleExtractor } from './admin/AdminAiPdfScheduleExtractor';
 import { AdminPresentationMaterialsEditor } from './admin/AdminPresentationMaterialsEditor';
 import { AdminWorkshopRundownUploader } from './admin/AdminWorkshopRundownUploader';
+import { AdminWorkshopMaterialsUploader } from './admin/AdminWorkshopMaterialsUploader';
 import { AdminCertificateTemplatesManager } from './admin/AdminCertificateTemplatesManager';
 import { getCertificateTemplateSlots } from '../utils/certificateTemplates';
 import { 
@@ -1713,6 +1714,16 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
           <div className="space-y-6">
             {/* Upload & Manajemen File PDF Rundown Jadwal Masing-Masing Workshop */}
             <AdminWorkshopRundownUploader
+              eventInfo={eventInfo}
+              sessions={sessions}
+              onSaveEventInfo={onSaveEventInfo}
+              onShowToast={showToast}
+              isCloudAdmin={isCloudAdmin}
+              onCloudAdminSignIn={onCloudAdminSignIn}
+            />
+
+            {/* Upload & Manajemen File PDF Materi / Modul Per Workshop (Akses Khusus Paket Sesuai) */}
+            <AdminWorkshopMaterialsUploader
               eventInfo={eventInfo}
               sessions={sessions}
               onSaveEventInfo={onSaveEventInfo}

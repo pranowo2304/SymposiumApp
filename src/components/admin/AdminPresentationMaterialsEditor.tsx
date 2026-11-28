@@ -169,7 +169,7 @@ export const AdminPresentationMaterialsEditor: React.FC<
             Materi Presentasi (File PDF)
           </span>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            Unggah slide atau handout dalam format <strong className="text-slate-200">.pdf</strong> (maks. 10 MB per file) agar peserta dapat membaca &amp; mengunduhnya di tab <strong className="text-indigo-300">Materi Presentasi</strong>.
+            Unggah slide atau handout dalam format <strong className="text-slate-200">.pdf</strong> (maks. 40 MB per file) agar peserta dapat membaca &amp; mengunduhnya di tab <strong className="text-indigo-300">Materi Presentasi</strong>.
           </p>
         </div>
 

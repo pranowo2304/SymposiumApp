@@ -19,6 +19,7 @@
         "customIdentityCardUrl": { "type": "string", "maxLength": 500000 },
         "identityCardLayout": { "type": "object", "description": "Field positions, font sizes, colors, and visibility for participant ID cards." },
         "workshopRundownPdfs": { "type": "object", "description": "Metadata mapping each workshop track to its uploaded rundown schedule PDF." },
+        "workshopMaterials": { "type": "object", "description": "Metadata mapping each workshop track to its list of uploaded PDF materials." },
         "themeColor": {
           "type": "string",
           "enum": ["medical-navy", "gold-amber", "cyan-teal", "emerald-green", "crimson-ruby", "royal-indigo"]
@@ -295,7 +296,7 @@
         "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "materialId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
         "index": { "type": "number" },
-        "data": { "type": "string", "minLength": 1, "maxLength": 500000 },
+        "data": { "type": "string", "minLength": 1, "maxLength": 750000 },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "materialId", "index", "data", "updatedAt"]

@@ -13,6 +13,10 @@ import {
   seedInitialCatalogIfEmpty,
   subscribePublicCatalog,
   subscribeUserPrivateData,
+  fetchWorkshopCardTemplatesOnce,
+  fetchCertificateTemplatesOnce,
+  subscribeWorkshopCardTemplates,
+  subscribeCertificateTemplates,
   saveEventInfoToFirestore,
   syncSessionsToFirestore,
   syncSpeakersToFirestore,
@@ -449,7 +453,12 @@ export default function App() {
   const handleSaveEventInfo = (newEventInfo: SymposiumInfo) => {
     setEventInfo(newEventInfo);
     try {
-      localStorage.setItem('simposium_event_info_custom', JSON.stringify(newEventInfo));
+      const {
+        workshopIdentityCardTemplates: _cards,
+        certificateTemplates: _certs,
+        ...lightweightInfo
+      } = newEventInfo;
+      localStorage.setItem('simposium_event_info_custom', JSON.stringify(lightweightInfo));
       if (newEventInfo.title) {
         document.title = newEventInfo.title;
       }
@@ -848,7 +857,22 @@ export default function App() {
     return () => unsubscribeAuth();
   }, []);
 
-  // 2. Real-Time Public Conference Catalog Subscription (All Users)
+  // Helper to persist lightweight eventInfo to localStorage (heavy base64 templates are cached in Firestore IndexedDB)
+  const persistLightweightEventInfo = (info: SymposiumInfo) => {
+    try {
+      const {
+        workshopIdentityCardTemplates: _cards,
+        certificateTemplates: _certs,
+        ...lightweightInfo
+      } = info;
+      localStorage.setItem('simposium_event_info_custom', JSON.stringify(lightweightInfo));
+    } catch {}
+  };
+
+  const cardTemplatesLoadedRef = useRef<boolean>(false);
+  const certTemplatesLoadedRef = useRef<boolean>(false);
+
+  // 2. Real-Time Public Conference Catalog Subscription (All Users — excludes heavy base64 templates)
   useEffect(() => {
     const unsubscribeCatalog = subscribePublicCatalog({
       onEventInfo: (info) => {
@@ -874,39 +898,7 @@ export default function App() {
                 info.dates?.munasSymposium || '29 November 2026 - 1 Desember 2026',
             },
           };
-          try {
-            localStorage.setItem('simposium_event_info_custom', JSON.stringify(mergedInfo));
-          } catch {}
-          return mergedInfo;
-        });
-      },
-      onWorkshopCardTemplates: (cloudTemplates) => {
-        if (isDirtyLocal('eventInfo')) {
-          return;
-        }
-        setEventInfo((prev) => {
-          const mergedInfo: SymposiumInfo = {
-            ...prev,
-            workshopIdentityCardTemplates: cloudTemplates,
-          };
-          try {
-            localStorage.setItem('simposium_event_info_custom', JSON.stringify(mergedInfo));
-          } catch {}
-          return mergedInfo;
-        });
-      },
-      onCertificateTemplates: (cloudCertTemplates) => {
-        if (isDirtyLocal('eventInfo')) {
-          return;
-        }
-        setEventInfo((prev) => {
-          const mergedInfo: SymposiumInfo = {
-            ...prev,
-            certificateTemplates: cloudCertTemplates,
-          };
-          try {
-            localStorage.setItem('simposium_event_info_custom', JSON.stringify(mergedInfo));
-          } catch {}
+          persistLightweightEventInfo(mergedInfo);
           return mergedInfo;
         });
       },
@@ -969,6 +961,83 @@ export default function App() {
 
     return () => unsubscribeCatalog();
   }, []);
+
+  // 2b. Lazy-Load Identity Card Templates (only downloaded when opening Participant Card or Admin)
+  useEffect(() => {
+    const needsCardTemplates = activeTab === 'admin' || isParticipantLoginModalOpen;
+    if (!needsCardTemplates) return;
+
+    if (activeTab === 'admin') {
+      const unsub = subscribeWorkshopCardTemplates((cloudTemplates) => {
+        cardTemplatesLoadedRef.current = true;
+        if (isDirtyLocal('eventInfo')) return;
+        setEventInfo((prev) => ({
+          ...prev,
+          workshopIdentityCardTemplates: cloudTemplates,
+        }));
+      });
+      return () => unsub();
+    }
+
+    if (cardTemplatesLoadedRef.current) return;
+    let cancelled = false;
+    fetchWorkshopCardTemplatesOnce()
+      .then((cloudTemplates) => {
+        if (cancelled) return;
+        cardTemplatesLoadedRef.current = true;
+        if (isDirtyLocal('eventInfo')) return;
+        setEventInfo((prev) => ({
+          ...prev,
+          workshopIdentityCardTemplates: cloudTemplates,
+        }));
+      })
+      .catch((err) => {
+        console.warn('Lazy load identity_card_templates failed:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isParticipantLoginModalOpen]);
+
+  // 2c. Lazy-Load E-Certificate Templates (only downloaded when opening E-Sertifikat, Participant Card, or Admin)
+  useEffect(() => {
+    const needsCertTemplates =
+      activeTab === 'admin' || activeTab === 'sertifikat' || isParticipantLoginModalOpen;
+    if (!needsCertTemplates) return;
+
+    if (activeTab === 'admin') {
+      const unsub = subscribeCertificateTemplates((cloudCertTemplates) => {
+        certTemplatesLoadedRef.current = true;
+        if (isDirtyLocal('eventInfo')) return;
+        setEventInfo((prev) => ({
+          ...prev,
+          certificateTemplates: cloudCertTemplates,
+        }));
+      });
+      return () => unsub();
+    }
+
+    if (certTemplatesLoadedRef.current) return;
+    let cancelled = false;
+    fetchCertificateTemplatesOnce()
+      .then((cloudCertTemplates) => {
+        if (cancelled) return;
+        certTemplatesLoadedRef.current = true;
+        if (isDirtyLocal('eventInfo')) return;
+        setEventInfo((prev) => ({
+          ...prev,
+          certificateTemplates: cloudCertTemplates,
+        }));
+      })
+      .catch((err) => {
+        console.warn('Lazy load certificate_templates failed:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, isParticipantLoginModalOpen]);
 
   const lastDirSyncSigRef = useRef<string>('');
 

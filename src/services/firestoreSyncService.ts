@@ -1144,6 +1144,113 @@ export function subscribePublicCatalog(callbacks: {
   };
 }
 
+function mapWorkshopCardTemplatesDocs(
+  docs: Array<{ id: string; data: () => any }>
+): Record<string, WorkshopIdentityCardTemplate> {
+  const templatesMap: Record<string, WorkshopIdentityCardTemplate> = {};
+  docs.forEach((d) => {
+    const raw = d.data() as any;
+    const key =
+      typeof raw.workshopKey === 'string' && raw.workshopKey ? raw.workshopKey : d.id;
+    if (typeof raw.templateUrl === 'string' && raw.templateUrl.trim()) {
+      templatesMap[key] = {
+        workshopKey: key,
+        workshopLabel: typeof raw.workshopLabel === 'string' ? raw.workshopLabel : key,
+        templateUrl: raw.templateUrl,
+        ...(raw.layout ? { layout: normalizeIdentityCardLayout(raw.layout) } : {}),
+      };
+    }
+  });
+  return templatesMap;
+}
+
+function mapCertificateTemplatesDocs(
+  docs: Array<{ id: string; data: () => any }>
+): Record<string, CertificateTemplate> {
+  const templatesMap: Record<string, CertificateTemplate> = {};
+  docs.forEach((d) => {
+    const raw = d.data() as any;
+    const key =
+      typeof raw.templateKey === 'string' && raw.templateKey ? raw.templateKey : d.id;
+    if (typeof raw.templateUrl === 'string' && raw.templateUrl.trim()) {
+      templatesMap[key] = {
+        templateKey: key,
+        templateLabel: typeof raw.templateLabel === 'string' ? raw.templateLabel : key,
+        category:
+          raw.category === 'symposium' || key === 'symposium' ? 'symposium' : 'workshop',
+        templateUrl: raw.templateUrl,
+        layout: normalizeCertificateLayout(raw.layout),
+        ...(typeof raw.certificateNumberPrefix === 'string'
+          ? { certificateNumberPrefix: raw.certificateNumberPrefix }
+          : {}),
+      };
+    }
+  });
+  return templatesMap;
+}
+
+/**
+ * Lazy one-time fetch of workshop identity card templates (reduces initial bandwidth for 400+ users).
+ */
+export async function fetchWorkshopCardTemplatesOnce(): Promise<
+  Record<string, WorkshopIdentityCardTemplate>
+> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'identity_card_templates'), where('isPublished', '==', true))
+    );
+    return mapWorkshopCardTemplatesDocs(snap.docs);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'identity_card_templates');
+  }
+}
+
+/**
+ * Lazy one-time fetch of E-Certificate templates (reduces initial bandwidth for 400+ users).
+ */
+export async function fetchCertificateTemplatesOnce(): Promise<
+  Record<string, CertificateTemplate>
+> {
+  try {
+    const snap = await getDocs(
+      query(collection(db, 'certificate_templates'), where('isPublished', '==', true))
+    );
+    return mapCertificateTemplatesDocs(snap.docs);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'certificate_templates');
+  }
+}
+
+/**
+ * Live subscription for workshop identity card templates (used when Admin panel is open).
+ */
+export function subscribeWorkshopCardTemplates(
+  onData: (templates: Record<string, WorkshopIdentityCardTemplate>) => void
+): () => void {
+  return onSnapshot(
+    query(collection(db, 'identity_card_templates'), where('isPublished', '==', true)),
+    (snapshot) => {
+      onData(mapWorkshopCardTemplatesDocs(snapshot.docs));
+    },
+    (error) => handleFirestoreError(error, OperationType.LIST, 'identity_card_templates')
+  );
+}
+
+/**
+ * Live subscription for E-Certificate templates (used when Admin panel is open).
+ */
+export function subscribeCertificateTemplates(
+  onData: (templates: Record<string, CertificateTemplate>) => void
+): () => void {
+  return onSnapshot(
+    query(collection(db, 'certificate_templates'), where('isPublished', '==', true)),
+    (snapshot) => {
+      onData(mapCertificateTemplatesDocs(snapshot.docs));
+    },
+    (error) => handleFirestoreError(error, OperationType.LIST, 'certificate_templates')
+  );
+}
+
 // ============================================================================
 // Authenticated User Private Data Subscriptions
 // ============================================================================

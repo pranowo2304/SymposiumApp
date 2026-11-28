@@ -13,6 +13,7 @@ export const TAB_HASH_ORDER: MainTabType[] = [
   'symposium',
   'pameran',
   'venue',
+  'sertifikat',
   'admin',
 ];
 

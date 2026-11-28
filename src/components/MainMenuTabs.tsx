@@ -8,13 +8,14 @@ import {
   Stethoscope,
   Sliders,
   Home,
-  Lock
+  Lock,
+  Award
 } from 'lucide-react';
 
 import { SymposiumInfo } from '../types';
 import { getThemePalette } from '../utils/themeColors';
 
-export type MainTabType = 'home' | 'speaker' | 'workshop' | 'symposium' | 'pameran' | 'venue' | 'admin';
+export type MainTabType = 'home' | 'speaker' | 'workshop' | 'symposium' | 'pameran' | 'venue' | 'sertifikat' | 'admin';
 
 interface MainMenuTabsProps {
   activeTab: MainTabType;
@@ -93,6 +94,14 @@ export const MainMenuTabs: React.FC<MainMenuTabsProps> = ({
       color: 'rose'
     },
     {
+      id: 'sertifikat' as MainTabType,
+      label: 'E-Sertifikat',
+      icon: Award,
+      badge: 'Unduh',
+      badgeHighlight: true,
+      color: 'amber'
+    },
+    {
       id: 'admin' as MainTabType,
       label: 'Admin Page',
       icon: isAdminAuthenticated ? Sliders : Lock,
@@ -160,7 +169,9 @@ export const MainMenuTabs: React.FC<MainMenuTabsProps> = ({
                             ? 'text-amber-600' 
                             : item.id === 'venue' 
                               ? 'text-rose-600' 
-                              : 'text-indigo-600'
+                              : item.id === 'sertifikat'
+                                ? 'text-amber-500'
+                                : 'text-indigo-600'
                   }`} />
                   <span className="relative z-10 whitespace-nowrap tracking-tight transition-colors duration-500 ease-out">
                     {item.label}

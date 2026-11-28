@@ -12,12 +12,14 @@ import {
   Download,
   QrCode,
   IdCard,
-  BadgeCheck
+  BadgeCheck,
+  Award
 } from 'lucide-react';
 import { MainTabType } from './MainMenuTabs';
 import { Participant, SymposiumInfo } from '../types';
 import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { extractParticipantIdRegistrant } from '../data/participantData';
+import { resolveParticipantCertificates } from '../utils/certificateTemplates';
 import { getThemePalette } from '../utils/themeColors';
 import { usePWAInstall } from '../hooks/usePWAInstall';
 
@@ -52,12 +54,19 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   isAdminAuthenticated,
   eventInfo
 }) => {
-  const info = eventInfo || SYMPOSIUM_INFO;
+  const info: SymposiumInfo = eventInfo || SYMPOSIUM_INFO;
   const palette = getThemePalette(info);
   const { isInstallable, isInstalled, installApp } = usePWAInstall();
   const activeIdReg = extractParticipantIdRegistrant(currentUser);
   const resolvedIdCode = (activeIdReg || currentUser?.badgeId || currentUser?.id || '').trim();
   const [inlineQrUrl, setInlineQrUrl] = useState<string>('');
+  const uploadedCertCount = info.certificateTemplates
+    ? Object.values(info.certificateTemplates).filter((t) => Boolean(t?.templateUrl)).length
+    : 0;
+  const eligibleCertCount =
+    isParticipantLoggedIn && currentUser
+      ? resolveParticipantCertificates(currentUser, info).length
+      : 0;
 
   useEffect(() => {
     if (!isParticipantLoggedIn || !resolvedIdCode) {
@@ -153,6 +162,26 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       badgeBg: 'bg-rose-100 text-rose-800',
       actionText: 'Lihat Denah Lokasi',
       onClick: () => onSelectTab('venue')
+    },
+    {
+      id: 'sertifikat' as MainTabType,
+      title: 'E-Sertifikat',
+      subtitle:
+        eligibleCertCount > 0
+          ? `${eligibleCertCount} Siap Unduh`
+          : uploadedCertCount > 0
+          ? 'Unduh PDF & PNG'
+          : 'Simposium & Workshop',
+      desc: 'Unduh E-Sertifikat resmi Simposium, Workshop, atau Bundling sesuai tiket yang Anda ikuti.',
+      icon: Award,
+      color: 'amber',
+      gradient: 'from-amber-500 to-yellow-600',
+      badgeBg:
+        eligibleCertCount > 0
+          ? 'bg-emerald-100 text-emerald-800 font-black'
+          : 'bg-amber-100 text-amber-900 font-bold',
+      actionText: 'Unduh Sertifikat',
+      onClick: () => onSelectTab('sertifikat')
     },
     {
       id: 'install-app' as any,

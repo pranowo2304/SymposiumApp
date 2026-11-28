@@ -500,16 +500,18 @@ export function resolveParticipantCertificates(
   const combinedNormalized = normalizeWords(`${ticketRaw} ${customParts.join(' ')}`);
   const isPrivileged = /(panitia|admin|committee|speaker|pembicara|narasumber|moderator|instruktur|vip)/i.test(roleLower);
   const isWorkshopFullPass = /workshop\s*full\s*pass|semua\s*workshop|all\s*workshop/i.test(ticketLower);
-  const isAllAccess =
-    isPrivileged ||
-    /all[\s-]*access|full[\s-]*access|vip|speaker|pembicara|panitia|paket\s*lengkap|bundle/i.test(ticketLower);
-  const hasSymposium =
-    (!isWorkshopFullPass &&
-      /simposium|symposium|munas|kongres|congress|plenary|full\s*pass|member|peserta|regular|reguler/i.test(ticketLower)) ||
-    isAllAccess ||
-    !ticketRaw;
   const hasGenericWorkshop =
     /workshop|\bws\b|hands[\s-]*on|wetlab|drylab/i.test(ticketLower) || customParts.length > 0;
+  const hasExplicitSymposium = /simposium|symposium|munas|kongres|congress|plenary/i.test(ticketLower);
+  const isAllAccess =
+    isPrivileged ||
+    /all[\s-]*access|full[\s-]*access|vip|speaker|pembicara|panitia|paket\s*lengkap/i.test(ticketLower);
+  const hasSymposium =
+    hasExplicitSymposium ||
+    isAllAccess ||
+    (!hasGenericWorkshop &&
+      !isWorkshopFullPass &&
+      (/full\s*pass|member|peserta|regular|reguler/i.test(ticketLower) || !ticketRaw));
 
   const idCode = (extractParticipantIdRegistrant(participant) || participant.badgeId || participant.id || '001').trim();
 
@@ -537,8 +539,8 @@ export function resolveParticipantCertificates(
     }
   }
 
-  // Fallback: if participant somehow matched nothing (e.g. custom ticket label) but symposium exists, include symposium
-  if (eligible.length === 0 && sympTemplates.length > 0) {
+  // Fallback only for non-workshop custom ticket labels when symposium template exists
+  if (eligible.length === 0 && !hasGenericWorkshop && !isWorkshopFullPass && sympTemplates.length > 0) {
     eligible.push(sympTemplates[0]);
   }
 

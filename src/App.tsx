@@ -44,6 +44,7 @@ import { AdminPageView } from './components/AdminPageView';
 import { LandingPageView } from './components/LandingPageView';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { ParticipantLoginModal } from './components/ParticipantLoginModal';
+import { CertificateDownloadView } from './components/CertificateDownloadView';
 import { PWAInstallModal, OfflineIndicator } from './components/PWAInstallModal';
 import { AppQRCodeModal } from './components/AppQRCodeModal';
 import { playBroadcastChime } from './utils/broadcastSound';
@@ -1501,6 +1502,21 @@ export default function App() {
       return (
         <InteractiveVenueMap
           rooms={rooms}
+          eventInfo={eventInfo}
+        />
+      );
+    }
+
+    if (activeTab === 'sertifikat') {
+      return (
+        <CertificateDownloadView
+          participants={participants}
+          sessions={displaySessions}
+          currentUser={currentUser}
+          isParticipantLoggedIn={isParticipantLoggedIn}
+          onLoginSuccess={handleParticipantLoginSuccess}
+          onOpenParticipantLogin={() => setIsParticipantLoginModalOpen(true)}
+          onGoogleSignIn={handleParticipantGoogleSignIn}
           eventInfo={eventInfo}
         />
       );

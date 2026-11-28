@@ -93,9 +93,9 @@ export const BottomDock: React.FC<BottomDockProps> = ({
     <nav
       id="bottom-dock-navigation"
       aria-label="Bottom Dock Menu Navigasi"
-      className={`fixed bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.25rem)] max-w-[430px] sm:max-w-[470px] pointer-events-auto ${className}`}
+      className={`fixed bottom-0 left-0 right-0 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-40 w-full sm:max-w-[480px] pointer-events-auto ${className}`}
     >
-      <div className="relative backdrop-blur-2xl bg-slate-950/85 text-white border border-slate-700/50 shadow-[0_12px_36px_-6px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.08)] rounded-2xl sm:rounded-full px-1.5 py-1.5 sm:px-2 sm:py-1.5">
+      <div className="relative w-full backdrop-blur-2xl bg-slate-950/95 text-white border-t border-slate-700/60 sm:border-x sm:rounded-t-2xl shadow-[0_-8px_28px_rgba(0,0,0,0.45)] px-2 pt-1.5 pb-[calc(0.4rem+env(safe-area-inset-bottom,0px))] sm:px-2.5 sm:pt-1.5 sm:pb-2">
         <div 
           role="tablist" 
           aria-label="Daftar Menu Navigasi Bawah"

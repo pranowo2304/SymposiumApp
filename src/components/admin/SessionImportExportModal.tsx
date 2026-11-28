@@ -126,10 +126,11 @@ export const SessionImportExportModal: React.FC<SessionImportExportModalProps> =
     setUploadedFileName(file.name);
     setIsMunasPresetActive(false);
 
-    if (file.name.endsWith('.pdf')) {
+    const lowerName = file.name.toLowerCase();
+    if (file.type === 'application/pdf' || lowerName.endsWith('.pdf')) {
       setFileType('pdf_text');
       setIsProcessing(true);
-      extractScheduleFromPdf(file)
+      extractScheduleFromPdf(file, undefined, { existingSpeakers: speakers })
         .then((res) => {
           if (res.success && res.data) {
             setPreviewResult({
@@ -160,8 +161,8 @@ export const SessionImportExportModal: React.FC<SessionImportExportModalProps> =
       return;
     }
 
-    const isJson = file.name.endsWith('.json');
-    const isTxt = file.name.endsWith('.txt');
+    const isJson = lowerName.endsWith('.json');
+    const isTxt = lowerName.endsWith('.txt');
     const type = isJson ? 'json' : isTxt ? 'pdf_text' : 'csv';
     setFileType(type);
 

@@ -610,13 +610,34 @@ export function importSessionsFromScheduleText(rawText: string, existingSpeakers
   const importedSessions: Session[] = [];
   const errors: string[] = [];
 
-  const timeRegex = /(\d{1,2}[:.]\d{2})\s*(?:-|–|—|to|s\/d)\s*(\d{1,2}[:.]\d{2})/i;
+  const timeRegex = /(\d{1,2}[:.]\d{2})\s*(?:-|–|—|to|s\/d|sd)\s*(\d{1,2}[:.]\d{2})/i;
   
   let currentSession: Partial<Session> | null = null;
+  let currentDay = 'Hari I';
+  let currentDate = '';
   let counter = 1;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+
+    // Detect day header lines (e.g., "Hari III", "Day 2 - Senin, 30 November 2026", "Workshop (28 Nov)")
+    const dayHeaderMatch = !timeRegex.test(line) && line.length < 90 && (
+      /\b(hari\s*(iv|iii|ii|i|4|3|2|1|pertama|kedua|ketiga|keempat)|day\s*[1-4]|pre-congress|workshop)\b/i.test(line)
+    );
+    if (dayHeaderMatch) {
+      if (/\b(hari\s*(iv|4|keempat)|day\s*4)\b/i.test(line)) currentDay = 'Hari IV';
+      else if (/\b(hari\s*(iii|3|ketiga)|day\s*3)\b/i.test(line)) currentDay = 'Hari III';
+      else if (/\b(hari\s*(ii|2|kedua)|day\s*2)\b/i.test(line)) currentDay = 'Hari II';
+      else if (/\b(hari\s*(i|1|pertama)|day\s*1)\b/i.test(line)) currentDay = 'Hari I';
+      else if (/workshop|pre-congress/i.test(line)) currentDay = line;
+
+      const dateInHeader = line.match(/(?:senin|selasa|rabu|kamis|jumat|sabtu|minggu)[^|]*/i);
+      if (dateInHeader) {
+        currentDate = dateInHeader[0].trim();
+      }
+      if (!currentSession) continue;
+    }
+
     const timeMatch = line.match(timeRegex);
 
     if (timeMatch) {
@@ -628,44 +649,41 @@ export function importSessionsFromScheduleText(rawText: string, existingSpeakers
       const endTime = timeMatch[2].replace('.', ':').padStart(5, '0');
       const timeString = `${startTime} - ${endTime} WIB`;
 
-      // The rest of the line could be the title or room
       let restOfLine = line.replace(timeMatch[0], '').replace(/^[|\-–—:\s]+|[|\-–—:\s]+$/g, '').trim();
 
       currentSession = {
         id: `pdf-session-${Date.now()}-${counter}`,
-        day: 'Hari I',
-        date: 'Minggu, 29 November 2026',
+        day: currentDay,
+        date: currentDate,
         startTime,
         endTime,
         timeString,
         title: restOfLine || '',
-        category: 'Simposium & Konferensi',
+        category: 'Simposium Ilmiah',
         type: 'Plenary Session',
-        room: 'Ballroom Amartapura A',
-        floor: 'Lantai 1',
+        room: 'Ruang Utama',
+        floor: '',
         roomColor: 'bg-indigo-600',
         moderator: '',
-        capacity: 350,
+        capacity: 300,
         speakers: [],
         abstract: {
-          background: 'Sesi ilmiah simposium veteriner/kedokteran.',
-          clinicalUpdates: ['Pembaruan ilmu klinis dan studi kasus terkini.'],
-          conclusion: 'Rangkuman dan implikasi klinis.'
+          background: '',
+          clinicalUpdates: [],
+          conclusion: ''
         },
         keyTakeaways: []
       };
     } else if (currentSession) {
-      // Line after time: could be title, room, moderator, or speaker
       const lower = line.toLowerCase();
       if (!currentSession.title) {
         currentSession.title = line;
-      } else if (lower.includes('ballroom') || lower.includes('ruang') || lower.includes('hall') || lower.includes('foyer')) {
+      } else if (lower.includes('ballroom') || lower.includes('ruang') || lower.includes('hall') || lower.includes('foyer') || lower.includes('room')) {
         currentSession.room = line;
       } else if (lower.startsWith('moderator:') || lower.startsWith('mod:') || lower.includes('moderator')) {
         currentSession.moderator = line.replace(/^(moderator|mod)\s*:\s*/i, '').trim();
       } else if (lower.startsWith('speaker:') || lower.startsWith('pembicara:') || lower.startsWith('dr.') || lower.startsWith('drh.') || lower.startsWith('prof.')) {
         const speakerName = line.replace(/^(speaker|pembicara)\s*:\s*/i, '').trim();
-        // check if speaker in database
         const found = existingSpeakers.find(s => s.name.toLowerCase().includes(speakerName.toLowerCase()) || speakerName.toLowerCase().includes(s.name.toLowerCase()));
         if (found) {
           currentSession.speakers = [...(currentSession.speakers || []), found];
@@ -673,15 +691,14 @@ export function importSessionsFromScheduleText(rawText: string, existingSpeakers
           currentSession.speakers = [...(currentSession.speakers || []), {
             id: `sp-pdf-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
             name: speakerName,
-            title: 'Narasumber Simposium',
-            institution: 'Instansi / Asosiasi Profesi',
-            photoUrl: 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&auto=format&fit=crop&q=80',
-            bio: `Narasumber ahli pada sesi ${currentSession.title}.`,
-            specialty: currentSession.category || 'Spesialisasi Klinis'
+            title: '',
+            institution: '',
+            photoUrl: `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160"><rect width="160" height="160" rx="24" fill="#4f46e5"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#ffffff" font-family="system-ui,sans-serif" font-size="58" font-weight="700">${(speakerName.replace(/\b(prof|dr|drh)\.?\s*/gi, '').trim().slice(0, 2) || 'SP').toUpperCase()}</text></svg>`)}`,
+            bio: '',
+            specialty: currentSession.category || 'Simposium Ilmiah'
           }];
         }
       } else if (currentSession.title && !currentSession.moderator && line.length < 80) {
-        // Maybe category or subtitle
         if (lower.includes('plenary') || lower.includes('keynote') || lower.includes('workshop') || lower.includes('paralel')) {
           if (lower.includes('workshop')) currentSession.type = 'Workshop Hands-On';
           else if (lower.includes('keynote')) currentSession.type = 'Keynote Lecture';
@@ -709,28 +726,28 @@ export function importSessionsFromScheduleText(rawText: string, existingSpeakers
   };
 }
 
-function finalizeSession(session: Partial<Session>, idx: number, speakers: Speaker[], rooms: Room[]): Session {
-  const matchedRoom = rooms.find(r => r.name.toLowerCase() === (session.room || '').toLowerCase() || (session.room || '').toLowerCase().includes(r.shortName?.toLowerCase() || ''));
+function finalizeSession(session: Partial<Session>, idx: number, _speakers: Speaker[], rooms: Room[]): Session {
+  const matchedRoom = rooms.find(r => r.name.toLowerCase() === (session.room || '').toLowerCase() || (r.shortName && (session.room || '').toLowerCase().includes(r.shortName.toLowerCase())));
   return {
     id: session.id || `session-parsed-${Date.now()}-${idx}`,
-    day: session.day === 'Hari II' ? 'Hari II' : 'Hari I',
-    date: session.date || 'Minggu, 29 November 2026',
+    day: (session.day && session.day.trim()) || 'Hari I',
+    date: session.date || '',
     startTime: session.startTime || '08:00',
     endTime: session.endTime || '09:00',
     timeString: session.timeString || `${session.startTime || '08:00'} - ${session.endTime || '09:00'} WIB`,
     title: session.title || `Sesi Ilmiah ${idx}`,
     category: session.category || 'Simposium',
     type: session.type || 'Plenary Session',
-    room: matchedRoom ? matchedRoom.name : (session.room || 'Ballroom Amartapura A'),
-    floor: matchedRoom ? matchedRoom.floor : 'Lantai 1',
+    room: matchedRoom ? matchedRoom.name : (session.room || 'Ruang Utama'),
+    floor: matchedRoom ? matchedRoom.floor : (session.floor || ''),
     roomColor: matchedRoom ? matchedRoom.color : 'bg-indigo-600',
-    moderator: session.moderator || 'Panitia Pelaksana',
+    moderator: session.moderator || '',
     capacity: session.capacity || 300,
     speakers: session.speakers || [],
     abstract: session.abstract || {
-      background: 'Sesi ilmiah konferensi.',
-      clinicalUpdates: ['Pembaruan materi klinis terkini.'],
-      conclusion: 'Rangkuman sesi.'
+      background: '',
+      clinicalUpdates: [],
+      conclusion: ''
     },
     keyTakeaways: session.keyTakeaways || []
   };

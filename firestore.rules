@@ -122,6 +122,27 @@ service cloud.firestore {
         isValidOptionalString(data, 'updatedBy', 128);
     }
 
+    function isValidCertificateTemplate(data) {
+      return data.keys().hasAll([
+          'id', 'templateKey', 'templateLabel', 'category', 'templateUrl', 'isPublished', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'templateKey', 'templateLabel', 'category', 'templateUrl', 'layout',
+          'certificateNumberPrefix', 'isPublished', 'updatedAt', 'updatedBy'
+        ]) &&
+        isValidId(data.id) &&
+        isValidId(data.templateKey) &&
+        data.templateKey.size() <= 120 &&
+        data.templateLabel is string && data.templateLabel.size() >= 1 && data.templateLabel.size() <= 200 &&
+        data.category in ['symposium', 'workshop'] &&
+        data.templateUrl is string && data.templateUrl.size() <= 500000 &&
+        (!( 'layout' in data ) || (data.layout is map && data.layout.size() <= 12)) &&
+        isValidOptionalString(data, 'certificateNumberPrefix', 80) &&
+        data.isPublished is bool &&
+        data.updatedAt is timestamp && data.updatedAt == request.time &&
+        isValidOptionalString(data, 'updatedBy', 128);
+    }
+
     function isValidSession(data) {
       return data.keys().hasAll([
           'id', 'day', 'date', 'startTime', 'endTime', 'timeString',
@@ -450,6 +471,17 @@ service cloud.firestore {
         isValidIdentityCardTemplate(incoming()) &&
         incoming().id == templateId &&
         incoming().workshopKey == templateId;
+      allow delete: if isAdmin() && isValidId(templateId);
+    }
+
+    match /certificate_templates/{templateId} {
+      allow get: if isValidId(templateId) && (existing().isPublished == true || isAdmin());
+      allow list: if existing().isPublished == true || isAdmin();
+      allow create, update: if isAdmin() &&
+        isValidId(templateId) &&
+        isValidCertificateTemplate(incoming()) &&
+        incoming().id == templateId &&
+        incoming().templateKey == templateId;
       allow delete: if isAdmin() && isValidId(templateId);
     }
 

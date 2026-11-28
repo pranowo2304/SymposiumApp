@@ -16,7 +16,13 @@ import {
   type Timestamp,
 } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
-import { db, OperationType, handleFirestoreError, toFirestoreDocId } from '../firebase';
+import {
+  db,
+  OperationType,
+  handleFirestoreError,
+  toFirestoreDocId,
+  isFirestoreQuotaError,
+} from '../firebase';
 import type {
   SymposiumInfo,
   Session,
@@ -30,6 +36,7 @@ import type {
   PresentationMaterial,
   WorkshopIdentityCardTemplate,
   WorkshopRundownPdf,
+  CertificateTemplate,
 } from '../types';
 import {
   base64ToPdfBlob,
@@ -38,6 +45,7 @@ import {
   splitBase64IntoChunks,
 } from '../utils/presentationPdfStorage';
 import { normalizeIdentityCardLayout } from '../utils/identityCardLayout';
+import { normalizeCertificateLayout } from '../utils/certificateTemplates';
 
 const BOOTSTRAP_ADMIN_EMAIL = 'pranowo.tfc@gmail.com';
 
@@ -96,6 +104,126 @@ function clampStringArray(val: unknown, maxItems: number, maxItemLen = 500): str
     .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     .slice(0, maxItems)
     .map((item) => item.trim().slice(0, maxItemLen));
+}
+
+// ============================================================================
+// Quota Circuit Breaker & Diff-Only Write Helpers (saves 95%+ Firestore writes)
+// ============================================================================
+
+const QUOTA_PAUSE_STORAGE_KEY = 'simposium_firestore_write_paused_until_v1';
+
+function computeNextDailyQuotaResetMs(): number {
+  // Cloud Firestore daily free-tier quota resets at midnight Pacific Time (~08:00 UTC / 15:00 WIB).
+  const now = new Date();
+  const resetUtc = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 8, 5, 0, 0)
+  );
+  if (resetUtc.getTime() <= now.getTime()) {
+    resetUtc.setUTCDate(resetUtc.getUTCDate() + 1);
+  }
+  return resetUtc.getTime();
+}
+
+function readPersistedQuotaPause(): boolean {
+  try {
+    const raw = localStorage.getItem(QUOTA_PAUSE_STORAGE_KEY);
+    if (!raw) return false;
+    const until = Number(raw);
+    if (Number.isFinite(until) && until > Date.now()) {
+      return true;
+    }
+    localStorage.removeItem(QUOTA_PAUSE_STORAGE_KEY);
+  } catch {}
+  return false;
+}
+
+let cloudWriteQuotaExhausted = readPersistedQuotaPause();
+
+export function isCloudWriteQuotaExhausted(): boolean {
+  if (cloudWriteQuotaExhausted) {
+    cloudWriteQuotaExhausted = readPersistedQuotaPause();
+  }
+  return cloudWriteQuotaExhausted;
+}
+
+export function markCloudWriteQuotaExhausted(): void {
+  cloudWriteQuotaExhausted = true;
+  try {
+    localStorage.setItem(QUOTA_PAUSE_STORAGE_KEY, String(computeNextDailyQuotaResetMs()));
+  } catch {}
+}
+
+export function resetCloudWriteQuotaFlag(): void {
+  cloudWriteQuotaExhausted = false;
+  try {
+    localStorage.removeItem(QUOTA_PAUSE_STORAGE_KEY);
+  } catch {}
+}
+
+function createQuotaExceededError(): Error {
+  return new Error(
+    'resource-exhausted: Kuota tulis harian gratis Cloud Firestore telah habis untuk hari ini dan akan reset otomatis besok.'
+  );
+}
+
+function markQuotaErrorIfNeeded(error: unknown): void {
+  if (isFirestoreQuotaError(error)) {
+    markCloudWriteQuotaExhausted();
+  }
+}
+
+async function runWriteWithStallGuard<T>(writePromise: Promise<T>, timeoutMs = 12000): Promise<T> {
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timerId = setTimeout(() => {
+      // Firestore SDK retries `resource-exhausted` indefinitely in the background without rejecting.
+      // If a write stalls > 12s while online, pause automatic writes until next daily quota reset.
+      if (typeof navigator === 'undefined' || navigator.onLine) {
+        markCloudWriteQuotaExhausted();
+      }
+      reject(createQuotaExceededError());
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([writePromise, timeoutPromise]);
+  } finally {
+    if (timerId !== undefined) clearTimeout(timerId);
+  }
+}
+
+function normalizeForDiff(value: unknown): unknown {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeForDiff(item));
+  }
+  const obj = value as Record<string, unknown>;
+  if (typeof (obj as any).toMillis === 'function' || typeof (obj as any)._methodName === 'string') {
+    return null;
+  }
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(obj).sort()) {
+    if (key === 'updatedAt' || key === 'createdAt') continue;
+    const v = obj[key];
+    if (v === undefined) continue;
+    sorted[key] = normalizeForDiff(v);
+  }
+  return sorted;
+}
+
+function isDocDataEqual(
+  existing: Record<string, any> | undefined,
+  incoming: Record<string, any>
+): boolean {
+  if (!existing) return false;
+  try {
+    return (
+      JSON.stringify(normalizeForDiff(existing)) === JSON.stringify(normalizeForDiff(incoming))
+    );
+  } catch {
+    return false;
+  }
 }
 
 // ============================================================================
@@ -185,6 +313,32 @@ function sanitizeIdentityCardTemplatePayload(
   if (tpl.layout) {
     payload.layout = normalizeIdentityCardLayout(tpl.layout);
   }
+  if (updatedBy) {
+    payload.updatedBy = clampStr(updatedBy, 128);
+  }
+  return { docId, data: payload };
+}
+
+function sanitizeCertificateTemplatePayload(
+  tpl: CertificateTemplate,
+  updatedBy?: string
+) {
+  const docId = toFirestoreDocId(tpl.templateKey || tpl.templateLabel, 'certificate_tpl').slice(
+    0,
+    120
+  );
+  const category = tpl.category === 'symposium' || docId === 'symposium' ? 'symposium' : 'workshop';
+  const payload: Record<string, any> = {
+    id: docId,
+    templateKey: docId,
+    templateLabel: clampStr(tpl.templateLabel, 200, docId),
+    category,
+    templateUrl: clampStr(tpl.templateUrl, 500000),
+    layout: normalizeCertificateLayout(tpl.layout),
+    certificateNumberPrefix: clampStr(tpl.certificateNumberPrefix, 60),
+    isPublished: true,
+    updatedAt: serverTimestamp(),
+  };
   if (updatedBy) {
     payload.updatedBy = clampStr(updatedBy, 128);
   }
@@ -480,7 +634,8 @@ function buildRegistrantDirectoryEntries(participant: Participant): Array<{
 function sanitizeParticipantPayload(
   participant: Participant,
   existingCreatedAt?: Timestamp | null,
-  ownerUid?: string
+  ownerUid?: string,
+  existingId?: string | null
 ) {
   const docId = toFirestoreDocId(participant.id || participant.email, 'part');
   const role = clampStr(participant.role, 100, 'Peserta');
@@ -489,7 +644,7 @@ function sanitizeParticipantPayload(
   const resolvedIdRegistrant = resolveIdRegistrantValue(participant);
 
   const data: Record<string, any> = {
-    id: clampStr(participant.id || docId, 128),
+    id: clampStr(existingId || participant.id || docId, 128),
     idRegistrant: clampStr(resolvedIdRegistrant, 80),
     email: safeEmail.length >= 3 ? safeEmail : `${docId}@peserta.local`,
     name: clampStr(participant.name, 180, 'Peserta'),
@@ -548,39 +703,57 @@ export async function ensureUserProfileAndCheckAdmin(user: User): Promise<{ isAd
 
     try {
       const userRef = doc(db, 'users', uid);
-      await runTransaction(db, async (tx) => {
-        const userSnap = await tx.get(userRef);
-        const safeDisplayName = clampStr(
-          user.displayName || email.split('@')[0] || 'Peserta',
-          180
-        );
-        const safePhotoUrl = clampStr(user.photoURL, 500);
+      const safeDisplayName = clampStr(
+        user.displayName || email.split('@')[0] || 'Peserta',
+        180
+      );
+      const safePhotoUrl = clampStr(user.photoURL, 500);
+      const targetRole = isAdmin ? 'admin' : 'attendee';
 
-        if (!userSnap.exists()) {
-          tx.set(userRef, {
-            uid,
-            email: clampStr(email || `${uid}@firebase.local`, 180),
-            displayName: safeDisplayName,
-            photoURL: safePhotoUrl,
-            role: isAdmin ? 'admin' : 'attendee',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        } else {
-          const existingData = userSnap.data() as Record<string, any> | undefined;
+      // Check first with a single read so unchanged logins perform 0 Firestore writes
+      const existingSnap = await getDoc(userRef);
+      if (existingSnap.exists()) {
+        const existingData = existingSnap.data() as Record<string, any> | undefined;
+        const needsRoleUpgrade = isAdmin && existingData?.role !== 'admin';
+        const needsProfileUpdate =
+          existingData?.displayName !== safeDisplayName ||
+          (existingData?.photoURL || '') !== safePhotoUrl ||
+          needsRoleUpgrade;
+
+        if (needsProfileUpdate && !cloudWriteQuotaExhausted) {
           const updatePayload: Record<string, any> = {
             displayName: safeDisplayName,
             photoURL: safePhotoUrl,
             updatedAt: serverTimestamp(),
           };
-          if (isAdmin && existingData?.role !== 'admin') {
+          if (needsRoleUpgrade) {
             updatePayload.role = 'admin';
           }
-          tx.update(userRef, updatePayload);
+          await updateDoc(userRef, updatePayload);
         }
-      });
+      } else if (!cloudWriteQuotaExhausted) {
+        await runTransaction(db, async (tx) => {
+          const userSnap = await tx.get(userRef);
+          if (!userSnap.exists()) {
+            tx.set(userRef, {
+              uid,
+              email: clampStr(email || `${uid}@firebase.local`, 180),
+              displayName: safeDisplayName,
+              photoURL: safePhotoUrl,
+              role: targetRole,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            });
+          }
+        });
+      }
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, userPath);
+      markQuotaErrorIfNeeded(error);
+      if (isFirestoreQuotaError(error)) {
+        console.warn('Skipped user profile write due to Firestore daily write quota limit.');
+      } else {
+        handleFirestoreError(error, OperationType.WRITE, userPath);
+      }
     }
 
     return { isAdmin };
@@ -600,8 +773,15 @@ async function commitBatchOps(
   ops: Array<{ type: 'set' | 'delete'; ref: ReturnType<typeof doc>; data?: any }>,
   pathLabel: string
 ) {
+  if (ops.length === 0) return;
+  if (isCloudWriteQuotaExhausted()) {
+    throw createQuotaExceededError();
+  }
   const CHUNK_SIZE = 400;
   for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+    if (isCloudWriteQuotaExhausted()) {
+      throw createQuotaExceededError();
+    }
     const batch = writeBatch(db);
     const slice = ops.slice(i, i + CHUNK_SIZE);
     for (const op of slice) {
@@ -612,8 +792,9 @@ async function commitBatchOps(
       }
     }
     try {
-      await batch.commit();
+      await runWriteWithStallGuard(batch.commit());
     } catch (error) {
+      markQuotaErrorIfNeeded(error);
       handleFirestoreError(error, OperationType.WRITE, pathLabel);
     }
   }
@@ -696,6 +877,7 @@ export async function seedInitialCatalogIfEmpty(defaults: {
 export function subscribePublicCatalog(callbacks: {
   onEventInfo: (info: SymposiumInfo) => void;
   onWorkshopCardTemplates?: (templates: Record<string, WorkshopIdentityCardTemplate>) => void;
+  onCertificateTemplates?: (templates: Record<string, CertificateTemplate>) => void;
   onSessions: (sessions: Session[]) => void;
   onSpeakers: (speakers: Speaker[]) => void;
   onExhibitors: (exhibitors: Exhibitor[]) => void;
@@ -771,6 +953,37 @@ export function subscribePublicCatalog(callbacks: {
           callbacks.onWorkshopCardTemplates?.(templatesMap);
         },
         (error) => handleFirestoreError(error, OperationType.LIST, 'identity_card_templates')
+      )
+    );
+  }
+
+  if (callbacks.onCertificateTemplates) {
+    unsubscribers.push(
+      onSnapshot(
+        query(collection(db, 'certificate_templates'), where('isPublished', '==', true)),
+        (snapshot) => {
+          const templatesMap: Record<string, CertificateTemplate> = {};
+          snapshot.docs.forEach((d) => {
+            const raw = d.data() as any;
+            const key =
+              typeof raw.templateKey === 'string' && raw.templateKey ? raw.templateKey : d.id;
+            if (typeof raw.templateUrl === 'string' && raw.templateUrl.trim()) {
+              templatesMap[key] = {
+                templateKey: key,
+                templateLabel: typeof raw.templateLabel === 'string' ? raw.templateLabel : key,
+                category:
+                  raw.category === 'symposium' || key === 'symposium' ? 'symposium' : 'workshop',
+                templateUrl: raw.templateUrl,
+                layout: normalizeCertificateLayout(raw.layout),
+                ...(typeof raw.certificateNumberPrefix === 'string'
+                  ? { certificateNumberPrefix: raw.certificateNumberPrefix }
+                  : {}),
+              };
+            }
+          });
+          callbacks.onCertificateTemplates?.(templatesMap);
+        },
+        (error) => handleFirestoreError(error, OperationType.LIST, 'certificate_templates')
       )
     );
   }
@@ -975,19 +1188,37 @@ export function subscribeUserPrivateData(
 // ============================================================================
 
 export async function saveEventInfoToFirestore(info: SymposiumInfo, adminUid?: string): Promise<void> {
+  if (isCloudWriteQuotaExhausted()) {
+    throw createQuotaExceededError();
+  }
+  const eventInfoPayload = sanitizeEventInfoPayload(info, adminUid);
+  let shouldWriteMain = true;
   try {
-    await setDoc(doc(db, 'event_info', 'main'), sanitizeEventInfoPayload(info, adminUid));
-  } catch (error) {
-    handleFirestoreError(error, OperationType.WRITE, 'event_info/main');
+    const existingMain = await getDoc(doc(db, 'event_info', 'main'));
+    if (existingMain.exists() && isDocDataEqual(existingMain.data() as Record<string, any>, eventInfoPayload)) {
+      shouldWriteMain = false;
+    }
+  } catch {
+    // Proceed with write if pre-read fails
   }
 
-  // Sync per-workshop ID card templates in their own documents to avoid the 1 MiB document limit
+  if (shouldWriteMain) {
+    try {
+      await runWriteWithStallGuard(setDoc(doc(db, 'event_info', 'main'), eventInfoPayload));
+    } catch (error) {
+      markQuotaErrorIfNeeded(error);
+      handleFirestoreError(error, OperationType.WRITE, 'event_info/main');
+    }
+  }
+
+  // Sync per-workshop ID card templates in their own documents (diff-only to save writes & avoid 1 MiB limit)
   if (info.workshopIdentityCardTemplates !== undefined) {
-    let existingIds: string[] = [];
+    const existingMap = new Map<string, Record<string, any>>();
     try {
       const snap = await getDocs(collection(db, 'identity_card_templates'));
-      existingIds = snap.docs.map((d) => d.id);
+      snap.docs.forEach((d) => existingMap.set(d.id, d.data() as Record<string, any>));
     } catch (error) {
+      markQuotaErrorIfNeeded(error);
       handleFirestoreError(error, OperationType.LIST, 'identity_card_templates');
     }
 
@@ -999,19 +1230,64 @@ export async function saveEventInfoToFirestore(info: SymposiumInfo, adminUid?: s
     for (const tpl of activeTemplates) {
       const { docId, data } = sanitizeIdentityCardTemplatePayload(tpl, adminUid);
       targetIds.add(docId);
-      try {
-        await setDoc(doc(db, 'identity_card_templates', docId), data);
-      } catch (error) {
-        handleFirestoreError(error, OperationType.WRITE, `identity_card_templates/${docId}`);
+      if (!isDocDataEqual(existingMap.get(docId), data)) {
+        try {
+          await runWriteWithStallGuard(setDoc(doc(db, 'identity_card_templates', docId), data));
+        } catch (error) {
+          markQuotaErrorIfNeeded(error);
+          handleFirestoreError(error, OperationType.WRITE, `identity_card_templates/${docId}`);
+        }
       }
     }
 
-    for (const oldId of existingIds) {
+    for (const oldId of existingMap.keys()) {
       if (!targetIds.has(oldId)) {
         try {
-          await deleteDoc(doc(db, 'identity_card_templates', oldId));
+          await runWriteWithStallGuard(deleteDoc(doc(db, 'identity_card_templates', oldId)));
         } catch (error) {
+          markQuotaErrorIfNeeded(error);
           handleFirestoreError(error, OperationType.DELETE, `identity_card_templates/${oldId}`);
+        }
+      }
+    }
+  }
+
+  // Sync certificate design templates (Symposium & Workshops) in dedicated collection (diff-only)
+  if (info.certificateTemplates !== undefined) {
+    const existingCertMap = new Map<string, Record<string, any>>();
+    try {
+      const snap = await getDocs(collection(db, 'certificate_templates'));
+      snap.docs.forEach((d) => existingCertMap.set(d.id, d.data() as Record<string, any>));
+    } catch (error) {
+      markQuotaErrorIfNeeded(error);
+      handleFirestoreError(error, OperationType.LIST, 'certificate_templates');
+    }
+
+    const activeCertTemplates = Object.values(info.certificateTemplates || {}).filter(
+      (tpl) => Boolean(tpl && tpl.templateUrl && tpl.templateUrl.trim())
+    );
+    const targetCertIds = new Set<string>();
+
+    for (const tpl of activeCertTemplates) {
+      const { docId, data } = sanitizeCertificateTemplatePayload(tpl, adminUid);
+      targetCertIds.add(docId);
+      if (!isDocDataEqual(existingCertMap.get(docId), data)) {
+        try {
+          await runWriteWithStallGuard(setDoc(doc(db, 'certificate_templates', docId), data));
+        } catch (error) {
+          markQuotaErrorIfNeeded(error);
+          handleFirestoreError(error, OperationType.WRITE, `certificate_templates/${docId}`);
+        }
+      }
+    }
+
+    for (const oldId of existingCertMap.keys()) {
+      if (!targetCertIds.has(oldId)) {
+        try {
+          await runWriteWithStallGuard(deleteDoc(doc(db, 'certificate_templates', oldId)));
+        } catch (error) {
+          markQuotaErrorIfNeeded(error);
+          handleFirestoreError(error, OperationType.DELETE, `certificate_templates/${oldId}`);
         }
       }
     }
@@ -1034,11 +1310,18 @@ async function executeSyncCollectionDocs<T>(
   items: T[],
   serializer: (item: T) => { docId: string; data: Record<string, any> }
 ): Promise<void> {
-  let existingIds: string[] = [];
+  if (cloudWriteQuotaExhausted) {
+    throw createQuotaExceededError();
+  }
+
+  const existingDocsMap = new Map<string, Record<string, any>>();
   try {
     const snap = await getDocs(collection(db, collectionName));
-    existingIds = snap.docs.map((d) => d.id);
+    snap.docs.forEach((d) => {
+      existingDocsMap.set(d.id, d.data() as Record<string, any>);
+    });
   } catch (error) {
+    markQuotaErrorIfNeeded(error);
     handleFirestoreError(error, OperationType.LIST, collectionName);
   }
 
@@ -1048,11 +1331,15 @@ async function executeSyncCollectionDocs<T>(
   for (const item of items) {
     const { docId, data } = serializer(item);
     targetIds.add(docId);
-    setOps.push({ type: 'set', ref: doc(db, collectionName, docId), data });
+    const existingData = existingDocsMap.get(docId);
+    // Diff-only: skip writing documents whose content has not changed
+    if (!isDocDataEqual(existingData, data)) {
+      setOps.push({ type: 'set', ref: doc(db, collectionName, docId), data });
+    }
   }
 
   const deleteOps: Array<{ type: 'delete'; ref: ReturnType<typeof doc> }> = [];
-  for (const oldId of existingIds) {
+  for (const oldId of existingDocsMap.keys()) {
     if (!targetIds.has(oldId)) {
       deleteOps.push({ type: 'delete', ref: doc(db, collectionName, oldId) });
     }
@@ -1145,75 +1432,154 @@ export async function clearBroadcastInFirestore(): Promise<void> {
   }
 }
 
-export async function syncParticipantsToFirestore(participants: Participant[]): Promise<void> {
-  let existingDocsMap = new Map<string, Timestamp>();
-  let existingIds: string[] = [];
+async function executeSyncParticipantsToFirestore(participants: Participant[]): Promise<void> {
+  if (cloudWriteQuotaExhausted) {
+    throw createQuotaExceededError();
+  }
+
+  const existingDocsMap = new Map<string, Record<string, any>>();
   try {
     const snap = await getDocs(collection(db, 'participants'));
-    existingIds = snap.docs.map((d) => {
-      const createdAt = d.data()?.createdAt as Timestamp | undefined;
-      if (createdAt) existingDocsMap.set(d.id, createdAt);
-      return d.id;
+    snap.docs.forEach((d) => {
+      existingDocsMap.set(d.id, d.data() as Record<string, any>);
     });
   } catch (error) {
+    markQuotaErrorIfNeeded(error);
     handleFirestoreError(error, OperationType.LIST, 'participants');
   }
 
   const targetIds = new Set<string>();
-  const ops: Array<{ type: 'set' | 'delete'; ref: ReturnType<typeof doc>; data?: any }> = [];
+  const setOps: Array<{ type: 'set'; ref: ReturnType<typeof doc>; data: any }> = [];
+  const deleteOps: Array<{ type: 'delete'; ref: ReturnType<typeof doc> }> = [];
 
-  for (const p of participants) {
-    const docId = toFirestoreDocId(p.id || p.email, 'part');
+  participants.forEach((p, idx) => {
+    let docId = toFirestoreDocId(p.id || p.email, 'part');
+    if (targetIds.has(docId)) {
+      docId = toFirestoreDocId(`${docId}_${idx}`, 'part');
+    }
     targetIds.add(docId);
-    const { data } = sanitizeParticipantPayload(p, existingDocsMap.get(docId) || null);
-    ops.push({ type: 'set', ref: doc(db, 'participants', docId), data });
-  }
+    const existingRaw = existingDocsMap.get(docId);
+    const existingCreatedAt = (existingRaw?.createdAt as Timestamp | undefined) || null;
+    const existingId =
+      typeof existingRaw?.id === 'string' && existingRaw.id.trim() ? existingRaw.id : null;
+    const existingUserId =
+      typeof existingRaw?.userId === 'string' && existingRaw.userId.trim()
+        ? existingRaw.userId
+        : undefined;
 
-  for (const oldId of existingIds) {
+    const { data } = sanitizeParticipantPayload(p, existingCreatedAt, existingUserId, existingId);
+    // Diff-only: skip writing participants that are already identical in Cloud Firestore
+    if (!isDocDataEqual(existingRaw, data)) {
+      setOps.push({ type: 'set', ref: doc(db, 'participants', docId), data });
+    }
+  });
+
+  for (const oldId of existingDocsMap.keys()) {
     if (!targetIds.has(oldId)) {
-      ops.push({ type: 'delete', ref: doc(db, 'participants', oldId) });
+      deleteOps.push({ type: 'delete', ref: doc(db, 'participants', oldId) });
     }
   }
 
-  await commitBatchOps(ops, 'participants');
+  if (deleteOps.length > 0) {
+    await commitBatchOps(deleteOps, 'participants/delete');
+  }
+  if (setOps.length > 0) {
+    await commitBatchOps(setOps, 'participants');
+  }
 
-  // Sync non-PII single-document lookup directory keyed by Id_registrant
+  // Diff-only sync for non-PII single-document lookup directory keyed by Id_registrant
+  if (cloudWriteQuotaExhausted) return;
   try {
     const existingDirSnap = await getDocs(collection(db, 'registrant_directory'));
-    const existingDirIds = existingDirSnap.docs.map((d) => d.id);
+    const existingDirMap = new Map<string, Record<string, any>>();
+    existingDirSnap.docs.forEach((d) => {
+      existingDirMap.set(d.id, d.data() as Record<string, any>);
+    });
+
     const targetDirIds = new Set<string>();
-    const dirOps: Array<{ type: 'set' | 'delete'; ref: ReturnType<typeof doc>; data?: any }> = [];
+    const dirSetOps: Array<{ type: 'set'; ref: ReturnType<typeof doc>; data: any }> = [];
+    const dirDeleteOps: Array<{ type: 'delete'; ref: ReturnType<typeof doc> }> = [];
 
     for (const p of participants) {
       for (const dirEntry of buildRegistrantDirectoryEntries(p)) {
         if (!targetDirIds.has(dirEntry.lookupId)) {
           targetDirIds.add(dirEntry.lookupId);
-          dirOps.push({
-            type: 'set',
-            ref: doc(db, 'registrant_directory', dirEntry.lookupId),
-            data: dirEntry.data,
-          });
+          const prevDir = existingDirMap.get(dirEntry.lookupId);
+          if (!isDocDataEqual(prevDir, dirEntry.data)) {
+            dirSetOps.push({
+              type: 'set',
+              ref: doc(db, 'registrant_directory', dirEntry.lookupId),
+              data: dirEntry.data,
+            });
+          }
         }
       }
     }
 
-    for (const oldDirId of existingDirIds) {
+    for (const oldDirId of existingDirMap.keys()) {
       if (!targetDirIds.has(oldDirId)) {
-        dirOps.push({ type: 'delete', ref: doc(db, 'registrant_directory', oldDirId) });
+        dirDeleteOps.push({ type: 'delete', ref: doc(db, 'registrant_directory', oldDirId) });
       }
     }
 
-    if (dirOps.length > 0) {
-      await commitBatchOps(dirOps, 'registrant_directory');
+    if (dirDeleteOps.length > 0) {
+      await commitBatchOps(dirDeleteOps, 'registrant_directory/delete');
+    }
+    if (dirSetOps.length > 0) {
+      await commitBatchOps(dirSetOps, 'registrant_directory');
     }
   } catch (error) {
+    markQuotaErrorIfNeeded(error);
     console.warn('Registrant directory sync skipped or failed:', error);
   }
+}
+
+export function syncParticipantsToFirestore(participants: Participant[]): Promise<void> {
+  const snapshotCopy = [...participants];
+  const queueKey = 'participants';
+
+  return new Promise<void>((resolve, reject) => {
+    const existingPending = pendingCollectionSyncTasks.get(queueKey);
+    if (existingPending) {
+      existingPending.run = () => executeSyncParticipantsToFirestore(snapshotCopy);
+      existingPending.resolvers.push({ resolve, reject });
+    } else {
+      pendingCollectionSyncTasks.set(queueKey, {
+        run: () => executeSyncParticipantsToFirestore(snapshotCopy),
+        resolvers: [{ resolve, reject }],
+      });
+    }
+
+    if (activeCollectionSyncs.has(queueKey)) {
+      return;
+    }
+
+    const drainQueue = async () => {
+      activeCollectionSyncs.add(queueKey);
+      try {
+        while (pendingCollectionSyncTasks.has(queueKey)) {
+          const nextTask = pendingCollectionSyncTasks.get(queueKey)!;
+          pendingCollectionSyncTasks.delete(queueKey);
+          try {
+            await nextTask.run();
+            nextTask.resolvers.forEach((r) => r.resolve());
+          } catch (err) {
+            nextTask.resolvers.forEach((r) => r.reject(err));
+          }
+        }
+      } finally {
+        activeCollectionSyncs.delete(queueKey);
+      }
+    };
+
+    void drainQueue();
+  });
 }
 
 export async function ensureRegistrantDirectorySynced(
   participants: Participant[]
 ): Promise<number> {
+  if (cloudWriteQuotaExhausted) return 0;
   const existingDirSnap = await getDocs(collection(db, 'registrant_directory'));
   const existingDirMap = new Map<string, Record<string, any>>();
   for (const d of existingDirSnap.docs) {

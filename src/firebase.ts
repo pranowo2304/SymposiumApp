@@ -71,6 +71,15 @@ export function handleFirestoreError(
   throw new Error(JSON.stringify(errInfo));
 }
 
+export function isFirestoreQuotaError(error: unknown): boolean {
+  const code = (error as { code?: string })?.code || '';
+  const msg = error instanceof Error ? error.message : String(error || '');
+  return (
+    code === 'resource-exhausted' ||
+    /resource-exhausted|quota\s+(limit\s+)?exceeded|free daily (write|read) units/i.test(msg)
+  );
+}
+
 /**
  * Normalizes any identifier into a Firestore-safe document ID matching `^[a-zA-Z0-9_-]+$`.
  */

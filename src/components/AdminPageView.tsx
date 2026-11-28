@@ -39,7 +39,8 @@ import {
   LogIn,
   Image as ImageIcon,
   Link as LinkIcon,
-  QrCode
+  QrCode,
+  Award
 } from 'lucide-react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { Speaker, Session, Exhibitor, Room, Participant, SymposiumInfo, BroadcastNotification, AttendanceRecord, WorkshopRundownItem, PresentationMaterial } from '../types';
@@ -51,6 +52,8 @@ import { AdminAnalyticsDashboard } from './admin/AdminAnalyticsDashboard';
 import { AdminAiPdfScheduleExtractor } from './admin/AdminAiPdfScheduleExtractor';
 import { AdminPresentationMaterialsEditor } from './admin/AdminPresentationMaterialsEditor';
 import { AdminWorkshopRundownUploader } from './admin/AdminWorkshopRundownUploader';
+import { AdminCertificateTemplatesManager } from './admin/AdminCertificateTemplatesManager';
+import { getCertificateTemplateSlots } from '../utils/certificateTemplates';
 import { 
   MUNAS_SESSIONS, 
   MUNAS_SPEAKERS, 
@@ -58,7 +61,7 @@ import {
   MUNAS_ADHPHKI_EVENT_INFO 
 } from '../data/munasAdhphkiData';
 
-type AdminTab = 'analytics' | 'ai_pdf' | 'event' | 'broadcast' | 'speakers' | 'symposium' | 'workshop' | 'abstracts' | 'pameran' | 'ruangan' | 'participants';
+type AdminTab = 'analytics' | 'ai_pdf' | 'event' | 'certificates' | 'broadcast' | 'speakers' | 'symposium' | 'workshop' | 'abstracts' | 'pameran' | 'ruangan' | 'participants';
 
 interface AdminPageViewProps {
   eventInfo: SymposiumInfo;
@@ -1174,6 +1177,36 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
             </button>
 
             <button
+              id="admin-tab-certificates"
+              onClick={() => { setActiveAdminTab('certificates'); setSearchTerm(''); }}
+              className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 whitespace-nowrap transition-all ${
+                activeAdminTab === 'certificates'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black shadow-md'
+                  : 'bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+              }`}
+            >
+              <Award className={`w-4 h-4 ${activeAdminTab === 'certificates' ? 'text-slate-950' : 'text-amber-400'}`} />
+              <span>Desain Sertifikat</span>
+              {(() => {
+                const certSlots = getCertificateTemplateSlots(sessions, eventInfo);
+                const uploadedCerts = certSlots.filter((s) => Boolean(eventInfo.certificateTemplates?.[s.templateKey]?.templateUrl)).length;
+                return (
+                  <span
+                    className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                      activeAdminTab === 'certificates'
+                        ? 'bg-slate-950/20 text-slate-950'
+                        : uploadedCerts > 0
+                        ? 'bg-emerald-500/20 text-emerald-300'
+                        : 'bg-amber-500/20 text-amber-300'
+                    }`}
+                  >
+                    {uploadedCerts}/{certSlots.length}
+                  </span>
+                );
+              })()}
+            </button>
+
+            <button
               id="admin-tab-broadcast"
               onClick={() => { setActiveAdminTab('broadcast'); setSearchTerm(''); }}
               className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 whitespace-nowrap transition-all ${
@@ -1367,6 +1400,21 @@ export const AdminPageView: React.FC<AdminPageViewProps> = ({
           <AdminEventSettings
             eventInfo={eventInfo}
             sessions={sessions}
+            onSaveEventInfo={onSaveEventInfo}
+            onShowToast={showToast}
+            isCloudAdmin={isCloudAdmin}
+            onCloudAdminSignIn={onCloudAdminSignIn}
+          />
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* SECTION -0.5: DESAIN TEMPLATE SERTIFIKAT (SYMPOSIUM & 2 WORKSHOP) */}
+        {/* ------------------------------------------------------------- */}
+        {activeAdminTab === 'certificates' && (
+          <AdminCertificateTemplatesManager
+            eventInfo={eventInfo}
+            sessions={sessions}
+            participants={participants}
             onSaveEventInfo={onSaveEventInfo}
             onShowToast={showToast}
             isCloudAdmin={isCloudAdmin}

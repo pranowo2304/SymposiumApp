@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { onAuthStateChanged, type User as FirebaseUser } from 'firebase/auth';
-import { auth, signInWithGoogle, signOutFirebase, formatFirebaseAuthError } from './firebase';
+import {
+  auth,
+  signInWithGoogle,
+  signOutFirebase,
+  formatFirebaseAuthError,
+  isFirestoreQuotaError,
+} from './firebase';
 import {
   ensureUserProfileAndCheckAdmin,
   seedInitialCatalogIfEmpty,
@@ -20,6 +26,8 @@ import {
   lookupOwnParticipantByEmailInFirestore,
   lookupParticipantByIdRegistrantInFirestore,
   subscribeParticipantByIdRegistrantInFirestore,
+  isCloudWriteQuotaExhausted,
+  resetCloudWriteQuotaFlag,
 } from './services/firestoreSyncService';
 import { Header } from './components/Header';
 import { MainMenuTabs, MainTabType } from './components/MainMenuTabs';
@@ -395,26 +403,37 @@ export default function App() {
   }, [eventInfo]);
 
   // Tracks active in-flight Firestore mutations per collection so intermediate onSnapshot echoes
-  // never roll back rapid deletions or edits before the cloud batch finishes committing.
-  const inFlightCloudSyncRef = useRef<Record<'sessions' | 'speakers' | 'exhibitors' | 'rooms', number>>({
+  // never roll back rapid deletions, edits, or multi-batch Excel imports before cloud commit finishes.
+  const inFlightCloudSyncRef = useRef<
+    Record<'sessions' | 'speakers' | 'exhibitors' | 'rooms' | 'participants', number>
+  >({
     sessions: 0,
     speakers: 0,
     exhibitors: 0,
     rooms: 0,
+    participants: 0,
   });
 
+  const QUOTA_EXCEEDED_TOAST =
+    'Kuota tulis harian gratis Cloud Firestore habis (reset otomatis besok). Data Anda tetap aman tersimpan di perangkat ini.';
+
   const runTrackedCatalogSync = (
-    key: 'sessions' | 'speakers' | 'exhibitors' | 'rooms',
+    key: 'sessions' | 'speakers' | 'exhibitors' | 'rooms' | 'participants',
     syncFn: () => Promise<void>,
     errorToast: string
   ) => {
+    if (isCloudWriteQuotaExhausted()) {
+      setDirtyLocal(key);
+      showToast(QUOTA_EXCEEDED_TOAST);
+      return;
+    }
     clearDirtyLocal(key);
     inFlightCloudSyncRef.current[key] += 1;
     syncFn()
       .catch((err) => {
         console.error(`Firestore ${key} sync failed:`, err);
         setDirtyLocal(key);
-        showToast(errorToast);
+        showToast(isFirestoreQuotaError(err) ? QUOTA_EXCEEDED_TOAST : errorToast);
       })
       .finally(() => {
         inFlightCloudSyncRef.current[key] = Math.max(0, inFlightCloudSyncRef.current[key] - 1);
@@ -433,15 +452,22 @@ export default function App() {
       console.error('Failed saving event info locally:', e);
       showToast('Peringatan: Ukuran data terlalu besar untuk penyimpanan lokal browser.');
     }
-    if (isCloudAdmin) {
+    if (isCloudAdmin && !isCloudWriteQuotaExhausted()) {
       clearDirtyLocal('eventInfo');
       saveEventInfoToFirestore(newEventInfo, firebaseUser?.uid).catch((err) => {
         console.error('Firestore eventInfo sync failed:', err);
         setDirtyLocal('eventInfo');
-        showToast('Gagal menyimpan pengaturan event ke Cloud Database.');
+        showToast(
+          isFirestoreQuotaError(err)
+            ? QUOTA_EXCEEDED_TOAST
+            : 'Gagal menyimpan pengaturan event ke Cloud Database.'
+        );
       });
     } else {
       setDirtyLocal('eventInfo');
+      if (isCloudAdmin && isCloudWriteQuotaExhausted()) {
+        showToast(QUOTA_EXCEEDED_TOAST);
+      }
     }
   };
 
@@ -595,17 +621,13 @@ export default function App() {
     setParticipants(newParticipants);
     saveStoredParticipants(newParticipants);
     if (isCloudAdmin) {
-      try {
-        localStorage.removeItem('simposium_participants_dirty_local_v1');
-      } catch {}
-      syncParticipantsToFirestore(newParticipants).catch((err) => {
-        console.error('Firestore participants sync failed:', err);
-        showToast('Data tersimpan lokal, namun gagal sinkron ke Cloud Database.');
-      });
+      runTrackedCatalogSync(
+        'participants',
+        () => syncParticipantsToFirestore(newParticipants),
+        'Data peserta tersimpan lokal, namun gagal sinkron ke Cloud Database.'
+      );
     } else {
-      try {
-        localStorage.setItem('simposium_participants_dirty_local_v1', 'true');
-      } catch {}
+      setDirtyLocal('participants');
     }
   };
 
@@ -739,6 +761,9 @@ export default function App() {
           if (typeof window !== 'undefined' && parseTabFromHash(window.location.hash) === 'admin') {
             setActiveTab('admin');
           }
+          if (isCloudWriteQuotaExhausted()) {
+            return;
+          }
           setIsCloudSyncing(true);
           try {
             const didSeed = await seedInitialCatalogIfEmpty({
@@ -829,6 +854,8 @@ export default function App() {
             ...info,
             workshopIdentityCardTemplates:
               info.workshopIdentityCardTemplates ?? prev.workshopIdentityCardTemplates,
+            certificateTemplates:
+              info.certificateTemplates ?? prev.certificateTemplates,
             dates: {
               ...SYMPOSIUM_INFO.dates,
               ...(info.dates || {}),
@@ -854,6 +881,21 @@ export default function App() {
           const mergedInfo: SymposiumInfo = {
             ...prev,
             workshopIdentityCardTemplates: cloudTemplates,
+          };
+          try {
+            localStorage.setItem('simposium_event_info_custom', JSON.stringify(mergedInfo));
+          } catch {}
+          return mergedInfo;
+        });
+      },
+      onCertificateTemplates: (cloudCertTemplates) => {
+        if (isDirtyLocal('eventInfo')) {
+          return;
+        }
+        setEventInfo((prev) => {
+          const mergedInfo: SymposiumInfo = {
+            ...prev,
+            certificateTemplates: cloudCertTemplates,
           };
           try {
             localStorage.setItem('simposium_event_info_custom', JSON.stringify(mergedInfo));
@@ -935,29 +977,39 @@ export default function App() {
       {
         onParticipants: (cloudParticipants) => {
           if (isCloudAdmin) {
-            if (pendingLocalParticipantPushRef.current) return;
+            if (
+              pendingLocalParticipantPushRef.current ||
+              inFlightCloudSyncRef.current.participants > 0
+            ) {
+              return;
+            }
 
-            let hasUnsyncedLocalEdits = false;
-            try {
-              hasUnsyncedLocalEdits =
-                localStorage.getItem('simposium_participants_dirty_local_v1') === 'true';
-            } catch {}
+            const hasUnsyncedLocalEdits = isDirtyLocal('participants');
 
-            if (hasUnsyncedLocalEdits && latestCatalogRef.current.participants.length > 0) {
+            if (hasUnsyncedLocalEdits) {
+              if (isCloudWriteQuotaExhausted()) {
+                return;
+              }
               const localToPush = [...latestCatalogRef.current.participants];
               pendingLocalParticipantPushRef.current = true;
+              inFlightCloudSyncRef.current.participants += 1;
               syncParticipantsToFirestore(localToPush)
                 .then(() => {
-                  try {
-                    localStorage.removeItem('simposium_participants_dirty_local_v1');
-                  } catch {}
+                  clearDirtyLocal('participants');
                   showToast(`${localToPush.length} data peserta lokal disinkronkan ke Cloud!`);
                 })
                 .catch((err) => {
                   console.error('Auto-push local participants failed:', err);
+                  if (isFirestoreQuotaError(err)) {
+                    showToast(QUOTA_EXCEEDED_TOAST);
+                  }
                 })
                 .finally(() => {
                   pendingLocalParticipantPushRef.current = false;
+                  inFlightCloudSyncRef.current.participants = Math.max(
+                    0,
+                    inFlightCloudSyncRef.current.participants - 1
+                  );
                 });
               return;
             }
@@ -972,7 +1024,7 @@ export default function App() {
                   )}`
               )
               .join('|');
-            if (sig && sig !== lastDirSyncSigRef.current) {
+            if (sig && sig !== lastDirSyncSigRef.current && !isCloudWriteQuotaExhausted()) {
               lastDirSyncSigRef.current = sig;
               ensureRegistrantDirectorySynced(cloudParticipants)
                 .then((writtenCount) => {
@@ -1077,7 +1129,18 @@ export default function App() {
       showToast('Silakan masuk dengan akun Google Admin terlebih dahulu.');
       return;
     }
+    resetCloudWriteQuotaFlag();
     setIsCloudSyncing(true);
+    const keys: Array<'sessions' | 'speakers' | 'exhibitors' | 'rooms' | 'participants'> = [
+      'sessions',
+      'speakers',
+      'exhibitors',
+      'rooms',
+      'participants',
+    ];
+    keys.forEach((k) => {
+      inFlightCloudSyncRef.current[k] += 1;
+    });
     try {
       await Promise.all([
         saveEventInfoToFirestore(eventInfo, firebaseUser.uid),
@@ -1097,8 +1160,15 @@ export default function App() {
       showToast('Seluruh data berhasil disinkronkan ke Cloud Database!');
     } catch (err) {
       console.error('Force cloud sync failed:', err);
-      showToast('Sebagian data gagal disinkronkan ke Cloud.');
+      showToast(
+        isFirestoreQuotaError(err)
+          ? QUOTA_EXCEEDED_TOAST
+          : 'Sebagian data gagal disinkronkan ke Cloud.'
+      );
     } finally {
+      keys.forEach((k) => {
+        inFlightCloudSyncRef.current[k] = Math.max(0, inFlightCloudSyncRef.current[k] - 1);
+      });
       setIsCloudSyncing(false);
     }
   };

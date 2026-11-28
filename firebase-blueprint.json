@@ -333,6 +333,24 @@
         "updatedBy": { "type": "string", "maxLength": 128 }
       },
       "required": ["id", "workshopKey", "workshopLabel", "templateUrl", "isPublished", "updatedAt"]
+    },
+    "CertificateTemplate": {
+      "title": "CertificateTemplate",
+      "description": "Custom certificate background design image and field layout for the symposium and each workshop track.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "templateKey": { "type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "templateLabel": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "category": { "type": "string", "enum": ["symposium", "workshop"] },
+        "templateUrl": { "type": "string", "maxLength": 500000 },
+        "layout": { "type": "object", "description": "Optional field positions, colors, and typography for the certificate." },
+        "certificateNumberPrefix": { "type": "string", "maxLength": 80 },
+        "isPublished": { "type": "boolean" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string", "maxLength": 128 }
+      },
+      "required": ["id", "templateKey", "templateLabel", "category", "templateUrl", "isPublished", "updatedAt"]
     }
   },
   "firestore": {
@@ -343,6 +361,10 @@
     "/identity_card_templates/{templateId}": {
       "schema": { "$ref": "#/entities/IdentityCardTemplate" },
       "description": "Per-workshop custom participant ID card template images and optional field layouts."
+    },
+    "/certificate_templates/{templateId}": {
+      "schema": { "$ref": "#/entities/CertificateTemplate" },
+      "description": "Custom certificate design template images and field layouts for Symposium and each Workshop track."
     },
     "/sessions/{sessionId}": {
       "schema": { "$ref": "#/entities/Session" },

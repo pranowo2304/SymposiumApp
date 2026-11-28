@@ -203,6 +203,7 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
     workshopIdentityCardTemplates: info.workshopIdentityCardTemplates
       ? { ...info.workshopIdentityCardTemplates }
       : {},
+    certificateTemplates: info.certificateTemplates ? { ...info.certificateTemplates } : {},
     workshopRundownPdfs: info.workshopRundownPdfs ? { ...info.workshopRundownPdfs } : {},
     enableQrAttendance: false
   });
@@ -314,6 +315,7 @@ export const AdminEventSettings: React.FC<AdminEventSettingsProps> = ({
       customIdentityCardUrl: SYMPOSIUM_INFO.customIdentityCardUrl || '',
       identityCardLayout: normalizeIdentityCardLayout(SYMPOSIUM_INFO.identityCardLayout),
       workshopIdentityCardTemplates: {},
+      certificateTemplates: formData.certificateTemplates ? { ...formData.certificateTemplates } : {},
       workshopRundownPdfs: {},
       enableQrAttendance: false
     });

@@ -107,6 +107,35 @@ export interface WorkshopRundownPdf {
   uploadedAt: string;
 }
 
+export interface CertificateFieldConfig {
+  visible: boolean;
+  x: number;
+  y: number;
+  fontSize: number;
+  color: string;
+  align: 'left' | 'center' | 'right';
+  fontFamily: 'serif' | 'sans';
+  fontWeight: 'normal' | 'bold';
+}
+
+export interface CertificateLayoutConfig {
+  name: CertificateFieldConfig;
+  role: CertificateFieldConfig;
+  institution: CertificateFieldConfig;
+  certificateNumber: CertificateFieldConfig;
+  dateLine: CertificateFieldConfig;
+  accreditation: CertificateFieldConfig;
+}
+
+export interface CertificateTemplate {
+  templateKey: string;
+  templateLabel: string;
+  category: 'symposium' | 'workshop';
+  templateUrl: string;
+  layout?: CertificateLayoutConfig;
+  certificateNumberPrefix?: string;
+}
+
 export interface SymposiumInfo {
   title: string;
   subtitle: string;
@@ -135,6 +164,7 @@ export interface SymposiumInfo {
   identityCardLayout?: IdentityCardLayoutConfig;
   workshopIdentityCardTemplates?: Record<string, WorkshopIdentityCardTemplate>;
   workshopRundownPdfs?: Record<string, WorkshopRundownPdf>;
+  certificateTemplates?: Record<string, CertificateTemplate>;
 }
 
 export interface Participant {

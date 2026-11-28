@@ -412,6 +412,33 @@ export function parseDelimitedSpreadsheetText(rawText: string): {
   };
 }
 
+const EMAIL_EXTRACT_REGEX = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+
+function cleanEmailCell(raw: string): string {
+  const cleaned = (raw || '')
+    .replace(/[\u200B-\u200D\uFEFF\u00A0]/g, ' ')
+    .replace(/^mailto:/i, '')
+    .trim();
+  if (!cleaned) return '';
+  const extracted = cleaned.match(EMAIL_EXTRACT_REGEX);
+  if (extracted) {
+    return extracted[0].toLowerCase();
+  }
+  const compact = cleaned.replace(/\s+/g, '');
+  if (compact.includes('@') && compact.length >= 3) {
+    return compact.toLowerCase();
+  }
+  return '';
+}
+
+function normalizeNameForMatch(name: string): string {
+  return (name || '')
+    .toLowerCase()
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export function detectParticipantColumnMapping(
   headers: string[],
   rows: string[][]
@@ -432,21 +459,29 @@ export function detectParticipantColumnMapping(
       return pickUnique('idRegistrant');
     }
     if (/(e-?mail|surel|\bmail\b)/.test(h)) return pickUnique('email');
-    if (/(nama|full.?name|\bname\b|peserta)/.test(h) && !/(institusi|instansi|rs|rumah sakit|kegiatan|event)/.test(h)) {
+    if (/(tiket|ticket|paket|jenis.?peserta|kepesertaan|pass|workshop)/.test(h)) {
+      return pickUnique('ticketType');
+    }
+    if (
+      /(nama|full.?name|\bname\b|peserta)/.test(h) &&
+      !/(institusi|instansi|rs|rumah sakit|kegiatan|event|jenis|status|kategori|tipe|paket|tiket|workshop)/.test(
+        h
+      )
+    ) {
       return pickUnique('name');
     }
     if (/(gelar|\btitle\b)/.test(h)) return pickUnique('title');
-    if (/(institusi|instansi|rumah sakit|\brs\b|hospital|afiliasi|faskes|asal|lembaga|unit kerja|universitas|fk)/.test(h)) {
+    if (/(institusi|instansi|rumah sakit|\brs\b|hospital|afiliasi|faskes|asal|lembaga|unit kerja|universitas|fk|klinik)/.test(h)) {
       return pickUnique('institution');
     }
     if (/(profesi|\brole\b|jabatan|kategori|spesialis|bidang|peran)/.test(h)) {
       return pickUnique('role');
     }
-    if (/(npa|idi|\bstr\b|\bsip\b|anggota)/.test(h)) return pickUnique('npaIdi');
+    if (/(npa|idi|\bstr\b|\bsip\b|anggota|pdhi|kta)/.test(h)) return pickUnique('npaIdi');
     if (/(\bhp\b|\bwa\b|whatsapp|telepon|telp|phone|handphone|no\.?\s?hp|kontak|seluler)/.test(h)) {
       return pickUnique('phone');
     }
-    if (/(tiket|ticket|paket|registrasi|jenis.?peserta|kepesertaan)/.test(h)) {
+    if (/(registrasi)/.test(h)) {
       return pickUnique('ticketType');
     }
     if (/(badge|kode.?peserta|id.?peserta|qr.?id)/.test(h)) {
@@ -455,10 +490,11 @@ export function detectParticipantColumnMapping(
     return 'custom';
   });
 
-  // Content-based fallback for headerless or non-standard headers
+  // Content-based fallback for headerless or non-standard headers (scan up to 50 rows)
+  const sampleRows = rows.slice(0, 50);
   if (!usedTargets.has('email')) {
     const emailColIdx = headers.findIndex((_, colIdx) =>
-      rows.slice(0, 10).some((row) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((row[colIdx] || '').trim()))
+      sampleRows.some((row) => Boolean(cleanEmailCell(row[colIdx] || '')))
     );
     if (emailColIdx >= 0) {
       initial[emailColIdx] = 'email';
@@ -470,7 +506,7 @@ export function detectParticipantColumnMapping(
     const nameColIdx = initial.findIndex(
       (target, colIdx) =>
         target === 'custom' &&
-        rows.slice(0, 5).some((row) => {
+        sampleRows.slice(0, 15).some((row) => {
           const val = (row[colIdx] || '').trim();
           return val.length >= 3 && !/^\d+$/.test(val) && !val.includes('@');
         })
@@ -489,8 +525,24 @@ function slugifyEmailLocal(text: string, fallbackIndex: number): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '.')
     .replace(/^\.+|\.+$/g, '')
-    .slice(0, 48);
+    .slice(0, 42);
   return slug || `peserta.${fallbackIndex + 1}`;
+}
+
+function generateUniquePlaceholderEmail(
+  seedText: string,
+  rowIdx: number,
+  usedEmails: Set<string>
+): string {
+  const baseSlug = slugifyEmailLocal(seedText, rowIdx);
+  let candidate = `${baseSlug}@peserta.local`;
+  let suffix = 2;
+  while (usedEmails.has(candidate)) {
+    candidate = `${baseSlug}.${suffix}@peserta.local`;
+    suffix++;
+  }
+  usedEmails.add(candidate);
+  return candidate;
 }
 
 export function importParticipantsWithMapping(params: {
@@ -505,6 +557,7 @@ export function importParticipantsWithMapping(params: {
   importedCount: number;
   updatedCount: number;
   skippedCount: number;
+  generatedEmailCount: number;
   totalParticipants: Participant[];
   errors: string[];
 } {
@@ -513,19 +566,23 @@ export function importParticipantsWithMapping(params: {
     rows,
     mapping,
     existingParticipants,
-    autoGeneratePlaceholderEmail = false,
+    autoGeneratePlaceholderEmail = true,
     defaultTicketType = 'Simposium Full Pass',
     ticketImportMode = 'from_column_with_fallback',
   } = params;
   const cleanDefaultTicket = defaultTicketType.trim() || 'Simposium Full Pass';
 
   const baseList = existingParticipants ? [...existingParticipants] : [...getStoredParticipants()];
+  const usedPlaceholderEmails = new Set<string>(
+    baseList.map((p) => (p.email || '').trim().toLowerCase()).filter(Boolean)
+  );
 
   if (rows.length === 0) {
     return {
       importedCount: 0,
       updatedCount: 0,
       skippedCount: 0,
+      generatedEmailCount: 0,
       totalParticipants: baseList,
       errors: ['Tidak ada baris data yang dapat diproses.'],
     };
@@ -535,13 +592,15 @@ export function importParticipantsWithMapping(params: {
   let importedCount = 0;
   let updatedCount = 0;
   let skippedCount = 0;
+  let generatedEmailCount = 0;
   const nowDate = new Date().toISOString().split('T')[0];
+  const batchTimestamp = Date.now();
 
   rows.forEach((row, idx) => {
     if (!row.some((cell) => cell.trim().length > 0)) return;
 
     let idRegistrant = '';
-    let email = '';
+    let rawEmail = '';
     let name = '';
     let title = '';
     let institution = '';
@@ -561,7 +620,7 @@ export function importParticipantsWithMapping(params: {
           idRegistrant = val;
           break;
         case 'email':
-          email = val.toLowerCase();
+          rawEmail = val;
           break;
         case 'name':
           name = val;
@@ -597,30 +656,69 @@ export function importParticipantsWithMapping(params: {
       }
     });
 
-    if (!name && !email && !idRegistrant && Object.keys(customFields).length === 0) {
+    if (!name && !rawEmail && !idRegistrant && !badgeId && Object.keys(customFields).length === 0) {
       skippedCount++;
       return;
     }
 
-    if (!email || !email.includes('@')) {
-      if (autoGeneratePlaceholderEmail && (name || badgeId || idRegistrant)) {
-        email = `${slugifyEmailLocal(idRegistrant || name || badgeId, idx)}@peserta.local`;
+    let email = cleanEmailCell(rawEmail);
+
+    // Check if another cell contains an email when the mapped email cell is empty/invalid
+    // (only if no explicit email column was valid)
+    const cleanIdReg = idRegistrant.trim().toLowerCase();
+    const normIncomingName = normalizeNameForMatch(name);
+
+    // Match existing record safely:
+    // 1) Exact Id_registrant match always identifies the same registrant.
+    // 2) Email match ONLY merges when Id_registrant does not conflict AND
+    //    either names match (or one is missing). This prevents overwriting
+    //    distinct participants who share a hospital/clinic/admin email!
+    let existingIndex = -1;
+    if (cleanIdReg) {
+      existingIndex = baseList.findIndex(
+        (p) => p.idRegistrant && p.idRegistrant.trim().toLowerCase() === cleanIdReg
+      );
+    }
+
+    if (existingIndex < 0 && email) {
+      existingIndex = baseList.findIndex((p) => {
+        if ((p.email || '').trim().toLowerCase() !== email) return false;
+        const existingIdReg = (p.idRegistrant || '').trim().toLowerCase();
+        // Different non-empty Id_registrant = definitely different people sharing an email
+        if (cleanIdReg && existingIdReg && cleanIdReg !== existingIdReg) {
+          return false;
+        }
+        const normExistingName = normalizeNameForMatch(p.name);
+        // Different non-empty names sharing an email (e.g., clinic/hospital batch registration) = keep both!
+        if (normIncomingName && normExistingName && normIncomingName !== normExistingName) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    if (!email) {
+      const existingById = existingIndex >= 0 ? baseList[existingIndex] : undefined;
+      if (existingById?.email) {
+        email = existingById.email.trim().toLowerCase();
+      } else if (autoGeneratePlaceholderEmail && (name || badgeId || idRegistrant || Object.keys(customFields).length > 0)) {
+        email = generateUniquePlaceholderEmail(
+          idRegistrant || name || badgeId || `peserta_${idx + 1}`,
+          idx,
+          usedPlaceholderEmails
+        );
+        generatedEmailCount++;
       } else {
         skippedCount++;
         errors.push(
-          `Baris ${idx + 1}: Email "${email || '-'}" tidak valid atau kosong (kolom Email belum terisi).`
+          `Baris ${idx + 1} (${name || idRegistrant || 'Tanpa Nama'}): Email "${rawEmail || '-'}" kosong atau tidak valid.`
         );
         return;
       }
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const cleanIdReg = idRegistrant.trim().toLowerCase();
-    const existingIndex = baseList.findIndex(
-      (p) =>
-        p.email.trim().toLowerCase() === cleanEmail ||
-        (cleanIdReg && p.idRegistrant && p.idRegistrant.trim().toLowerCase() === cleanIdReg)
-    );
+    usedPlaceholderEmails.add(cleanEmail);
     const existing = existingIndex >= 0 ? baseList[existingIndex] : undefined;
 
     const mergedCustomFields = {
@@ -633,7 +731,7 @@ export function importParticipantsWithMapping(params: {
       badgeId ||
       resolvedIdRegistrant ||
       existing?.badgeId ||
-      `ID-SIMP-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+      `ID-SIMP-2026-${String(idx + 1).padStart(3, '0')}-${Math.floor(100 + Math.random() * 900)}`;
 
     const resolvedTicketType =
       ticketImportMode === 'override_all'
@@ -641,7 +739,7 @@ export function importParticipantsWithMapping(params: {
         : ticketType || cleanDefaultTicket || existing?.ticketType || 'Simposium Full Pass';
 
     const participantObj: Participant = {
-      id: existing ? existing.id : `part-${Date.now()}-${idx}`,
+      id: existing ? existing.id : `part-${batchTimestamp}-${idx}`,
       ...(resolvedIdRegistrant ? { idRegistrant: resolvedIdRegistrant } : {}),
       email: cleanEmail,
       name: name || existing?.name || cleanEmail.split('@')[0],
@@ -671,6 +769,7 @@ export function importParticipantsWithMapping(params: {
     importedCount,
     updatedCount,
     skippedCount,
+    generatedEmailCount,
     totalParticipants: baseList,
     errors,
   };

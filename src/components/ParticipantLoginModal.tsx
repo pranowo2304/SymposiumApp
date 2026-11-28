@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Award,
   CreditCard,
   IdCard,
   LogIn,
@@ -9,9 +10,12 @@ import {
   X,
 } from 'lucide-react';
 import { Participant, SymposiumInfo } from '../types';
+import { SYMPOSIUM_INFO } from '../data/symposiumData';
 import { findParticipantByIdRegistrant } from '../data/participantData';
 import { lookupParticipantByIdRegistrantInFirestore } from '../services/firestoreSyncService';
+import { resolveParticipantCertificates } from '../utils/certificateTemplates';
 import { ParticipantIdentityCard } from './ParticipantIdentityCard';
+import { ParticipantCertificateCard } from './ParticipantCertificateCard';
 
 interface ParticipantLoginModalProps {
   isOpen: boolean;
@@ -41,12 +45,22 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [showSwitchForm, setShowSwitchForm] = useState(false);
+  const [activeView, setActiveView] = useState<'card' | 'certificate'>('card');
+
+  const availableCertificates = useMemo(
+    () =>
+      isParticipantLoggedIn
+        ? resolveParticipantCertificates(currentUser, eventInfo || SYMPOSIUM_INFO)
+        : [],
+    [isParticipantLoggedIn, currentUser, eventInfo]
+  );
 
   useEffect(() => {
     if (isOpen) {
       setErrorMsg(null);
       setIdRegistrantInput('');
       setShowSwitchForm(!isParticipantLoggedIn);
+      setActiveView('card');
     }
   }, [isOpen, isParticipantLoggedIn]);
 
@@ -118,8 +132,12 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
       <div
         className={`bg-slate-900 border border-slate-700 w-full ${
-          isParticipantLoggedIn && !showSwitchForm ? 'max-w-lg' : 'max-w-md'
-        } rounded-2xl shadow-2xl overflow-hidden text-slate-100 max-h-[92vh] overflow-y-auto`}
+          isParticipantLoggedIn && !showSwitchForm
+            ? activeView === 'certificate'
+              ? 'max-w-2xl'
+              : 'max-w-lg'
+            : 'max-w-md'
+        } rounded-2xl shadow-2xl overflow-hidden text-slate-100 max-h-[92vh] overflow-y-auto transition-all`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="participant-login-title"
@@ -137,7 +155,11 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
 
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 shrink-0 shadow-xs">
-              <IdCard className="w-6 h-6" />
+              {activeView === 'certificate' && isParticipantLoggedIn && !showSwitchForm ? (
+                <Award className="w-6 h-6 text-amber-400" />
+              ) : (
+                <IdCard className="w-6 h-6" />
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -148,7 +170,9 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
               </div>
               <h2 id="participant-login-title" className="text-lg font-black text-white mt-0.5">
                 {isParticipantLoggedIn && !showSwitchForm
-                  ? 'Kartu Identitas Peserta'
+                  ? activeView === 'certificate'
+                    ? 'E-Sertifikat Peserta'
+                    : 'Kartu Identitas Peserta'
                   : 'Login Peserta'}
               </h2>
             </div>
@@ -163,13 +187,49 @@ export const ParticipantLoginModal: React.FC<ParticipantLoginModalProps> = ({
             </div>
           )}
 
-          {/* Active Participant Identity Card with QR Code */}
+          {/* Active Participant Identity Card / E-Certificate View */}
           {isParticipantLoggedIn && !showSwitchForm && (
             <div className="space-y-4">
-              <ParticipantIdentityCard
-                participant={currentUser}
-                eventInfo={eventInfo}
-              />
+              {availableCertificates.length > 0 && (
+                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-950 border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setActiveView('card')}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      activeView === 'card'
+                        ? 'bg-emerald-500 text-slate-950 font-black shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <IdCard className="w-3.5 h-3.5" />
+                    <span>Kartu Identitas</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveView('certificate')}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                      activeView === 'certificate'
+                        ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Award className="w-3.5 h-3.5" />
+                    <span>E-Sertifikat ({availableCertificates.length})</span>
+                  </button>
+                </div>
+              )}
+
+              {activeView === 'certificate' && availableCertificates.length > 0 ? (
+                <ParticipantCertificateCard
+                  participant={currentUser}
+                  eventInfo={eventInfo}
+                />
+              ) : (
+                <ParticipantIdentityCard
+                  participant={currentUser}
+                  eventInfo={eventInfo}
+                />
+              )}
 
               <div className="flex flex-col sm:flex-row gap-2 pt-1 border-t border-slate-800">
                 <button

@@ -119,7 +119,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
   const [parsedHeaders, setParsedHeaders] = useState<string[]>([]);
   const [parsedRows, setParsedRows] = useState<string[][]>([]);
   const [columnMapping, setColumnMapping] = useState<ParticipantMappingTarget[]>([]);
-  const [autoGenerateEmail, setAutoGenerateEmail] = useState(false);
+  const [autoGenerateEmail, setAutoGenerateEmail] = useState(true);
   const [importTicketMode, setImportTicketMode] = useState<'override_all' | 'from_column_with_fallback'>('override_all');
   const [importTicketType, setImportTicketType] = useState<string>('Simposium Full Pass');
   const [importErrorBanner, setImportErrorBanner] = useState<string | null>(null);
@@ -127,6 +127,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
     imported: number;
     updated: number;
     skipped: number;
+    generatedEmails: number;
     errors: string[];
   } | null>(null);
 
@@ -234,6 +235,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
       header: 1,
       defval: '',
       blankrows: false,
+      raw: false,
     });
 
     const stringRows = rawMatrix
@@ -248,9 +250,49 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
       return;
     }
 
-    // Find first row with at least 2 non-empty cells as header (skips title banner rows in Excel)
-    let headerIdx = stringRows.findIndex((r) => r.filter((c) => c.length > 0).length >= 2);
-    if (headerIdx < 0) headerIdx = 0;
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+    const headerKeywordRegex =
+      /(email|e-mail|surel|\bmail\b|nama|name|peserta|registran|registrasi|institusi|instansi|rumah sakit|\brs\b|hospital|klinik|asal|profesi|role|jabatan|kategori|npa|idi|pdhi|hp|wa|telepon|telp|phone|tiket|ticket|paket|workshop|badge|gelar|title|\bno\.?\b)/i;
+
+    const firstEmailRowIdx = stringRows.findIndex((r) =>
+      r.some((cell) => emailRegex.test(cell))
+    );
+
+    // If the very first non-empty row already contains an email address, the sheet has NO header row.
+    // Treat all rows (including row 0) as participant data so row 1 is never lost!
+    if (firstEmailRowIdx === 0) {
+      const maxCols = Math.max(...stringRows.map((r) => r.length), 1);
+      const fallbackHeaders = Array.from({ length: maxCols }, (_, idx) => `Kolom ${idx + 1}`);
+      const allDataRows = stringRows.map((r) =>
+        Array.from({ length: maxCols }, (_, idx) => (r[idx] ?? '').trim())
+      );
+      applyParsedTable(fallbackHeaders, allDataRows);
+      return;
+    }
+
+    // Score candidate rows before the first email data row (or top 10 rows) to locate the real header
+    // and skip title banners like "DAFTAR PESERTA" / "Tanggal: ..."
+    const searchLimit =
+      firstEmailRowIdx > 0 ? Math.min(firstEmailRowIdx, 10) : Math.min(stringRows.length, 10);
+
+    let headerIdx = -1;
+    let bestScore = -1;
+    for (let i = 0; i < searchLimit; i++) {
+      const row = stringRows[i];
+      const nonEmpty = row.filter((c) => c.length > 0);
+      if (nonEmpty.length === 0) continue;
+      const keywordHits = nonEmpty.filter((c) => headerKeywordRegex.test(c)).length;
+      const score = keywordHits * 15 + nonEmpty.length;
+      if (nonEmpty.length >= 2 && score > bestScore) {
+        bestScore = score;
+        headerIdx = i;
+      }
+    }
+
+    if (headerIdx < 0) {
+      headerIdx = stringRows.findIndex((r) => r.filter((c) => c.length > 0).length >= 2);
+      if (headerIdx < 0) headerIdx = 0;
+    }
 
     const headerRow = stringRows[headerIdx];
     const maxCols = Math.max(
@@ -267,7 +309,6 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
     );
 
     if (dataRows.length === 0) {
-      // Treat single-row sheet as 1 data row without header
       const fallbackHeaders = Array.from({ length: maxCols }, (_, idx) => `Kolom ${idx + 1}`);
       applyParsedTable(fallbackHeaders, [
         Array.from({ length: maxCols }, (_, idx) => (headerRow[idx] ?? '').trim()),
@@ -356,9 +397,9 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
         : {}),
     };
 
-    const existingIdx = participants.findIndex(
-      (p) => p.id === payload.id || p.email.trim().toLowerCase() === cleanEmail
-    );
+    const existingIdx = editingParticipant
+      ? participants.findIndex((p) => p.id === editingParticipant.id)
+      : participants.findIndex((p) => p.id === payload.id);
     const updatedList =
       existingIdx >= 0
         ? participants.map((p, i) => (i === existingIdx ? { ...p, ...payload } : p))
@@ -610,13 +651,16 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
       imported: result.importedCount,
       updated: result.updatedCount,
       skipped: result.skippedCount,
+      generatedEmails: result.generatedEmailCount,
       errors: result.errors,
     });
 
     if (result.importedCount > 0 || result.updatedCount > 0) {
       onParticipantsChange(result.totalParticipants);
+      const skippedSuffix =
+        result.skippedCount > 0 ? `, ${result.skippedCount} dilewati` : '';
       onShowToast(
-        `Impor berhasil: ${result.importedCount} peserta baru, ${result.updatedCount} diperbarui.`
+        `Impor selesai: ${result.importedCount} baru, ${result.updatedCount} diperbarui${skippedSuffix}.`
       );
     } else {
       const msg =
@@ -645,7 +689,7 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
     setParsedHeaders([]);
     setParsedRows([]);
     setColumnMapping([]);
-    setAutoGenerateEmail(false);
+    setAutoGenerateEmail(true);
     setImportTicketMode('override_all');
     setImportTicketType('Simposium Full Pass');
     setIsImportModalOpen(true);
@@ -1832,6 +1876,11 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                     <div className="text-[11px] text-emerald-200 space-y-0.5">
                       <div>• {importResult.imported} peserta baru ditambahkan.</div>
                       <div>• {importResult.updated} peserta yang sudah ada diperbarui.</div>
+                      {importResult.generatedEmails > 0 && (
+                        <div className="text-sky-300">
+                          • {importResult.generatedEmails} baris tanpa email valid otomatis dibuatkan email placeholder unik (@peserta.local).
+                        </div>
+                      )}
                       {importResult.skipped > 0 && (
                         <div className="text-amber-300">
                           • {importResult.skipped} baris dilewati.
@@ -1839,12 +1888,12 @@ export const AdminParticipantsManager: React.FC<AdminParticipantsManagerProps> =
                       )}
                     </div>
                     {importResult.errors.length > 0 && (
-                      <div className="text-[10px] text-amber-300 pt-1.5 border-t border-emerald-500/20 max-h-24 overflow-y-auto space-y-0.5">
-                        {importResult.errors.slice(0, 10).map((err, i) => (
+                      <div className="text-[10px] text-amber-300 pt-1.5 border-t border-emerald-500/20 max-h-36 overflow-y-auto space-y-0.5">
+                        {importResult.errors.slice(0, 50).map((err, i) => (
                           <div key={i}>- {err}</div>
                         ))}
-                        {importResult.errors.length > 10 && (
-                          <div>...dan {importResult.errors.length - 10} baris lainnya.</div>
+                        {importResult.errors.length > 50 && (
+                          <div>...dan {importResult.errors.length - 50} baris lainnya.</div>
                         )}
                       </div>
                     )}

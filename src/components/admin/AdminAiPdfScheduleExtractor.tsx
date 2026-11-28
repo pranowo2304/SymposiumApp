@@ -32,7 +32,12 @@ import {
   Stethoscope
 } from 'lucide-react';
 import { Session, Speaker, Room, SymposiumInfo } from '../../types';
-import { extractScheduleFromPdf, extractScheduleFromText, getRoomColorByRoomName } from '../../services/aiScheduleService';
+import {
+  extractScheduleFromPdf,
+  extractScheduleFromText,
+  getRoomColorByRoomName,
+  buildInitialsAvatarDataUri
+} from '../../services/aiScheduleService';
 import { 
   MUNAS_SESSIONS, 
   MUNAS_SPEAKERS, 
@@ -83,15 +88,19 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
   const [aiSummary, setAiSummary] = useState<string>('');
   const [hasExtracted, setHasExtracted] = useState<boolean>(false);
 
+  // Extraction Hint Options
+  const [targetDayHint, setTargetDayHint] = useState<string>('auto');
+  const [customHint, setCustomHint] = useState<string>('');
+
   // View, Filter & Apply Options
   const [viewTab, setViewTab] = useState<'sessions' | 'json' | 'metadata'>('sessions');
   const [previewFilterRoom, setPreviewFilterRoom] = useState<string>('all');
   const [previewFilterDay, setPreviewFilterDay] = useState<string>('all');
   const [previewSearch, setPreviewSearch] = useState<string>('');
-  const [importMode, setImportMode] = useState<'replace' | 'append' | 'upsert'>('replace');
+  const [importMode, setImportMode] = useState<'replace' | 'append' | 'upsert'>('upsert');
   const [syncRooms, setSyncRooms] = useState<boolean>(true);
   const [syncSpeakers, setSyncSpeakers] = useState<boolean>(true);
-  const [syncEventInfo, setSyncEventInfo] = useState<boolean>(true);
+  const [syncEventInfo, setSyncEventInfo] = useState<boolean>(false);
   const [copiedJson, setCopiedJson] = useState<boolean>(false);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
 
@@ -117,7 +126,7 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       const file = files[0];
-      if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         setSelectedFile(file);
         setErrorMessage(null);
       } else {
@@ -130,7 +139,7 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+      if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
         setSelectedFile(file);
         setErrorMessage(null);
       } else {
@@ -183,15 +192,24 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
     setExtractionProgress('Menghubungkan ke model AI Gemini...');
 
     try {
+      const extractionOptions = {
+        targetDayHint,
+        customHint,
+        existingSpeakers: speakers,
+      };
       let result;
       if (inputMode === 'pdf' && selectedFile) {
-        result = await extractScheduleFromPdf(selectedFile, (stage) => {
-          setExtractionProgress(stage);
-        });
+        result = await extractScheduleFromPdf(
+          selectedFile,
+          (stage) => setExtractionProgress(stage),
+          extractionOptions
+        );
       } else {
-        result = await extractScheduleFromText(rawText, (stage) => {
-          setExtractionProgress(stage);
-        });
+        result = await extractScheduleFromText(
+          rawText,
+          (stage) => setExtractionProgress(stage),
+          extractionOptions
+        );
       }
 
       if (!result.success || !result.data) {
@@ -207,18 +225,23 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
       setSelectedSessionIds(new Set(sessionsList.map(s => s.id)));
       setDetectedRooms(result.data.detectedRooms || []);
       setDetectedSpeakers(result.data.detectedSpeakers || []);
-      setAiSummary(result.data.summary || `Berhasil mengekstrak ${sessionsList.length} sesi secara detail.`);
-      
-      if (result.data.eventName) {
+      setAiSummary(result.data.summary || `Berhasil mengekstrak ${sessionsList.length} sesi secara detail dari dokumen.`);
+      setPreviewFilterDay('all');
+      setPreviewFilterRoom('all');
+      setPreviewSearch('');
+
+      if (result.data.eventName || result.data.eventDate || result.data.venue) {
         setDetectedEventInfo({
-          title: result.data.eventName,
-          dateString: result.data.eventDate,
-          location: result.data.venue
+          title: result.data.eventName || '',
+          dateString: result.data.eventDate || '',
+          location: result.data.venue || ''
         });
+      } else {
+        setDetectedEventInfo(null);
       }
 
       setHasExtracted(true);
-      onShowToast(`AI berhasil mengekstrak ${sessionsList.length} sesi jadwal simposium!`);
+      onShowToast(`AI berhasil mengekstrak ${sessionsList.length} sesi jadwal dari dokumen!`);
     } catch (err: any) {
       setErrorMessage(err.message || 'Terjadi kesalahan saat memproses ekstraksi dengan AI.');
     } finally {
@@ -249,8 +272,19 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
     }
   };
 
+  const getDefaultDateForDay = (targetDay: string, fallback = ''): string => {
+    const lower = targetDay.toLowerCase();
+    if (lower.includes('workshop') || lower.includes('pre-congress')) {
+      return eventInfo.dates?.workshop || fallback;
+    }
+    if (lower === 'hari iii') return eventInfo.dates?.day3 || fallback;
+    if (lower === 'hari ii') return eventInfo.dates?.day2 || fallback;
+    if (lower === 'hari i') return eventInfo.dates?.day1 || fallback;
+    return fallback;
+  };
+
   // Batch Day Change
-  const handleBatchSetDay = (targetDay: 'Hari I' | 'Hari II') => {
+  const handleBatchSetDay = (targetDay: string) => {
     if (selectedSessionIds.size === 0) {
       onShowToast('Pilih minimal satu sesi terlebih dahulu.');
       return;
@@ -261,7 +295,7 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
           return {
             ...s,
             day: targetDay,
-            date: targetDay === 'Hari II' ? 'Senin, 30 November 2026' : 'Minggu, 29 November 2026'
+            date: getDefaultDateForDay(targetDay, s.date)
           };
         }
         return s;
@@ -289,21 +323,23 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
 
   // Open Add Session Modal
   const handleOpenAddSession = () => {
+    const defaultDay = previewFilterDay !== 'all' ? previewFilterDay : (extractedSessions[0]?.day || 'Hari I');
+    const defaultRoom = extractedSessions[0]?.room || rooms[0]?.name || 'Ruang Utama';
     const newSession: Session = {
       id: `sess-manual-${Date.now()}`,
-      day: 'Hari I',
-      date: 'Minggu, 29 November 2026',
+      day: defaultDay,
+      date: getDefaultDateForDay(defaultDay, extractedSessions[0]?.date || ''),
       startTime: '10:00',
       endTime: '11:00',
       timeString: '10:00 - 11:00 WIB',
       title: '',
-      category: 'Onkologi & Bedah',
+      category: 'Simposium Ilmiah',
       type: 'Simposium Paralel',
-      room: 'Ballroom Amartapura B',
-      floor: 'Lantai 1',
-      roomColor: 'bg-emerald-600',
+      room: defaultRoom,
+      floor: '',
+      roomColor: getRoomColorByRoomName(defaultRoom),
       moderator: '',
-      capacity: 350,
+      capacity: 300,
       speakers: [],
       abstract: {
         background: '',
@@ -385,24 +421,52 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
     // Save sessions to database
     onSaveSessions(finalSessions);
 
-    // Sync Rooms if enabled
+    // Sync Rooms if enabled — derive strictly from detectedRooms + rooms actually present in sessionsToApply
     if (syncRooms && onSaveRooms) {
-      const allExtractedRooms = detectedRooms.length > 0 ? detectedRooms : MUNAS_ROOMS;
-      const existingRoomNames = new Set(rooms.map(r => r.name.toLowerCase()));
-      const newRooms: Room[] = allExtractedRooms
-        .filter(dr => !existingRoomNames.has((dr.name || '').toLowerCase()))
-        .map((dr, idx) => ({
-          id: dr.name || `room-ai-${Date.now()}-${idx}`,
-          name: dr.name,
-          shortName: dr.shortName || dr.name,
-          floor: dr.floor || 'Lantai 1',
-          capacity: dr.capacity || 300,
-          description: `Ruangan terdaftar dari dokumen simposium.`,
-          facilities: ['Audio Visual HD', 'Layar Proyektor / Videotron', 'Wireless Mic', 'WiFi'],
-          type: dr.name?.toLowerCase().includes('workshop') ? 'workshop' : 'ballroom',
-          color: dr.color || getRoomColorByRoomName(dr.name),
-          badgeBg: `${dr.color || getRoomColorByRoomName(dr.name)} text-white`
-        }));
+      const candidateRoomsMap = new Map<string, { name: string; shortName?: string; floor?: string; capacity?: number; color?: string }>();
+      detectedRooms.forEach((dr) => {
+        const name = String(dr?.name || '').trim();
+        if (name) {
+          candidateRoomsMap.set(name.toLowerCase(), {
+            name,
+            shortName: dr.shortName || name,
+            floor: dr.floor || '',
+            capacity: dr.capacity || 300,
+            color: dr.color || getRoomColorByRoomName(name),
+          });
+        }
+      });
+      sessionsToApply.forEach((s) => {
+        const name = String(s.room || '').trim();
+        if (name && !candidateRoomsMap.has(name.toLowerCase())) {
+          candidateRoomsMap.set(name.toLowerCase(), {
+            name,
+            shortName: name,
+            floor: s.floor || '',
+            capacity: s.capacity || 300,
+            color: s.roomColor || getRoomColorByRoomName(name),
+          });
+        }
+      });
+
+      const existingRoomNames = new Set(rooms.map(r => r.name.toLowerCase().trim()));
+      const newRooms: Room[] = Array.from(candidateRoomsMap.values())
+        .filter(dr => !existingRoomNames.has(dr.name.toLowerCase().trim()))
+        .map((dr, idx) => {
+          const color = dr.color || getRoomColorByRoomName(dr.name);
+          return {
+            id: dr.name || `room-ai-${Date.now()}-${idx}`,
+            name: dr.name,
+            shortName: dr.shortName || dr.name,
+            floor: dr.floor || 'Lantai 1',
+            capacity: dr.capacity || 300,
+            description: `Ruangan dari dokumen jadwal PDF.`,
+            facilities: ['Audio Visual HD', 'Layar Proyektor / Videotron', 'Wireless Mic', 'WiFi'],
+            type: dr.name.toLowerCase().includes('workshop') ? 'workshop' : 'ballroom',
+            color,
+            badgeBg: `${color} text-white`
+          };
+        });
       
       if (newRooms.length > 0) {
         onSaveRooms([...rooms, ...newRooms]);
@@ -431,15 +495,20 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
       }
     }
 
-    // Sync Event Info if enabled
+    // Sync Event Info if explicitly enabled
     if (syncEventInfo && detectedEventInfo && onSaveEventInfo) {
+      const nextDates = { ...eventInfo.dates };
+      const firstDay1 = sessionsToApply.find(s => s.day === 'Hari I' && s.date)?.date;
+      const firstDay2 = sessionsToApply.find(s => s.day === 'Hari II' && s.date)?.date;
+      const firstDay3 = sessionsToApply.find(s => s.day === 'Hari III' && s.date)?.date;
+      if (firstDay1) nextDates.day1 = firstDay1;
+      if (firstDay2) nextDates.day2 = firstDay2;
+      if (firstDay3) nextDates.day3 = firstDay3;
+
       onSaveEventInfo({
         ...eventInfo,
         title: detectedEventInfo.title || eventInfo.title,
-        dates: {
-          ...eventInfo.dates,
-          day1: detectedEventInfo.dateString || eventInfo.dates.day1
-        },
+        dates: nextDates,
         location: detectedEventInfo.location || eventInfo.location
       });
     }
@@ -489,7 +558,11 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
     return true;
   });
 
-  const uniqueRoomsInPreview = Array.from(new Set(extractedSessions.map(s => s.room)));
+  const uniqueRoomsInPreview = Array.from(new Set(extractedSessions.map(s => s.room).filter(Boolean)));
+  const uniqueDaysInPreview = Array.from(new Set(extractedSessions.map(s => s.day).filter(Boolean)));
+  const selectableDayOptions = Array.from(
+    new Set(['Hari I', 'Hari II', 'Hari III', 'Workshop (28 Nov)', 'Pre-Congress', ...uniqueDaysInPreview])
+  );
 
   return (
     <div className="space-y-6">
@@ -644,6 +717,42 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
               />
             </div>
           )}
+
+          {/* Extraction Options (Target Day & Custom Hint) */}
+          <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3 text-xs">
+            <div>
+              <label className="font-bold text-slate-300 block mb-1">
+                Target Hari Dokumen PDF:
+              </label>
+              <select
+                value={targetDayHint}
+                onChange={(e) => setTargetDayHint(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 text-xs font-medium focus:outline-none focus:border-indigo-500"
+              >
+                <option value="auto">Otomatis (Deteksi dari isi PDF)</option>
+                <option value="Hari I">Hari I</option>
+                <option value="Hari II">Hari II</option>
+                <option value="Hari III">Hari III</option>
+                <option value="Workshop (28 Nov)">Pre-Congress / Workshop</option>
+              </select>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Pilih hari spesifik jika file PDF hanya memuat jadwal 1 hari dan tidak mencantumkan label hari di tabelnya.
+              </p>
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-300 block mb-1">
+                Catatan Tambahan untuk AI (Opsional):
+              </label>
+              <input
+                type="text"
+                value={customHint}
+                onChange={(e) => setCustomHint(e.target.value)}
+                placeholder="Misal: Tabel punya 3 kolom ruangan (Hall A, B, C)"
+                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 text-xs placeholder:text-slate-600 focus:outline-none focus:border-indigo-500"
+              />
+            </div>
+          </div>
 
           {/* Action Button: Start Extraction */}
           <button
@@ -877,18 +986,44 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
                       >
                         Hari II
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBatchSetDay('Hari III')}
+                        className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 font-bold"
+                      >
+                        Hari III
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBatchSetDay('Workshop (28 Nov)')}
+                        className="px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 font-bold"
+                      >
+                        Workshop
+                      </button>
                     </div>
 
-                    {/* Room & Day Filters */}
+                    {/* Search, Room & Day Filters */}
                     <div className="flex items-center gap-2 flex-wrap">
+                      <div className="relative">
+                        <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          value={previewSearch}
+                          onChange={(e) => setPreviewSearch(e.target.value)}
+                          placeholder="Cari sesi / pembicara..."
+                          className="bg-slate-900 border border-slate-800 rounded-lg pl-7 pr-2.5 py-1 text-slate-200 placeholder:text-slate-500 text-xs w-40 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+
                       <select
                         value={previewFilterDay}
                         onChange={(e) => setPreviewFilterDay(e.target.value)}
                         className="bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-300 text-xs font-medium"
                       >
-                        <option value="all">Semua Hari</option>
-                        <option value="Hari I">Hari I</option>
-                        <option value="Hari II">Hari II</option>
+                        <option value="all">Semua Hari ({uniqueDaysInPreview.length})</option>
+                        {uniqueDaysInPreview.map((d, idx) => (
+                          <option key={idx} value={d}>{d}</option>
+                        ))}
                       </select>
 
                       <select
@@ -953,9 +1088,15 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
                                     </span>
 
                                     <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
-                                      session.day === 'Hari II' ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-300'
+                                      session.day === 'Hari III'
+                                        ? 'bg-amber-500/20 text-amber-300'
+                                        : session.day === 'Hari II'
+                                          ? 'bg-purple-500/20 text-purple-300'
+                                          : session.day.toLowerCase().includes('workshop')
+                                            ? 'bg-violet-500/20 text-violet-300'
+                                            : 'bg-blue-500/20 text-blue-300'
                                     }`}>
-                                      {session.day}
+                                      {session.day}{session.date ? ` • ${session.date}` : ''}
                                     </span>
 
                                     <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
@@ -1273,35 +1414,32 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
                   <label className="text-slate-300 font-bold block mb-1">Hari:</label>
                   <select
                     value={editingSession.day}
-                    onChange={(e) => setEditingSession({ 
-                      ...editingSession, 
-                      day: e.target.value as any,
-                      date: e.target.value === 'Hari II' ? 'Senin, 30 November 2026' : 'Minggu, 29 November 2026'
+                    onChange={(e) => setEditingSession({
+                      ...editingSession,
+                      day: e.target.value,
+                      date: getDefaultDateForDay(e.target.value, editingSession.date)
                     })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
                   >
-                    <option value="Hari I">Hari I</option>
-                    <option value="Hari II">Hari II</option>
+                    {Array.from(new Set([...selectableDayOptions, editingSession.day].filter(Boolean))).map((dayOpt) => (
+                      <option key={dayOpt} value={dayOpt}>{dayOpt}</option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-slate-300 font-bold block mb-1">Tipe Sesi:</label>
-                  <select
-                    value={editingSession.type}
-                    onChange={(e) => setEditingSession({ ...editingSession, type: e.target.value as any })}
+                  <label className="text-slate-300 font-bold block mb-1">Tanggal:</label>
+                  <input
+                    type="text"
+                    value={editingSession.date || ''}
+                    onChange={(e) => setEditingSession({ ...editingSession, date: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
-                  >
-                    <option value="Plenary Session">Plenary Session</option>
-                    <option value="Simposium Paralel">Simposium Paralel</option>
-                    <option value="Workshop Hands-On">Workshop Hands-On</option>
-                    <option value="Keynote Lecture">Keynote Lecture</option>
-                    <option value="Panel Discussion">Panel Discussion</option>
-                  </select>
+                    placeholder="Contoh: Minggu, 29 November 2026"
+                  />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-slate-300 font-bold block mb-1">Jam Mulai (HH:mm):</label>
                   <input
@@ -1323,6 +1461,21 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
                     placeholder="09:15"
                   />
                 </div>
+
+                <div>
+                  <label className="text-slate-300 font-bold block mb-1">Tipe Sesi:</label>
+                  <select
+                    value={editingSession.type}
+                    onChange={(e) => setEditingSession({ ...editingSession, type: e.target.value as any })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
+                  >
+                    <option value="Plenary Session">Plenary Session</option>
+                    <option value="Simposium Paralel">Simposium Paralel</option>
+                    <option value="Workshop Hands-On">Workshop Hands-On</option>
+                    <option value="Keynote Lecture">Keynote Lecture</option>
+                    <option value="Panel Discussion">Panel Discussion</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1333,7 +1486,7 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
                     value={editingSession.room}
                     onChange={(e) => setEditingSession({ ...editingSession, room: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
-                    placeholder="Ballroom Amartapura A"
+                    placeholder="Nama Ruangan / Ballroom"
                   />
                 </div>
 
@@ -1344,7 +1497,7 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
                     value={editingSession.category}
                     onChange={(e) => setEditingSession({ ...editingSession, category: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
-                    placeholder="Onkologi & Bedah"
+                    placeholder="Kategori / Topik"
                   />
                 </div>
               </div>
@@ -1356,27 +1509,33 @@ export const AdminAiPdfScheduleExtractor: React.FC<AdminAiPdfScheduleExtractorPr
                   value={editingSession.moderator || ''}
                   onChange={(e) => setEditingSession({ ...editingSession, moderator: e.target.value })}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
-                  placeholder="Nama dokter moderator jika ada"
+                  placeholder="Nama moderator jika ada"
                 />
               </div>
 
               <div>
-                <label className="text-slate-300 font-bold block mb-1">Nama Pembicara (Narasumber):</label>
+                <label className="text-slate-300 font-bold block mb-1">Nama Pembicara (pisahkan dengan ; jika lebih dari satu):</label>
                 <input
                   type="text"
-                  value={editingSession.speakers?.[0]?.name || ''}
+                  value={(editingSession.speakers || []).map(sp => sp.name).join('; ')}
                   onChange={(e) => {
-                    const spName = e.target.value;
-                    const updatedSpeakers = spName ? [{
-                      id: editingSession.speakers?.[0]?.id || `sp-${Date.now()}`,
-                      name: spName,
-                      title: editingSession.speakers?.[0]?.title || 'Dokter Spesialis / Konsultan',
-                      institution: editingSession.speakers?.[0]?.institution || 'Asosiasi Profesi',
-                      photoUrl: editingSession.speakers?.[0]?.photoUrl || 'https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=400&auto=format&fit=crop&q=80',
-                      bio: `Narasumber ahli pada sesi ilmiah.`,
-                      specialty: editingSession.category,
-                      talkTitle: editingSession.title
-                    }] : [];
+                    const names = e.target.value
+                      .split(';')
+                      .map(n => n.trim())
+                      .filter(Boolean);
+                    const updatedSpeakers: Speaker[] = names.map((spName, idx) => {
+                      const prevSp = editingSession.speakers?.[idx];
+                      return {
+                        id: prevSp?.id || `sp-${Date.now()}-${idx}`,
+                        name: spName,
+                        title: prevSp?.title || '',
+                        institution: prevSp?.institution || '',
+                        photoUrl: prevSp?.photoUrl || buildInitialsAvatarDataUri(spName),
+                        bio: prevSp?.bio || '',
+                        specialty: prevSp?.specialty || editingSession.category,
+                        talkTitle: prevSp?.talkTitle || editingSession.title
+                      };
+                    });
                     setEditingSession({ ...editingSession, speakers: updatedSpeakers });
                   }}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white"
